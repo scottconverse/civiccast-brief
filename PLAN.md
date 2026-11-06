@@ -154,6 +154,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 - Stack: Python, SQLite, static site, separate sign-up worker.
 - Capture runs on the operator's machine.
 - No tracking or analytics on city sites.
+- Hosting: Cloudflare Pages for the site, Cloudflare R2 for MP3s (Scott, 2026-11-05). Free tier per Cloudflare docs checked 2026-11-05: Pages 20,000 files, 25 MiB per file; R2 10 GB-month storage, free egress, 10M reads/month.
 
 ## 7. Open decisions (decide when reached)
 - Writer LLM and how it shares the GPU with voice (Phase 2).
