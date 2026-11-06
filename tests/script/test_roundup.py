@@ -23,6 +23,22 @@ def test_combine_prefixes_ids_and_dates():
     assert "WEEKLY ROUNDUP" not in build_prompt(recap("October 20, 2026", "A."))
 
 
+def test_combine_puts_the_meetings_in_date_order():
+    r = combine(
+        [
+            recap("October 20, 2026", "B."),
+            recap("not a date", "C."),
+            recap("October 6, 2026", "A."),
+        ]
+    )
+    assert [c.text for c in r.claims] == [
+        "[October 6, 2026 meeting] A.",
+        "[October 20, 2026 meeting] B.",
+        "[not a date meeting] C.",
+    ]
+    assert r.meeting_date == "October 6, 2026 and October 20, 2026 and not a date"
+
+
 def test_combine_needs_two_recaps_of_one_city():
     with pytest.raises(RoundupError):
         combine([recap("October 20, 2026", "A.")])

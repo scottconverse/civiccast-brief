@@ -9,6 +9,7 @@ meeting date, so the intro may name them without citing a claim.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 
 from civiccast_brief.script.recap import Recap
 from civiccast_brief.script.writer import ROUNDUP_ID
@@ -18,12 +19,21 @@ class RoundupError(ValueError):
     """The recaps cannot be combined."""
 
 
+def _date_key(recap: Recap) -> datetime:
+    """Sort key: the header date ("October 6, 2026"). A date that does not parse sorts last."""
+    try:
+        return datetime.strptime(recap.meeting_date.strip(), "%B %d, %Y")
+    except ValueError:
+        return datetime.max
+
+
 def combine(recaps: list[Recap]) -> Recap:
     if len(recaps) < 2:
         raise RoundupError("a roundup needs at least two meeting recaps")
     cities = {r.city for r in recaps}
     if len(cities) != 1:
         raise RoundupError(f"a roundup covers one city, got {sorted(cities)}")
+    recaps = sorted(recaps, key=_date_key)  # oldest meeting first; stable for equal dates
     bodies = sorted({r.body for r in recaps})
     claims = []
     for number, recap in enumerate(recaps, start=1):

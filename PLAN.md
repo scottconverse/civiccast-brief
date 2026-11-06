@@ -156,8 +156,14 @@ Each phase ends only when its "done when" is shown, not claimed.
 - No tracking or analytics on city sites.
 - Hosting: Cloudflare Pages for the site, Cloudflare R2 for MP3s (Scott, 2026-11-05). Free tier per Cloudflare docs checked 2026-11-05: Pages 20,000 files, 25 MiB per file; R2 10 GB-month storage, free egress, 10M reads/month.
 
+- Writer LLM (Phase 2, item 6, 2026-11-06): `deepseek-v4.1-flash:1017-cloud` through Ollama at
+  127.0.0.1:11434, the code default (`--model` changes it). It is an Ollama cloud model, so it uses no local
+  VRAM and does not compete with voice; the meeting text does leave the machine for that call. Load order per
+  meeting: diarization (pyannote, GPU) → writer and claim judge (Ollama) → voice (GPU). Each step is a separate
+  process, so the GPU holds one model at a time. Evidence: five Longmont meetings ran in this order on
+  2026-11-06; all five scripts pass the no-new-claims check (four after the repair step).
+
 ## 7. Open decisions (decide when reached)
-- Writer LLM and how it shares the GPU with voice (Phase 2).
 - Mail provider and audio host (Phases 7–8).
 - Whether episodes carry VibeVoice's built-in audible disclaimer if that engine wins (Phase 1).
 - Whether the on-air disclaimer text follows civiccast.ai's wording or your own (Phase 2).
