@@ -156,3 +156,30 @@ def test_number_words_at_a_sentence_start_are_not_names():
         "Brain",
         "Road",
     ]
+
+
+def test_intro_and_outro_may_use_the_recap_header_without_a_claim():
+    lines = good_script()
+    lines[0] = ScriptLine(
+        "S1",
+        "Welcome to CivicCast Brief. We're covering the Longmont City Council meeting on "
+        "October twentieth, twenty twenty-six.",
+    )
+    lines[-1] = ScriptLine("S2", "That's our brief. Watch the meeting video on YouTube.")
+    report = check_script(RECAP, lines)
+    assert report.passed, report.render()
+
+
+def test_intro_may_not_add_facts_beyond_the_header():
+    lines = good_script()
+    lines[0] = ScriptLine(
+        "S1", "Welcome to CivicCast Brief. Mayor Smith ran the Longmont meeting for three hours."
+    )
+    codes = errors_by_code(lines)
+    assert (1, "name") in codes and (1, "number") in codes
+
+
+def test_a_middle_line_still_needs_a_claim_for_header_facts():
+    lines = good_script()
+    lines[4] = ScriptLine("S2", "The Longmont City Council met on October twentieth.")
+    assert (5, "uncited") in errors_by_code(lines)

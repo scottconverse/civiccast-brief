@@ -51,10 +51,10 @@ OUTPUT: one JSON object per line and nothing else. No prose, no code fence, no b
 claim_ids lists every claim the line relies on. Use an empty list only for a short reaction ("Right.") or a question that states no fact.
 
 STRUCTURE, in this order:
-1. Maya (S1): an intro that names CivicCast Brief, the city of Longmont, the body and the meeting date. Cite the claim that gives the date.
+1. Maya (S1): an intro that names CivicCast Brief, the city of Longmont, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
 2. Theo (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
 3. The meeting's items in the order of the claims. Put a CHAPTER line where the topic changes, then the lines for that topic. Give each item its vote count and outcome, and the main arguments on each side. Cover public comment.
-4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's YouTube channel. Cite the claim that says so.
+4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's YouTube channel. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Saint Vrain Road", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
 No digits anywhere in the text. Spell out RTD as R-T-D. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.

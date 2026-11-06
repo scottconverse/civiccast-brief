@@ -7,7 +7,8 @@ Deterministic rules (these decide pass or fail):
 - spoken text holds no digits;
 - uncited lines are allowed only when they are reactions or questions;
 - the disclaimer is Theo's line 2 and appears once; the intro names the show and city; the
-  outro is Theo's last line and points to the YouTube channel.
+  outro is Theo's last line and points to the YouTube channel. The intro and outro may also use
+  the recap header (city, body, date) and need no claim id.
 
 The optional model check asks the writer model, once per line, whether the cited claims support
 the line. Its disagreements are reported as warnings; they do not change pass or fail.
@@ -400,7 +401,17 @@ def _is_reaction(text: str) -> bool:
     return not any(word in _FACT_WORDS for word in words)
 
 
-def _check_line(number: int, line: ScriptLine, recap: Recap, issues: list[Issue]) -> None:
+def header_text(recap: Recap) -> str:
+    """The recap header: city, body and date. They come from the roster and the video title,
+    not from the model, so the intro and outro may say them without citing a claim."""
+    return f"{recap.city} {recap.body} meeting, {recap.meeting_date}"
+
+
+def _check_line(
+    number: int, line: ScriptLine, recap: Recap, issues: list[Issue], *, frame: bool = False
+) -> None:
+    """Check one line. ``frame`` marks the intro and the outro: they may use the recap header
+    and need no claim id."""
     if line.speaker not in SPEAKERS and not line.is_chapter:
         issues.append(Issue(number, "error", "speaker", f"unknown speaker {line.speaker!r}"))
         return
@@ -418,11 +429,11 @@ def _check_line(number: int, line: ScriptLine, recap: Recap, issues: list[Issue]
     for cid in unknown:
         issues.append(Issue(number, "error", "unknown_claim", f"cites unknown claim {cid}"))
     cited = [known[cid] for cid in line.claim_ids if cid in known]
-    if not cited:
+    if not cited and not frame:
         if not _is_reaction(line.text):
             issues.append(Issue(number, "error", "uncited", "states a fact but cites no claim id"))
         return
-    cited_texts = [c.text for c in cited]
+    cited_texts = [c.text for c in cited] + ([header_text(recap)] if frame else [])
     allowed_numbers = set()
     for text in cited_texts:
         allowed_numbers |= number_atoms(text)
@@ -527,7 +538,8 @@ def check_script(recap: Recap, lines: list[ScriptLine]) -> CheckReport:
     report = CheckReport(lines=list(lines))
     _check_structure(lines, report.issues)
     for number, line in enumerate(lines, 1):
-        _check_line(number, line, recap, report.issues)
+        frame = number in (1, len(lines)) and not line.is_chapter
+        _check_line(number, line, recap, report.issues, frame=frame)
     return report
 
 

@@ -1,0 +1,19 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "City Council",
+  "retrieved": "2026-11-05",
+  "sources": [
+    "https://longmontcolorado.gov/government/mayor-city-council-members/wards-and-representatives/"
+  ],
+  "note": "Names as the city prints them. The roster page's metadata date is 2024-07-30; the names were checked against the page on 2026-11-05. Sean McCoy's Mayor Pro Tem title is in the March 2026 City Line newsletter but not on the roster page, so no Pro Tem title is used.",
+  "members": [
+    {"name": "Susie Hidalgo-Fahring", "first": "Susie", "last": "Hidalgo-Fahring", "role": "Mayor"},
+    {"name": "Diane Crist", "first": "Diane", "last": "Crist", "role": "Ward 1 Representative"},
+    {"name": "Matthew Popkin", "first": "Matthew", "last": "Popkin", "role": "Ward 2 Representative"},
+    {"name": "Alex Kalkhofer", "first": "Alex", "last": "Kalkhofer", "role": "Ward 3 Representative"},
+    {"name": "Sean McCoy", "first": "Sean", "last": "McCoy", "role": "At Large Representative"},
+    {"name": "Jake Marsing", "first": "Jake", "last": "Marsing", "role": "At Large Representative"},
+    {"name": "Crystal Prieto", "first": "Crystal", "last": "Prieto", "role": "At Large Representative"}
+  ]
+}
