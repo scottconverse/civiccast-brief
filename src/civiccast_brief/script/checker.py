@@ -7,7 +7,7 @@ Deterministic rules (these decide pass or fail):
 - spoken text holds no digits;
 - uncited lines are allowed only when they are reactions or questions;
 - the disclaimer is Theo's line 2 and appears once; the intro names the show and city; the
-  outro is Theo's last line and points to the YouTube channel. The intro and outro may also use
+  outro is Theo's last line and points to the city's video place (YouTube channel by default). The intro and outro may also use
   the recap header (city, body, date) and need no claim id.
 
 The optional model check asks the writer model, once per line, whether the cited claims support
@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from civiccast_brief.script.numbers import NUMBER_WORDS, number_atoms
-from civiccast_brief.script.recap import Recap
+from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap
 from civiccast_brief.script.writer import DISCLAIMER, SPEAKERS, ScriptLine
 
 MAX_LINE_WORDS = 45
@@ -449,7 +449,9 @@ def _check_line(
             )
 
 
-def _check_structure(lines: list[ScriptLine], issues: list[Issue]) -> None:
+def _check_structure(
+    lines: list[ScriptLine], issues: list[Issue], video_place: str = DEFAULT_VIDEO_PLACE
+) -> None:
     disclaimers = [i for i, line in enumerate(lines, 1) if line.text.strip() == DISCLAIMER]
     if len(disclaimers) != 1:
         issues.append(
@@ -472,13 +474,14 @@ def _check_structure(lines: list[ScriptLine], issues: list[Issue]) -> None:
             )
         last_number = len(lines)
         last = lines[-1]
-        if last.speaker != "S2" or "youtube" not in last.text.lower():
+        place_word = video_place.split()[0].lower()
+        if last.speaker != "S2" or place_word not in last.text.lower():
             issues.append(
                 Issue(
                     last_number,
                     "error",
                     "outro",
-                    "the last line must be Theo's closing line pointing to the YouTube channel",
+                    f"the last line must be Theo's closing line pointing to the city's {video_place}",
                 )
             )
     previous = None
@@ -536,7 +539,7 @@ def drop_unsupported(
 def check_script(recap: Recap, lines: list[ScriptLine]) -> CheckReport:
     """Run the deterministic rules over a script."""
     report = CheckReport(lines=list(lines))
-    _check_structure(lines, report.issues)
+    _check_structure(lines, report.issues, recap.video_place)
     for number, line in enumerate(lines, 1):
         frame = number in (1, len(lines)) and not line.is_chapter
         _check_line(number, line, recap, report.issues, frame=frame)

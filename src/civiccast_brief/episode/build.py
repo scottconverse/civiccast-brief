@@ -153,7 +153,7 @@ def assemble(
         ],
         "chapters_url": f"{base}/{slug}-chapters.json",
         "vtt_url": f"{base}/{slug}.vtt",
-        "video_url": None if roundup else f"https://www.youtube.com/watch?v={data['video_id']}",
+        "video_url": None if roundup else _video_url(data),
         "transcript": None
         if roundup
         else [
@@ -166,6 +166,12 @@ def assemble(
             if s.text
         ],
     }
+
+
+def _video_url(data: dict[str, Any]) -> str:
+    """The meeting video: the capture's own link, or YouTube for transcripts made before it."""
+    source = data.get("source") or {}
+    return str(source.get("video_url") or f"https://www.youtube.com/watch?v={data['video_id']}")
 
 
 def _speaker(segment: transcript_mod.Segment, names: dict[str, str]) -> str:

@@ -1,6 +1,7 @@
 """Command line for the Phase 4 meeting pipeline.
 
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
+    python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
         [--agenda AGENDA.txt] [--roster ROSTER.json] [--townrecord-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
@@ -16,6 +17,7 @@ import sys
 from pathlib import Path
 
 from civiccast_brief.meeting import capture as capture_mod
+from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import PipelineError, run
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
 from civiccast_brief.script import llm
@@ -34,8 +36,16 @@ def _run(args: argparse.Namespace) -> int:
             reuse_draft=args.reuse_draft,
             diarize=args.diarize,
             textflowkit_python=args.textflowkit_python,
+            granicus_host=args.granicus,
+            granicus_view_id=args.view_id,
         )
-    except (capture_mod.CaptureError, PipelineError, llm.ModelError, OSError) as exc:
+    except (
+        capture_mod.CaptureError,
+        granicus_mod.GranicusError,
+        PipelineError,
+        llm.ModelError,
+        OSError,
+    ) as exc:
         print(f"run failed: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -49,10 +59,18 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     run_cmd = commands.add_parser("run", help="capture, speakers and recap for one video")
-    run_cmd.add_argument("video_id", help="the YouTube video id, e.g. uHFuCfd5MVQ")
+    run_cmd.add_argument(
+        "video_id", help="the YouTube video id (e.g. uHFuCfd5MVQ), or with --granicus the clip id"
+    )
+    run_cmd.add_argument(
+        "--granicus", metavar="HOST", help="Granicus host, e.g. oakland.granicus.com"
+    )
+    run_cmd.add_argument(
+        "--view-id", type=int, help="Granicus ViewPublisher view_id that lists the clip"
+    )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")
-    run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: Longmont)")
+    run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: the Longmont roster)")
     run_cmd.add_argument(
         "--townrecord-python",
         help="TownRecord's python.exe (default: $CIVICCAST_TOWNRECORD_PYTHON or the scratch venv)",

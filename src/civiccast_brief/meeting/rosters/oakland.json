@@ -1,0 +1,20 @@
+{
+  "city": "Oakland",
+  "state": "California",
+  "body": "City Council",
+  "retrieved": "2026-11-06",
+  "sources": [
+    "https://www.oaklandca.gov/Government/City-Council-Leadership/Council-Members"
+  ],
+  "note": "Names as the city prints them on its Council Members page, checked 2026-11-06. Kevin Jenkins is named City Council President on that page. The Mayor is not a council member and is not listed there, so no Mayor is in this roster.",
+  "members": [
+    {"name": "Rowena Brown", "first": "Rowena", "last": "Brown", "role": "At-Large Councilmember"},
+    {"name": "Zac Unger", "first": "Zac", "last": "Unger", "role": "District 1 Councilmember"},
+    {"name": "Charlene Wang", "first": "Charlene", "last": "Wang", "role": "District 2 Councilmember"},
+    {"name": "Carroll Fife", "first": "Carroll", "last": "Fife", "role": "District 3 Councilmember"},
+    {"name": "Janani Ramachandran", "first": "Janani", "last": "Ramachandran", "role": "District 4 Councilmember"},
+    {"name": "Noel Gallo", "first": "Noel", "last": "Gallo", "role": "District 5 Councilmember"},
+    {"name": "Kevin Jenkins", "first": "Kevin", "last": "Jenkins", "role": "City Council President"},
+    {"name": "Ken Houston", "first": "Ken", "last": "Houston", "role": "District 7 Councilmember"}
+  ]
+}

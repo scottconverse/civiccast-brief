@@ -1,4 +1,4 @@
-"""Run the Phase 4 stages for one YouTube meeting and write each stage's file.
+"""Run the Phase 4 stages for one meeting (YouTube or Granicus) and write each stage's file.
 
 out/raw/                caption file and info from the TownRecord bridge
 out/transcript.json     normalized caption lines, with speaker labels
@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from civiccast_brief.meeting import diarize as diarize_mod
+from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.meeting.agenda import load_agenda
 from civiccast_brief.meeting.capture import caption_origin, capture_captions
@@ -42,7 +43,13 @@ from civiccast_brief.meeting.speakers import (
 )
 from civiccast_brief.meeting.verify import TranscriptIndex, verify
 from civiccast_brief.script import llm
-from civiccast_brief.script.recap import Claim, Recap, save_recap
+from civiccast_brief.script.recap import (
+    DEFAULT_VIDEO_PLACE,
+    GRANICUS_VIDEO_PLACE,
+    Claim,
+    Recap,
+    save_recap,
+)
 
 Complete = Callable[[str], tuple[str, Any]]
 
@@ -67,40 +74,79 @@ def run(
     reuse_draft: bool = False,
     diarize: bool = False,
     textflowkit_python: str | None = None,
+    granicus_host: str | None = None,
+    granicus_view_id: int | None = None,
     complete: Complete | None = None,
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
+    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     raw_dir = out / "raw"
 
-    log(f"[{video_id}] capture: TownRecord caption command")
-    capture = capture_captions(video_id, raw_dir, python=townrecord_python)
-    title = str(capture.info.get("title") or "")
-    meeting_date = transcript_mod.meeting_date_from_title(title)
-    if meeting_date is None:
-        raise PipelineError(f"no meeting date in the title {title!r}")
-    segments = transcript_mod.segments_from_capture(capture.segments)
-    origin = caption_origin(raw_dir, video_id)
-    source = {
-        "platform": "youtube",
-        "video_id": video_id,
-        "caption_kind": origin["kind"],
-        "caption_file": capture.caption_file.name,
-        "caption_download_reused": capture.caption_reused,
-        "capture": (
-            "TownRecord caption command (townrecord.capture.command) run in TownRecord's venv "
-            "by townrecord_bridge.py; srv3 parsed by townrecord.captions.parse"
-        ),
-    }
+    fetch_audio: Callable[[Path], Path]
+    if granicus_host:
+        if granicus_view_id is None:
+            raise PipelineError("a Granicus run needs the publisher view id")
+        log(f"[{video_id}] capture: Granicus {granicus_host} clip {video_id}")
+        try:
+            gcap = granicus_mod.capture(granicus_host, granicus_view_id, int(video_id), raw_dir)
+        except granicus_mod.GranicusError as exc:
+            raise PipelineError(str(exc)) from exc
+        title = gcap.clip.name
+        meeting_date = gcap.clip.date
+        items = gcap.items
+        caption_kind = "granicus_captions"
+        source = {
+            "platform": "granicus",
+            "host": granicus_host,
+            "view_id": granicus_view_id,
+            "clip_id": int(video_id),
+            "video_url": gcap.video_url,
+            "caption_kind": caption_kind,
+            "caption_file": gcap.caption_file.name,
+            "caption_download_reused": gcap.caption_reused,
+            "capture": "the city's Granicus caption file (videos/<clip>/captions.vtt)",
+        }
+        video_id = gcap.meeting_id
+
+        def fetch_audio(audio_dir: Path) -> Path:
+            return granicus_mod.fetch_audio(gcap, audio_dir)
+
+    else:
+        log(f"[{video_id}] capture: TownRecord caption command")
+        capture = capture_captions(video_id, raw_dir, python=townrecord_python)
+        title = str(capture.info.get("title") or "")
+        found = transcript_mod.meeting_date_from_title(title)
+        if found is None:
+            raise PipelineError(f"no meeting date in the title {title!r}")
+        meeting_date = found
+        items = capture.segments
+        caption_kind = caption_origin(raw_dir, video_id)["kind"]
+        source = {
+            "platform": "youtube",
+            "video_id": video_id,
+            "video_url": f"https://www.youtube.com/watch?v={video_id}",
+            "caption_kind": caption_kind,
+            "caption_file": capture.caption_file.name,
+            "caption_download_reused": capture.caption_reused,
+            "capture": (
+                "TownRecord caption command (townrecord.capture.command) run in TownRecord's "
+                "venv by townrecord_bridge.py; srv3 parsed by townrecord.captions.parse"
+            ),
+        }
+        youtube_id = video_id
+
+        def fetch_audio(audio_dir: Path) -> Path:
+            return diarize_mod.fetch_audio(youtube_id, audio_dir, python=townrecord_python)
+
+    segments = transcript_mod.segments_from_capture(items)
 
     roster = load_roster(roster_path)
     turns = split_turns(segments)
     roll_call = label_roll_call(turns, roster)
     apply_turns(segments, turns)
-    diarization = _diarize(
-        video_id, out, segments, diarize, townrecord_python, textflowkit_python, log
-    )
+    diarization = _diarize(video_id, out, segments, diarize, fetch_audio, textflowkit_python, log)
     speakers = speakers_report(video_id, segments, turns, roll_call, diarization)
     speakers["roster"] = {
         "file": str(roster_path) if roster_path else "default",
@@ -171,6 +217,7 @@ def run(
         meeting_date=meeting_date,
         video_id=video_id,
         claims=tuple(claims),
+        video_place=GRANICUS_VIDEO_PLACE if granicus_host else DEFAULT_VIDEO_PLACE,
     )
     save_recap(recap, out / "recap.json")
     verify_report["agenda_source"] = agenda.source if agenda else None
@@ -186,7 +233,7 @@ def run(
         "video_id": video_id,
         "title": title,
         "meeting_date": meeting_date,
-        "caption_kind": origin["kind"],
+        "caption_kind": caption_kind,
         "diarization": speakers["diarization"]["status"],
         "voices": speakers["diarization"].get("voices"),
         "segments": speakers["counts"]["segments"],
@@ -214,7 +261,7 @@ def _diarize(
     out: Path,
     segments: list[transcript_mod.Segment],
     requested: bool,
-    townrecord_python: str | None,
+    fetch_audio: Callable[[Path], Path],
     textflowkit_python: str | None,
     log: Callable[[str], None],
 ) -> dict[str, Any]:
@@ -224,12 +271,12 @@ def _diarize(
         return diarize_mod.not_run("diarization was not requested for this run (use --diarize)")
     try:
         log(f"[{video_id}] diarize: audio")
-        audio = diarize_mod.fetch_audio(video_id, out / "audio", python=townrecord_python)
+        audio = fetch_audio(out / "audio")
         log(f"[{video_id}] diarize: textflowkit")
         data = diarize_mod.run_diarization(
             audio, out / "diarization.json", python=textflowkit_python
         )
-    except diarize_mod.DiarizeError as exc:
+    except (diarize_mod.DiarizeError, granicus_mod.GranicusError) as exc:
         log(f"[{video_id}] diarize FAILED: {exc}")
         return {"status": "failed", "reason": str(exc)}
     counts = diarize_mod.assign_voices(segments, diarize_mod.spans_from(data))

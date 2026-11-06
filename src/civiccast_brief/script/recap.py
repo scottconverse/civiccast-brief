@@ -18,6 +18,8 @@ from typing import Any
 from civiccast_brief.script.numbers import number_atoms
 
 HEADER_TIMESTAMP = "0:00:00"
+DEFAULT_VIDEO_PLACE = "YouTube channel"
+GRANICUS_VIDEO_PLACE = "website"
 _CAPTION_RE = re.compile(r"^(\d{1,2}:\d{2}:\d{2})\s+(.*)$")
 _TIMESTAMP_RE = re.compile(r"^\d{1,2}:\d{2}:\d{2}$")
 _NAME_RE = re.compile(r"\b[A-Z][A-Za-z]+(?:'[A-Za-z]+)?\b")
@@ -40,6 +42,7 @@ class Recap:
     meeting_date: str
     video_id: str
     claims: tuple[Claim, ...]
+    video_place: str = DEFAULT_VIDEO_PLACE
 
     def claim(self, claim_id: str) -> Claim | None:
         for claim in self.claims:
@@ -58,6 +61,7 @@ def recap_to_dict(recap: Recap) -> dict[str, Any]:
         "body": recap.body,
         "meeting_date": recap.meeting_date,
         "video_id": recap.video_id,
+        "video_place": recap.video_place,
         "claims": [
             {
                 "id": c.id,
@@ -89,6 +93,7 @@ def recap_from_dict(data: dict[str, Any]) -> Recap:
             meeting_date=str(data["meeting_date"]),
             video_id=str(data["video_id"]),
             claims=claims,
+            video_place=str(data.get("video_place") or DEFAULT_VIDEO_PLACE),
         )
     except (KeyError, TypeError) as exc:
         raise RecapFormatError(f"recap is missing a field: {exc}") from exc

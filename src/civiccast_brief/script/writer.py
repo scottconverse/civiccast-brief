@@ -54,7 +54,7 @@ STRUCTURE, in this order:
 1. Maya (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
 2. Theo (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
 3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name, such as "Art in Public Places mural" or "Setback appeal". Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
-4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's YouTube channel. This line states no other fact and needs no claim id.
+4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Saint Vrain Road", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
 No digits anywhere in the text. Spell out RTD as R-T-D. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.
@@ -70,17 +70,17 @@ LENGTH: 850 to 1000 spoken words in total.
 
 
 ROUNDUP_ID = "roundup"
-ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October twentieth meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's YouTube channel."""
+ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October twentieth meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's {video_place}."""
 
 
 def build_prompt(recap: Recap, feedback: str = "") -> str:
     claims = [{"id": c.id, "topic": c.topic, "text": c.text} for c in recap.claims]
     parts = [
-        PROMPT_HEAD,
+        PROMPT_HEAD.replace("{video_place}", recap.video_place),
         f"Meeting (from the recap header): {recap.body} of {recap.city}, {recap.meeting_date}.",
     ]
     if recap.video_id == ROUNDUP_ID:
-        parts.insert(1, ROUNDUP_NOTE)
+        parts.insert(1, ROUNDUP_NOTE.replace("{video_place}", recap.video_place))
     if feedback.strip():
         parts.append(
             "A previous draft failed the no-new-claims check. Fix every problem below and output "

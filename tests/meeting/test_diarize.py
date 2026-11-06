@@ -77,9 +77,8 @@ def test_pipeline_records_a_failed_diarization_and_goes_on(tmp_path, monkeypatch
     def boom(*a, **k):
         raise D.DiarizeError("audio fetch failed for v")
 
-    monkeypatch.setattr(D, "fetch_audio", boom)
     segments = [seg(0, 1)]
-    status = pipeline._diarize("v", tmp_path, segments, True, None, None, lambda m: None)
+    status = pipeline._diarize("v", tmp_path, segments, True, boom, None, lambda m: None)
     assert status == {"status": "failed", "reason": "audio fetch failed for v"}
     assert segments[0].voice is None
 
