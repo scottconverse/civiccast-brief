@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ item.title }}</h2>
+<p class="muted">{{ item.meeting_id }} &middot; {{ item.meeting_date }}</p>
+<p>Status: <span class="status">{{ item.status }}</span>{% if item.approved_at %}
+  &middot; approved {{ item.approved_at|localtime }}{% endif %}</p>
+
+{% if notice %}
+<p class="notice{% if notice_error %} error{% endif %}" role="status">{{ notice }}</p>
+{% endif %}
+
+<form method="post" action="/items/{{ item.id }}/save">
+  <input type="hidden" name="token" value="{{ token }}">
+  <fieldset>
+    <legend>Speakers</legend>
+    {% for label, name in item.speakers.items() %}
+    <p><label>{{ label }}: <input type="text" name="speaker:{{ label }}" value="{{ name }}"></label></p>
+    {% else %}
+    <p class="muted">No speakers.</p>
+    {% endfor %}
+  </fieldset>
+  <p><label>Recap<br>
+    <textarea name="recap">
+{{ item.recap }}</textarea></label></p>
+  <p><label>Podcast script<br>
+    <textarea name="script">
+{{ item.script }}</textarea></label></p>
+  <p class="muted">Approval covers exactly the text on this page. Saving any change sends the
+    item back to draft.</p>
+  <button type="submit">Save</button>
+</form>
+
+<div class="actions">
+  <form method="post" action="/items/{{ item.id }}/approve">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Approve</button>
+  </form>
+  <form method="post" action="/items/{{ item.id }}/reject">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Reject</button>
+  </form>
+  <form method="post" action="/items/{{ item.id }}/regenerate">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Regenerate audio</button>
+  </form>
+</div>
+
+<h3>Audio requests</h3>
+{% if requests %}
+<ul>
+  {% for request in requests %}
+  <li>{{ request.requested_at|localtime }} &middot; for content
+    <span class="muted">{{ request.content_hash[:12] }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No audio requests yet.</p>
+{% endif %}
+<p><a href="/">All meetings</a></p>
+{% endblock %}

@@ -1,0 +1,20 @@
+{
+  "slug": "example",
+  "name": "Example City",
+  "site_title": "CivicCast Brief: Example City",
+  "tagline": "What did our local government just do?",
+  "publisher": "CivicCast Brief",
+  "contact_email": "corrections@example.com",
+  "hosts": {"S1": "Maya", "S2": "Theo"},
+  "about": ["This is a test city used by the automated tests. Its meetings and names are invented."],
+  "podcast": {
+    "name": "CivicCast Brief: Example City",
+    "author": "CivicCast Brief",
+    "owner_name": "CivicCast Brief",
+    "owner_email": "podcast@example.com",
+    "description": "Short, cited recaps of Example City meetings, read by two AI hosts.",
+    "category": "Government",
+    "language": "en-us",
+    "explicit": false
+  }
+}

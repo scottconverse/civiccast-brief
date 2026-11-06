@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="transcript" aria-labelledby="transcript-title">
+  <p class="kicker"><a href="{{ episode.href }}">Back to the episode</a></p>
+  <h1 id="transcript-title" class="head__title">Transcript: {{ episode.meeting_title }}</h1>
+  <p class="head__formal">{{ episode.meeting_date }}</p>
+  <p class="notice">Each time links to the meeting video at that moment. Speaker names appear only where the source gives them; otherwise the speaker is shown as Unknown speaker.{% if episode.video_url %} <a href="{{ episode.video_url }}" target="_blank" rel="noopener">Open the meeting video<span class="visually-hidden"> (opens in a new tab)</span></a>.{% endif %}</p>
+  <ol class="transcript__lines">
+    {% for line in lines %}
+    <li class="tline">
+      {% if line.link %}
+      <a class="tline__time" href="{{ line.link }}" target="_blank" rel="noopener">{{ line.timestamp }}<span class="visually-hidden"> (opens the meeting video at this time)</span></a>
+      {% else %}
+      <span class="tline__time">{{ line.timestamp }}</span>
+      {% endif %}
+      <span class="tline__speaker">{{ line.speaker }}</span>
+      <span class="tline__text">{{ line.text }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</article>
+{% endblock %}

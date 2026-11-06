@@ -9,7 +9,9 @@ description = "A lite, self-hosted tool: city meeting video in, cited recap, pod
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "jinja2>=3.1",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Meetings</h2>
+<p class="muted">Only approved items that are unchanged since approval are exported. Export from
+the command line: <code>python -m civiccast_brief.review export --db PATH --out DIR</code></p>
+{% if items %}
+<table>
+  <thead>
+    <tr><th>Meeting</th><th>Date</th><th>Status</th><th>Approved</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.title }}<br><span class="muted">{{ item.meeting_id }}</span></td>
+      <td>{{ item.meeting_date }}</td>
+      <td><span class="status">{{ item.status }}</span></td>
+      <td>{{ item.approved_at|localtime }}</td>
+      <td><a href="/items/{{ item.id }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No items yet.</p>
+{% endif %}
+{% endblock %}

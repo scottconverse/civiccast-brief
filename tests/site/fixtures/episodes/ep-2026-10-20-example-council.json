@@ -1,0 +1,38 @@
+{
+  "id": "2026-10-20-example-council",
+  "city": "example",
+  "approved": true,
+  "approved_by": "test fixture (no producer review)",
+  "board": "City Council",
+  "meeting_title": "City Council Regular Session",
+  "meeting_date": "2026-10-20",
+  "published": "2026-10-21T09:00:00-06:00",
+  "headline": "Council approves a test annexation and two ordinances",
+  "dek": "A fictional meeting used to test the site build. Nothing here happened.",
+  "tags": ["annexation", "ordinances"],
+  "recap": {
+    "claims": [
+      {"id": "c01", "topic": "meeting header", "text": "The Example City Council held a regular session on October 20, 2026.", "timestamp": "0:00:00", "quote": "Example City Council Regular Session, October 20, 2026."},
+      {"id": "c02", "topic": "consent agenda", "text": "The council approved the consent agenda unanimously.", "timestamp": "0:28:00", "quote": "That carries unanimously."},
+      {"id": "c03", "topic": "annexation", "text": "The council approved the annexation resolution 6-1 with one member opposed.", "timestamp": "1:31:42", "quote": "The vote carried 6-1."},
+      {"id": "c04", "topic": "public comment", "text": "A resident asked for more study of traffic on Test Road.", "timestamp": "1:21:06", "quote": "We need more study of the traffic on Test Road."}
+    ]
+  },
+  "script": "[S1] Example City, October twentieth. I'm Maya.\n[S2] This episode is AI-generated from a fictional test meeting.\n[S1] The council approved the consent agenda.\n[S2] The annexation resolution passed six to one.",
+  "audio": {"url": "https://media.example.com/example-council.mp3", "duration_s": 75.4, "bytes": 603200, "type": "audio/mpeg"},
+  "chapters": [
+    {"start": 0, "title": "Opening and consent agenda"},
+    {"start": "0:00:40", "title": "Annexation"}
+  ],
+  "chapters_url": "https://media.example.com/example-council-chapters.json",
+  "vtt_url": "https://media.example.com/example-council.vtt",
+  "video_url": "https://www.youtube.com/watch?v=EXAMPLE0001",
+  "transcript": [
+    {"t": "0:00:05", "text": "Okay, it is seven o'clock. I'd like to call the regular session to order."},
+    {"t": "0:00:19", "speaker": "Mayor", "text": "Roll call, please."},
+    {"t": "0:28:00", "text": "Motion to approve the consent agenda. Seconded. That carries unanimously."}
+  ],
+  "corrections": [
+    {"date": "2026-10-23", "note": "An earlier version gave the vote count as 5-2. The recorded vote was 6-1."}
+  ]
+}

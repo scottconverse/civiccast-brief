@@ -1,0 +1,14 @@
+{
+  "id": "2026-10-06-example-sample",
+  "city": "example",
+  "approved": true,
+  "approved_by": "test fixture",
+  "sample": true,
+  "board": "Planning Commission",
+  "meeting_title": "Planning Commission Work Session",
+  "meeting_date": "2026-10-06",
+  "published": "2026-10-07T08:30:00-06:00",
+  "headline": "Planning commission reviews a test zoning map",
+  "script": "[S1] A short fictional sample with no recap and no transcript.\n[S2] It only checks the layout for an episode without those parts.",
+  "audio": {"url": "https://media.example.com/example-sample.mp3", "duration_s": 12, "bytes": 96000}
+}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="home">
+  <section class="home__main" aria-labelledby="home-title">
+    <h1 id="home-title" class="section-title">Latest episodes</h1>
+    {% if latest %}
+    <article class="lead card" aria-labelledby="lead-title">
+      <p class="kicker">{{ latest.board }}</p>
+      <h2 id="lead-title" class="lead__title"><a href="{{ latest.href }}">{{ latest.headline }}</a></h2>
+      {% if latest.dek %}<p class="lead__dek">{{ latest.dek }}</p>{% endif %}
+      <p class="meta">
+        <span>Meeting {{ latest.meeting_date }}</span>
+        <span class="dot" aria-hidden="true">·</span>
+        <span>Published {{ latest.published_date }}</span>
+        <span class="dot" aria-hidden="true">·</span>
+        <span class="listen-chip">{{ latest.length }} listen</span>
+        {% if latest.sample %}<span class="sample-chip">Sample</span>{% endif %}
+      </p>
+      <p><a class="button" href="{{ latest.href }}">Read the recap and listen</a></p>
+    </article>
+    {% else %}
+    <p>No episodes have been published yet.</p>
+    {% endif %}
+
+    {% if others %}
+    <h2 class="section-sub">Earlier episodes</h2>
+    <ul class="story-list">
+      {% for card in others %}
+      <li class="story card">
+        <p class="kicker">{{ card.board }}</p>
+        <h3 class="story__title"><a href="{{ card.href }}">{{ card.headline }}</a></h3>
+        {% if card.dek %}<p class="story__dek">{{ card.dek }}</p>{% endif %}
+        <p class="meta"><span>Meeting {{ card.meeting_date }}</span> <span class="dot" aria-hidden="true">·</span> <span class="listen-chip">{{ card.length }} listen</span>{% if card.sample %} <span class="sample-chip">Sample</span>{% endif %}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <aside class="home__aside" aria-label="About the podcast">
+    <section class="card card--cream" aria-labelledby="podcast-title">
+      <h2 id="podcast-title">Podcast</h2>
+      <p>{{ city.podcast.name }} is a podcast of short, conversational recaps of {{ city.name }} meetings.</p>
+      <p><a href="{{ feed_href }}">Subscribe with the podcast feed (RSS)</a></p>
+    </section>
+    <section class="card" aria-labelledby="ai-title">
+      <h2 id="ai-title">AI-generated</h2>
+      <p>{{ city.disclaimer }}</p>
+      <p><a href="{{ href('/how-this-is-made/') }}">How this is made</a></p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

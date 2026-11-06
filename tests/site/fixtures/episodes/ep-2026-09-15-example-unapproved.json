@@ -1,0 +1,12 @@
+{
+  "id": "2026-09-15-example-unapproved",
+  "city": "example",
+  "approved": false,
+  "board": "City Council",
+  "meeting_title": "City Council Regular Session",
+  "meeting_date": "2026-09-15",
+  "published": "2026-09-16T09:00:00-06:00",
+  "headline": "This fictional episode was never approved",
+  "script": "[S1] Not approved.\n[S2] It must not reach the site.",
+  "audio": {"url": "https://media.example.com/unapproved.mp3", "duration_s": 5, "bytes": 40000}
+}

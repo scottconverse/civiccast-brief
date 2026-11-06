@@ -7,12 +7,12 @@ An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED
 
 | # | Item | Status | Evidence |
 |---|---|---|---|
-| 1 | Phase 0: TownRecord tests + one Longmont capture + `docs/townrecord-state.md` | running | |
+| 1 | Phase 0: TownRecord tests + one Longmont capture + `docs/townrecord-state.md` | done | docs/townrecord-state.md, commit 6b801b1: local 1113 pass/2 skip; origin/main 1466 pass/41 skip; grounding 67 pass/6 skip; one capture done, 8,032 segments |
 | 2 | Phase 1: Scott listens to round 2 | waiting on Scott | files sent 2026-11-05 |
 | 3 | Phase 1: default + backup voice recorded in `docs/voice-bakeoff.md` | after 2 | |
-| 4 | Phase 2: recap → two-host script writer | running | |
-| 5 | Phase 2: no-new-claims checker | running | |
-| 6 | Phase 2: writer model + GPU load order decided; one Longmont script passes | running | |
+| 4 | Phase 2: recap → two-host script writer | built, committed | src/civiccast_brief/script; 72 script tests |
+| 5 | Phase 2: no-new-claims checker | built, committed | checker + repair step; real script PASS after dropping 4 lines |
+| 6 | Phase 2: writer model + GPU load order decided; one Longmont script passes | not done | passes the check but does not read right: caption-garbled names ("Mayor Prom McCoy", "Gulf Course"). Rerun on a Phase 4 recap with official names |
 | 7 | Phase 3: voice interface, Chatterbox + Dia2 | built, uncommitted | 134 tests pass, ruff clean (rerun by coordinator 2026-11-05); e2e on both engines |
 | 8 | Phase 3: intro/outro, loudness, MP3, chapters, VTT | built; loudness choice waits on Scott | Chatterbox -17.0 LUFS plain, -16.1 with compressor; files sent 2026-11-05 |
 | 9 | Phase 3: Scott plays one episode from a local feed | after 8 | |
