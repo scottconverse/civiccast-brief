@@ -166,3 +166,26 @@ def test_assemble_refuses_an_unapproved_folder(tmp_path, meeting):
     (item / "item.json").write_text(json.dumps({"status": "draft"}))
     with pytest.raises(B.EpisodeError, match="not an approved export"):
         _assemble(item, meeting_dir, audio)
+
+
+def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, monkeypatch):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 10.0)
+    recap = json.loads((meeting_dir / "recap.json").read_text())
+    recap["video_id"] = "roundup"
+    recap["meeting_date"] = "October 6, 2026 and October 20, 2026"
+    (meeting_dir / "recap.json").write_text(json.dumps(recap))
+    (meeting_dir / "transcript.json").unlink()
+    (meeting_dir / "speakers.json").unlink()
+
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, meeting_dir / "script.json")
+    with ReviewStore(db) as store:
+        assert store.get_item(item_id).meeting_id == "roundup October 6, 2026 and October 20, 2026"
+        store.approve(item_id)
+    item_dir = export_approved(db, tmp_path / "export").exported[0]
+    episode = _assemble(item_dir, meeting_dir, audio)
+
+    assert episode["id"] == "2026-10-20-example-weekly-roundup"
+    assert episode["headline"] == "Longmont weekly roundup: October 6, 2026 and October 20, 2026"
+    assert episode["video_url"] is None and episode["transcript"] is None

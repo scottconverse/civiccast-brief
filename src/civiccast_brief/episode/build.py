@@ -11,7 +11,7 @@ from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.recap import Recap, load_recap
-from civiccast_brief.script.writer import load_script, render_txt
+from civiccast_brief.script.writer import ROUNDUP_ID, load_script, render_txt
 
 UNKNOWN = "unknown"
 
@@ -38,13 +38,23 @@ def voice_map(meeting_dir: Path) -> dict[str, str]:
 
 
 def _meeting(meeting_dir: Path) -> tuple[Recap, dict[str, Any]]:
+    """The recap and the transcript. A roundup has no single transcript, so it gets none."""
     recap_path = meeting_dir / "recap.json"
+    if not recap_path.exists():
+        raise EpisodeError(f"missing {recap_path}")
+    recap = load_recap(recap_path)
+    if recap.video_id == ROUNDUP_ID:
+        return recap, {}
     transcript_path = meeting_dir / "transcript.json"
-    for path in (recap_path, transcript_path):
-        if not path.exists():
-            raise EpisodeError(f"missing {path}")
-    data = json.loads(transcript_path.read_text(encoding="utf-8"))
-    return load_recap(recap_path), data
+    if not transcript_path.exists():
+        raise EpisodeError(f"missing {transcript_path}")
+    return recap, json.loads(transcript_path.read_text(encoding="utf-8"))
+
+
+def _meeting_id(recap: Recap, data: dict[str, Any]) -> str:
+    if recap.video_id == ROUNDUP_ID:
+        return f"roundup {recap.meeting_date}"
+    return str(data["video_id"])
 
 
 def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
@@ -53,7 +63,7 @@ def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
     script = load_script(script_json)
     with ReviewStore(db) as store:
         item = store.add_item(
-            meeting_id=str(data["video_id"]),
+            meeting_id=_meeting_id(recap, data),
             title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),
             meeting_date=recap.meeting_date,
             speakers=voice_map(meeting_dir),
@@ -72,7 +82,9 @@ def _same(label: str, exported: str, expected: str) -> None:
 
 
 def _iso_date(long_date: str) -> str:
-    return datetime.strptime(long_date, "%B %d, %Y").date().isoformat()
+    """ISO date of a recap date; for a roundup ("A and B"), the last meeting's date."""
+    last = long_date.split(" and ")[-1].strip()
+    return datetime.strptime(last, "%B %d, %Y").date().isoformat()
 
 
 def assemble(
@@ -96,22 +108,27 @@ def assemble(
 
     mp3 = audio_dir / "episode.mp3"
     chapters = json.loads((audio_dir / "chapters.json").read_text(encoding="utf-8"))
-    video_id = str(data["video_id"])
+    roundup = recap.video_id == ROUNDUP_ID
     day = _iso_date(recap.meeting_date)
-    slug = f"{day}-{city_slug}-{recap.body.lower().replace(' ', '-')}"
+    kind = "weekly-roundup" if roundup else recap.body.lower().replace(" ", "-")
+    slug = f"{day}-{city_slug}-{kind}"
     base = media_base_url.rstrip("/")
     names = meta.get("speakers") or {}
-    segments = transcript_mod.from_json(data)
+    segments = [] if roundup else transcript_mod.from_json(data)
     return {
         "id": slug,
         "city": city_slug,
         "approved": True,
         "approved_by": f"producer screen, {meta['approved_at']}",
         "board": recap.body,
-        "meeting_title": str(data.get("title") or recap.body),
+        "meeting_title": "Weekly roundup" if roundup else str(data.get("title") or recap.body),
         "meeting_date": day,
         "published": published,
-        "headline": f"{recap.city} {recap.body}, {recap.meeting_date}",
+        "headline": (
+            f"{recap.city} weekly roundup: {recap.meeting_date}"
+            if roundup
+            else f"{recap.city} {recap.body}, {recap.meeting_date}"
+        ),
         "recap": {
             "claims": [
                 {
@@ -136,8 +153,10 @@ def assemble(
         ],
         "chapters_url": f"{base}/{slug}-chapters.json",
         "vtt_url": f"{base}/{slug}.vtt",
-        "video_url": f"https://www.youtube.com/watch?v={video_id}",
-        "transcript": [
+        "video_url": None if roundup else f"https://www.youtube.com/watch?v={data['video_id']}",
+        "transcript": None
+        if roundup
+        else [
             {
                 "t": transcript_mod.hms(s.start),
                 "speaker": _speaker(s, names),

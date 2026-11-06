@@ -2,6 +2,7 @@
 
     python -m civiccast_brief.script write --recap recap.json --out script.txt [--feedback report.txt]
     python -m civiccast_brief.script check --recap recap.json --script script.json [--model-check]
+    python -m civiccast_brief.script roundup --recap a.json --recap b.json --out roundup.json
 
 ``write`` saves the spoken script (``script.txt``, with ``[S1]``/``[S2]``/``[CHAPTER]`` lines) and
 the same lines with their claim ids (``script.json``), then runs the deterministic check.
@@ -17,7 +18,8 @@ from pathlib import Path
 
 from civiccast_brief.script import llm
 from civiccast_brief.script.checker import check_script, drop_unsupported, model_check
-from civiccast_brief.script.recap import load_recap
+from civiccast_brief.script.recap import load_recap, save_recap
+from civiccast_brief.script.roundup import RoundupError, combine
 from civiccast_brief.script.writer import ScriptFormatError, load_script, save_script, write_script
 
 
@@ -57,6 +59,17 @@ def _check(args: argparse.Namespace) -> int:
     if args.report:
         args.report.write_text(text, encoding="utf-8")
     return 0 if report.passed else 1
+
+
+def _roundup(args: argparse.Namespace) -> int:
+    try:
+        recap = combine([load_recap(path) for path in args.recap])
+    except RoundupError as exc:
+        print(f"roundup failed: {exc}", file=sys.stderr)
+        return 1
+    save_recap(recap, args.out)
+    print(f"wrote {args.out}: {len(recap.claims)} claims from {len(args.recap)} meetings")
+    return 0
 
 
 def _repair(args: argparse.Namespace) -> int:
@@ -99,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
     repair.add_argument("--script", type=Path, required=True, help="script.json to repair")
     repair.add_argument("--out", type=Path, required=True, help="the repaired script (.txt)")
     repair.set_defaults(run=_repair)
+
+    roundup = commands.add_parser("roundup", help="combine meeting recaps into one roundup recap")
+    roundup.add_argument("--recap", type=Path, action="append", required=True)
+    roundup.add_argument("--out", type=Path, required=True, help="the roundup recap.json")
+    roundup.set_defaults(run=_roundup)
 
     args = parser.parse_args(argv)
     return args.run(args)

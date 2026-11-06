@@ -51,16 +51,26 @@ OUTPUT: one JSON object per line and nothing else. No prose, no code fence, no b
 claim_ids lists every claim the line relies on. Use an empty list only for a short reaction ("Right.") or a question that states no fact.
 
 STRUCTURE, in this order:
-1. Maya (S1): an intro that names CivicCast Brief, the city of Longmont, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
+1. Maya (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
 2. Theo (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
-3. The meeting's items in the order of the claims. Put a CHAPTER line where the topic changes, then the lines for that topic. Give each item its vote count and outcome, and the main arguments on each side. Cover public comment.
+3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name, such as "Art in Public Places mural" or "Setback appeal". Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
 4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's YouTube channel. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Saint Vrain Road", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
 No digits anywhere in the text. Spell out RTD as R-T-D. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.
 
+SOUND LIKE TWO PEOPLE TALKING, NOT A LIST:
+- Never repeat a sentence, and never say the same fact twice. Skip a claim that adds nothing new (a second "the vote carried" for the same item).
+- Combine related claims about one item into one or two flowing lines, citing all of their ids.
+- Do not start more than two lines in a row the same way. When a claim says "a speaker" or "an unidentified speaker", say "one speaker" or "another speaker", and never invent who they are (no roles, names or titles the claim lacks).
+- Tie each vote to its item: "On the mural, the vote was unanimous", not a bare "A vote carried."
+
 LENGTH: 850 to 1000 spoken words in total.
 """
+
+
+ROUNDUP_ID = "roundup"
+ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October twentieth meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's YouTube channel."""
 
 
 def build_prompt(recap: Recap, feedback: str = "") -> str:
@@ -69,6 +79,8 @@ def build_prompt(recap: Recap, feedback: str = "") -> str:
         PROMPT_HEAD,
         f"Meeting (from the recap header): {recap.body} of {recap.city}, {recap.meeting_date}.",
     ]
+    if recap.video_id == ROUNDUP_ID:
+        parts.insert(1, ROUNDUP_NOTE)
     if feedback.strip():
         parts.append(
             "A previous draft failed the no-new-claims check. Fix every problem below and output "
