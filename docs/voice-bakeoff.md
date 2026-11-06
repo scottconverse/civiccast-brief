@@ -28,8 +28,12 @@ addresses as spoken words ("eighty-five thirteen Saint Vrain Road"). This is a s
 
 ## Round 2 (in progress)
 
-- Dia2: fixed voice prefixes per host, 2–4 line chunks, calmer sampling, pace check.
-- Chatterbox: male host re-voiced from VibeVoice's male preset instead of Kokoro.
-- One 5–7 minute speakable script rendered on the top engines to check stability.
+Long script: 42 lines, 855 spoken words, written by DeepSeek from the transcript and checked claim by
+claim. Numbers, codes and addresses are spelled as words.
 
-Default and fallback are recorded here when round 2 ends.
+| Engine | Setup | 90 s script | Long script | Notes (not yet heard by Scott) |
+|---|---|---|---|---|
+| Chatterbox Turbo | Built-in female (S1); male (S2) cloned from VibeVoice `en-Carter_man.wav` | 92.6 s, 3.7x realtime | 327 s, rendered in 86 s (3.8x), 3.3 GB | Whisper: all 42 lines present, in order; address now read correctly. Leads to check by ear: "remote" may be dropped (0:36), "two hundred six" (3:17), "seventy-eight" (3:50), "one thousand nine hundred seventy-six" (5:17) |
+| Dia2-2B | Fixed per-host voice prefixes, 2 lines per generation, cfg 3.0, temp 0.6, ffmpeg atempo 0.85 | A/B/C variants; C picked (2.41 words/s, WER 8.4%) | 351 s, 336 s render on a shared GPU | Pace steady (147 wpm first and last minute). WER 12–13% at start and end; several middle chunks 28–49% (some is digits-vs-words scoring, some looks like real misreads). Dia2's own pace did not change with sampling; only atempo slowed it. `generate()` adds a stray `[S1]` to chunks that start on `[S2]`; the chunked renderer avoids it |
+
+Default and fallback are recorded here when Scott has listened.
