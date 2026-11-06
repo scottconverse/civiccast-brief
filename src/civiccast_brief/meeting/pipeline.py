@@ -80,6 +80,8 @@ def run(
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id."""
+    if roster_path is None:
+        raise PipelineError("a run needs the city's roster file (--roster, or --city)")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     raw_dir = out / "raw"
@@ -149,7 +151,7 @@ def run(
     diarization = _diarize(video_id, out, segments, diarize, fetch_audio, textflowkit_python, log)
     speakers = speakers_report(video_id, segments, turns, roll_call, diarization)
     speakers["roster"] = {
-        "file": str(roster_path) if roster_path else "default",
+        "file": str(roster_path),
         "city": roster.city,
         "body": roster.body,
         "sources": list(roster.sources),

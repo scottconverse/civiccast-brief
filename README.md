@@ -7,7 +7,9 @@ an audio player, transcript pages, a podcast feed and an email sign-up. A human 
 episode before anything is published. Nothing publishes on its own. Voices come only from free, open-source
 engines; no hosted text-to-speech is used.
 
-Status: planning and voice bake-off (Phase 0–1). No release yet.
+Status: in development. The pipeline runs end to end on real meetings; the default voice is not picked yet. No release yet.
+
+To set up your own city, follow [docs/set-up-a-city.md](docs/set-up-a-city.md).
 
 ## What it does
 

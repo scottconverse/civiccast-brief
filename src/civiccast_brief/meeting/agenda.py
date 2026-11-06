@@ -15,11 +15,12 @@ from pathlib import Path
 HEADER_PREFIXES = ("Source:", "Retrieved ")
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z'\-]*")
 
-#: Capitalised words that a recap may use without the agenda or roster naming them.
+#: Capitalised words that a recap may use without the agenda or roster naming them. The roster
+#: adds its own city and state names (see verify.py).
 GENERIC_WORDS = frozenset(
     {
         "Council", "Mayor", "Member", "Members", "Pro", "Tem", "Ward", "Representative",
-        "Staff", "Resident", "Residents", "Speaker", "Chair", "City", "Colorado", "Longmont",
+        "Staff", "Resident", "Residents", "Speaker", "Chair", "City", "County", "State",
         "Public", "The", "A", "An", "I",
     }
 )  # fmt: skip

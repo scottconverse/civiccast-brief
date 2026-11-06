@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 from civiccast_brief.site.timecode import parse_seconds
 
 CITY_FILE = "city.json"
+#: The city folder's roster (see civiccast_brief/city.py); not an episode.
+ROSTER_FILE = "roster.json"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 SCRIPT_LINE_RE = re.compile(r"^\[([A-Za-z0-9_ -]{1,24})\]\s*(\S.*)$")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -264,7 +266,7 @@ def load_site_input(directory: Path) -> SiteInput:
     excluded: list[tuple[str, str]] = []
     seen_ids: dict[str, str] = {}
     for path in sorted(directory.glob("*.json")):
-        if path.name == CITY_FILE:
+        if path.name in (CITY_FILE, ROSTER_FILE):
             continue
         episode = _load_episode(path, problems)
         if episode is None:

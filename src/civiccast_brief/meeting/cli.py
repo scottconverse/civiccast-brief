@@ -2,6 +2,7 @@
 
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
     python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
+    python -m civiccast_brief.meeting run <video_or_clip_id> --city CITY_DIR --out DIR
         [--agenda AGENDA.txt] [--roster ROSTER.json] [--townrecord-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
@@ -16,6 +17,7 @@ import json
 import sys
 from pathlib import Path
 
+from civiccast_brief.city import CityError, load_city
 from civiccast_brief.meeting import capture as capture_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import PipelineError, run
@@ -23,8 +25,20 @@ from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
 from civiccast_brief.script import llm
 
 
+def _city_defaults(args: argparse.Namespace) -> None:
+    """Fill the roster and the Granicus settings from --city, unless given on the command line."""
+    if not args.city:
+        return
+    city = load_city(args.city)
+    args.roster = args.roster or city.roster_path
+    if city.platform == "granicus" and not args.granicus:
+        args.granicus = city.granicus_host
+        args.view_id = args.view_id if args.view_id is not None else city.granicus_view_id
+
+
 def _run(args: argparse.Namespace) -> int:
     try:
+        _city_defaults(args)
         summary = run(
             args.video_id,
             args.out,
@@ -42,6 +56,7 @@ def _run(args: argparse.Namespace) -> int:
     except (
         capture_mod.CaptureError,
         granicus_mod.GranicusError,
+        CityError,
         PipelineError,
         llm.ModelError,
         OSError,
@@ -70,7 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")
-    run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: the Longmont roster)")
+    run_cmd.add_argument(
+        "--city", type=Path, help="city folder from `python -m civiccast_brief setup`"
+    )
+    run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: the --city roster)")
     run_cmd.add_argument(
         "--townrecord-python",
         help="TownRecord's python.exe (default: $CIVICCAST_TOWNRECORD_PYTHON or the scratch venv)",

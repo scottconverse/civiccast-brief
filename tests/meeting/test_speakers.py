@@ -1,10 +1,10 @@
 import pytest
 
 from civiccast_brief.meeting import speakers as S
-from civiccast_brief.meeting.roster import load_roster
+from civiccast_brief.meeting.roster import EXAMPLE_ROSTER, load_roster
 from civiccast_brief.meeting.transcript import Segment
 
-ROSTER = load_roster()
+ROSTER = load_roster(EXAMPLE_ROSTER)
 
 
 def seg(start, text, turn=False):

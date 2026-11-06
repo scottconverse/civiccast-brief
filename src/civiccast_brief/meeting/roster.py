@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_ROSTER = Path(__file__).parent / "rosters" / "longmont.json"
+ROSTERS_DIR = Path(__file__).parent / "rosters"
+#: The roster of the first city, kept as a worked example and for the tests.
+EXAMPLE_ROSTER = ROSTERS_DIR / "longmont.json"
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class Member:
 class Roster:
     city: str
     body: str
+    state: str
     sources: tuple[str, ...]
     members: tuple[Member, ...]
 
@@ -51,15 +54,18 @@ def roster_from_dict(data: dict[str, Any]) -> Roster:
         for item in data["members"]
     )
     if not members:
-        raise ValueError("roster has no members")
+        raise ValueError(
+            "roster has no members; add each member as the city's own page prints the name"
+        )
     return Roster(
         city=str(data["city"]),
         body=str(data["body"]),
+        state=str(data.get("state", "")),
         sources=tuple(str(s) for s in data.get("sources", [])),
         members=members,
     )
 
 
-def load_roster(path: Path | None = None) -> Roster:
-    target = Path(path) if path else DEFAULT_ROSTER
-    return roster_from_dict(json.loads(target.read_text(encoding="utf-8")))
+def load_roster(path: Path) -> Roster:
+    """Read a roster file. There is no default: every city brings its own roster."""
+    return roster_from_dict(json.loads(Path(path).read_text(encoding="utf-8")))

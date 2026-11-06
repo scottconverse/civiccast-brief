@@ -5,8 +5,10 @@ import pytest
 
 from civiccast_brief.meeting import granicus as G
 from civiccast_brief.meeting import pipeline
+from civiccast_brief.meeting.roster import ROSTERS_DIR
 
 FIX = Path(__file__).parent / "fixtures" / "granicus"
+OAKLAND = ROSTERS_DIR / "oakland.json"
 
 
 def test_publisher_rows_from_two_city_templates():
@@ -98,6 +100,7 @@ def test_pipeline_runs_a_granicus_clip(tmp_path, monkeypatch):
         tmp_path,
         granicus_host="oakland.granicus.com",
         granicus_view_id=2,
+        roster_path=OAKLAND,
         complete=complete,
         log=lambda m: None,
     )
@@ -111,7 +114,13 @@ def test_pipeline_runs_a_granicus_clip(tmp_path, monkeypatch):
 
 def test_pipeline_refuses_a_granicus_run_without_a_view_id(tmp_path):
     with pytest.raises(pipeline.PipelineError, match="view id"):
-        pipeline.run("7806", tmp_path, granicus_host="oakland.granicus.com", log=lambda m: None)
+        pipeline.run(
+            "7806",
+            tmp_path,
+            granicus_host="oakland.granicus.com",
+            roster_path=OAKLAND,
+            log=lambda m: None,
+        )
 
 
 def test_granicus_recap_points_the_outro_to_the_city_website(tmp_path, monkeypatch):
@@ -131,6 +140,7 @@ def test_granicus_recap_points_the_outro_to_the_city_website(tmp_path, monkeypat
         tmp_path,
         granicus_host="oakland.granicus.com",
         granicus_view_id=2,
+        roster_path=OAKLAND,
         complete=lambda prompt: ("[]", {}),
         log=lambda m: None,
     )

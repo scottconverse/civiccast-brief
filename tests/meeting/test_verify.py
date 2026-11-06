@@ -2,10 +2,10 @@ import pytest
 
 from civiccast_brief.meeting import agenda as A
 from civiccast_brief.meeting import verify as V
-from civiccast_brief.meeting.roster import load_roster
+from civiccast_brief.meeting.roster import EXAMPLE_ROSTER, load_roster
 from civiccast_brief.meeting.transcript import Segment
 
-ROSTER = load_roster()
+ROSTER = load_roster(EXAMPLE_ROSTER)
 VOCAB = frozenset({"golf", "course", "advisory", "board", "vrain", "8513", "annexation"})
 
 

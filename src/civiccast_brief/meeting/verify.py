@@ -143,6 +143,7 @@ def verify(
     """Return the kept claims and a report that lists each dropped draft item with its reason."""
     roster_tokens = {t.lower() for m in roster.members for t in (m.first, m.last)}
     roster_tokens |= {t.lower() for m in roster.members for t in m.name.split()}
+    roster_tokens |= {t.lower() for t in f"{roster.city} {roster.state}".split()}
     allowed = vocabulary | {w.lower() for w in GENERIC_WORDS} | roster_tokens
     dropped: list[dict[str, Any]] = []
     kept: list[tuple[float, str, str, str, str]] = []
