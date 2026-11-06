@@ -1,0 +1,19 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Project output and media
+out/
+media/
+*.wav
+*.mp3
+*.sqlite
+*.db
+.env
