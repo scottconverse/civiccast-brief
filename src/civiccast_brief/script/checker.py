@@ -524,16 +524,36 @@ def drop_unsupported(
             break
         dropped.extend(line for n, line in enumerate(kept, 1) if n in bad)
         kept = [line for n, line in enumerate(kept, 1) if n not in bad]
-    # A chapter mark followed by another chapter mark or the end has nothing under it.
-    result: list[ScriptLine] = []
-    for index, line in enumerate(kept):
+    while (orphan := _orphan(kept)) is not None:
+        dropped.append(kept.pop(orphan))
+    return kept, dropped
+
+
+def _orphan(lines: list[ScriptLine]) -> int | None:
+    """The first line a drop left without its point, or None.
+
+    - a chapter with no cited line before the next chapter or the outro;
+    - an uncited question whose next line is not a cited answer (or the outro);
+    - an uncited reaction ("Right.") straight after a chapter mark or the disclaimer.
+    The intro, the disclaimer and the outro are never orphans.
+    """
+    last = len(lines) - 1
+    for index in range(2, last):
+        line = lines[index]
+        following = lines[index + 1]
         if line.is_chapter:
-            following = kept[index + 1] if index + 1 < len(kept) else None
-            if following is None or following.is_chapter:
-                dropped.append(line)
-                continue
-        result.append(line)
-    return result, dropped
+            section = lines[index + 1 : last]
+            end = next((n for n, item in enumerate(section) if item.is_chapter), len(section))
+            if not any(item.claim_ids for item in section[:end]):
+                return index
+        elif not line.claim_ids:
+            if line.text.rstrip().endswith("?"):
+                # A question just before the outro hands over to it, so it stays.
+                if index + 1 < last and (following.is_chapter or not following.claim_ids):
+                    return index
+            elif index == 2 or lines[index - 1].is_chapter:
+                return index
+    return None
 
 
 def check_script(recap: Recap, lines: list[ScriptLine]) -> CheckReport:

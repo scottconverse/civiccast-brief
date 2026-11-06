@@ -44,3 +44,40 @@ def test_never_drops_intro_disclaimer_or_outro():
     assert repaired[1].text == DISCLAIMER
     assert dropped == []
     assert not check_script(RECAP, repaired).passed  # left for the writer or a human
+
+
+def test_drops_the_question_and_reactions_a_drop_leaves_behind():
+    lines = good_script()
+    lines[2:2] = [
+        ScriptLine("CHAPTER", "Bonds", ("c02",)),
+        ScriptLine("S2", "Right."),
+        ScriptLine("S2", "What did the speaker say about the bonds?"),
+        ScriptLine("S1", "The Thompson bonds failed.", ("c02",)),
+        ScriptLine("CHAPTER", "Ordinance again", ("c02",)),
+    ]
+    lines.insert(9, ScriptLine("S1", "Ask me anything?"))
+    repaired, dropped = drop_unsupported(RECAP, lines)
+    assert [d.text for d in dropped] == [
+        "Bonds",
+        "The Thompson bonds failed.",
+        "Right.",
+        "What did the speaker say about the bonds?",
+        "Ordinance again",
+        "Ask me anything?",
+    ]
+    assert repaired == good_script()
+    assert check_script(RECAP, repaired).passed
+
+
+def test_keeps_a_question_that_its_next_line_answers():
+    lines = good_script()
+    lines.insert(3, ScriptLine("S2", "What happened with the ordinance?"))
+    repaired, dropped = drop_unsupported(RECAP, lines)
+    assert dropped == [] and repaired == lines
+
+
+def test_keeps_the_question_that_hands_over_to_the_outro():
+    lines = good_script()
+    lines.insert(6, ScriptLine("S1", "Theo, where can people watch it?"))
+    repaired, dropped = drop_unsupported(RECAP, lines)
+    assert dropped == [] and repaired == lines

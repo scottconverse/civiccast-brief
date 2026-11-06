@@ -25,6 +25,15 @@ MAX_ACK_GAP_S = 20.0
 _TOKEN_RE = re.compile(r"[a-z][a-z'\-]*")
 _ACK_WORDS = frozenset({"present", "here", "yes", "aye", "yep", "yeah", "am", "im", "i'm", "i"})
 _ACK_NEEDS_ONE = frozenset({"present", "here", "yes", "aye", "yep", "yeah", "am"})
+#: Member titles other bodies use before a name ("Supervisor Gauthier", "Vice President Mueller").
+#: They are skipped like "council member"; they never name anyone on their own.
+OTHER_TITLES = frozenset(
+    {
+        "supervisor", "commissioner", "trustee", "alderman", "alderwoman", "alderperson",
+        "councilor", "councillor", "director", "president", "chair", "chairman", "chairwoman",
+        "chairperson",
+    }
+)  # fmt: skip
 DIARIZATION_NOT_REQUESTED = {
     "status": "not run",
     "reason": "diarization was not requested for this run (use --diarize)",
@@ -90,7 +99,7 @@ def _tokens(text: str) -> list[str]:
 def parse_call(text: str) -> Call | None:
     """A turn that is only a roll-call name: an optional title, then one or two name words.
 
-    "Council member Popkin" and "Mayor Susie Hidalgo-Fahring" parse. "Mayor Prom McCoy" parses
+    "Council member Popkin", "Mayor Susie Hidalgo-Fahring" and "SUPERVISOR GAUTHIER?" parse. "Mayor Prom McCoy" parses
     too (first word "prom"); it fails later when it matches the roster. A turn with more words
     ("Council member Pto is walking in the door") is not a call.
     """
@@ -106,6 +115,15 @@ def parse_call(text: str) -> Call | None:
     if tokens[i : i + 2] == ["council", "member"]:
         council_title = True
         i += 2
+    elif not mayor_title:
+        if (
+            tokens[i : i + 1] == ["vice"]
+            and tokens[i + 1 : i + 2]
+            and tokens[i + 1] in OTHER_TITLES
+        ):
+            i += 2
+        elif tokens[i : i + 1] and tokens[i] in OTHER_TITLES:
+            i += 1
     rest = tokens[i:]
     if not 1 <= len(rest) <= 2:
         return None

@@ -182,3 +182,32 @@ def test_speakers_report_counts_named_and_unknown_lines():
     assert report["counts"]["unknown_segments"] == 3
     assert report["counts"]["named_percent"] == 25.0
     assert report["diarization"]["status"] == "not run"
+
+
+def test_other_bodies_titles_parse_and_match_in_capitals():
+    from civiccast_brief.meeting.roster import roster_from_dict
+
+    board = roster_from_dict(
+        {
+            "city": "San Mateo County",
+            "body": "Board of Supervisors",
+            "members": [
+                {
+                    "name": "Lisa Gauthier",
+                    "first": "Lisa",
+                    "last": "Gauthier",
+                    "role": "Supervisor",
+                },
+                {
+                    "name": "Ray Mueller",
+                    "first": "Ray",
+                    "last": "Mueller",
+                    "role": "Vice President",
+                },
+            ],
+        }
+    )
+    assert S.match_member(S.parse_call("SUPERVISOR GAUTHIER?"), board).name == "Lisa Gauthier"
+    assert S.match_member(S.parse_call("Vice President Mueller"), board).name == "Ray Mueller"
+    assert S.parse_call("Supervisor Gauthier is walking in") is None
+    assert S.match_member(S.parse_call("SUPERVISOR GOTHIER"), board) is None
