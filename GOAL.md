@@ -26,8 +26,8 @@ An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED
 | 17 | Phase 7: upload site and audio | parked by Scott | host: Cloudflare Pages (site) + R2 (MP3s), Scott 2026-11-05. Scott 2026-11-05: wire up civiccast.org later, not before |
 | 18 | Phase 7: Apple Podcasts + Spotify listing | needs Scott (his accounts) | |
 | 19 | Phase 8: email double opt-in + sender | needs Scott's mail provider pick | |
-| 20 | Phase 9: weekly roundup episode | open | |
-| 21 | Phase 9: Granicus adapter end to end | done | commit 414918a; Oakland clip 7806: capture, recap, script, repair all exit 0 (scratch run 2026-11-06). San Mateo County clip 1984 also ran end to end |
+| 20 | Phase 9: weekly roundup episode | through script; audio waits on voice pick | commit 752ac2e (meetings in date order); roundup of the 5 Longmont recaps: 180 claims, script passes after repair (782 words), staged as draft item 6 in scratch phase4/review.db for Scott's review |
+| 21 | Phase 9: Granicus adapter end to end | through script; audio waits on voice pick | commit 414918a; Oakland clip 7806: capture, recap, script, repair all exit 0 (scratch run 2026-11-06). San Mateo County clip 1984 also ran through script |
 | 22 | Phase 10: per-city config, setup command, docs, GitHub release | built; release waits on voice pick | commit 9bf8e74 (city folders, `setup` command), docs/set-up-a-city.md. Walk-through from the guide only: San Mateo County Board of Supervisors (Granicus), meeting + script + repair exit 0, all 5 supervisors named from the roll call (title fix in 12aaf0e). Release held: the audio step needs the default voice (items 2-3) |
 | 23 | Push the 2 local docs commits | done | pushed 1300c6e to origin/main, 2026-11-05 |
 | 24 | Commit + push Phase 0/2/3 code once tested | done | commits 6b801b1, a695138 on origin/main |
