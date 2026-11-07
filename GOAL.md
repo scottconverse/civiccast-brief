@@ -28,6 +28,6 @@ An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED
 | 19 | Phase 8: email double opt-in + sender | parked by Scott | needs a sending domain and Scott's mail provider account. Scott 2026-11-07: keep parked |
 | 20 | Phase 9: weekly roundup episode | done | commit 752ac2e (meetings in date order); roundup script passes after repair (782 words); approved 2026-11-07 (item 6); audio 313 s; on the local Longmont site |
 | 21 | Phase 9: Granicus adapter end to end | done | commit 414918a; Oakland clip 7806: capture, recap, script, repair exit 0; approved 2026-11-07 (item 7); audio 265 s; local Oakland site built, link check 0 broken, feed valid, audio plays. San Mateo County clip 1984 also ran through script |
-| 22 | Phase 10: per-city config, setup command, docs, GitHub release | built; release after the items above | commit 9bf8e74 (city folders, `setup` command), docs/set-up-a-city.md, San Mateo County walk-through. Scott 2026-11-07: publish v0.1.0 once everything except 17-19 is done |
+| 22 | Phase 10: per-city config, setup command, docs, GitHub release | done | commit 9bf8e74 (city folders, `setup` command), docs/set-up-a-city.md, San Mateo County walk-through. Released v0.1.0 on 2026-11-07 at commit 2e7f06f (CI green): https://github.com/scottconverse/civiccast-brief/releases/tag/v0.1.0 |
 | 23 | Push the 2 local docs commits | done | pushed 1300c6e to origin/main, 2026-11-05 |
 | 24 | Commit + push Phase 0/2/3 code once tested | done | commits 6b801b1, a695138 on origin/main |
