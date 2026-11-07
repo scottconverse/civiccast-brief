@@ -29,17 +29,17 @@ def test_module_entry_point_prints_help() -> None:
     assert "--engine" in proc.stdout and "chatterbox" in proc.stdout
 
 
-def test_engine_has_no_default(tmp_path: Path) -> None:
+def test_engine_defaults_to_stepaudio(tmp_path: Path) -> None:
     script = tmp_path / "s.txt"
     script.write_text(SCRIPT_TEXT, encoding="utf-8")
-    with pytest.raises(SystemExit):
-        build_parser().parse_args([str(script), "--out", str(tmp_path / "o")])
+    args = build_parser().parse_args([str(script), "--out", str(tmp_path / "o")])
+    assert args.engine == "stepaudio"
 
 
-def test_engine_choices_are_the_three_adapters() -> None:
+def test_engine_choices_are_the_four_adapters() -> None:
     parser = build_parser()
     engine = next(a for a in parser._actions if a.dest == "engine")
-    assert list(engine.choices) == ["chatterbox", "dia2", "fake"]
+    assert list(engine.choices) == ["stepaudio", "chatterbox", "dia2", "fake"]
 
 
 def test_bad_script_is_a_clean_error_not_a_traceback(tmp_path: Path, capsys) -> None:

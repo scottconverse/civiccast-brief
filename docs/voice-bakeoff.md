@@ -1,6 +1,6 @@
 # Voice bake-off
 
-Status: round 1 done (90-second script, all five engines). Round 2 (5–7 minute script, top engines) in progress.
+Status: rounds 1–3 done. Default voice: Step-Audio-EditX (Scott, 2026-11-06, "for now"). Backup: not picked.
 
 Phase 1 compares five free, open-source voice engines on the same two-host script, written from the
 Longmont City Council regular session of October 20, 2026 (14 lines, 228 words). The script was
@@ -26,7 +26,7 @@ leads to check by ear, not proof.
 Every engine misread the street address "8513 St. Vrain Road". Scripts should spell numbers, codes and
 addresses as spoken words ("eighty-five thirteen Saint Vrain Road"). This is a script-writer rule for Phase 2.
 
-## Round 2 (in progress)
+## Round 2 (2026-11-05)
 
 Long script: 42 lines, 855 spoken words, written by DeepSeek from the transcript and checked claim by
 claim. Numbers, codes and addresses are spelled as words.
@@ -36,4 +36,33 @@ claim. Numbers, codes and addresses are spelled as words.
 | Chatterbox Turbo | Built-in female (S1); male (S2) cloned from VibeVoice `en-Carter_man.wav` | 92.6 s, 3.7x realtime | 327 s, rendered in 86 s (3.8x), 3.3 GB | Whisper: all 42 lines present, in order; address now read correctly. Leads to check by ear: "remote" may be dropped (0:36), "two hundred six" (3:17), "seventy-eight" (3:50), "one thousand nine hundred seventy-six" (5:17) |
 | Dia2-2B | Fixed per-host voice prefixes, 2 lines per generation, cfg 3.0, temp 0.6, ffmpeg atempo 0.85 | A/B/C variants; C picked (2.41 words/s, WER 8.4%) | 351 s, 336 s render on a shared GPU | Pace steady (147 wpm first and last minute). WER 12–13% at start and end; several middle chunks 28–49% (some is digits-vs-words scoring, some looks like real misreads). Dia2's own pace did not change with sampling; only atempo slowed it. `generate()` adds a stray `[S1]` to chunks that start on `[S2]`; the chunked renderer avoids it |
 
-Default and fallback are recorded here when Scott has listened.
+## Round 3 (2026-11-06)
+
+Scott asked for more natural news voices and back-and-forth. Three newer open models and one hosted
+engine rendered the same 42-line long script. Reference voices for the cloning engines:
+`en_woman.wav` (S1, Maya) and `en_man.wav` (S2, Theo) from the Higgs Audio repo's `examples/voice_prompts`.
+
+| Engine | License / use terms | Long script | Render time | Loudness | Misreads (Whisper medium.en, besides digits) |
+|---|---|---|---|---|---|
+| **Step-Audio-EditX** (picked) | Apache-2.0 | 364 s (6:04) | 214 s | -18.7 LUFS | "setback variance" heard as "sent back variants" |
+| Higgs Audio v2 | Boson community license | 331 s (5:31) | 414 s | -17.7 LUFS | none; 74 samples at 0 dBFS (possible slight clipping) |
+| Voxtral 4B TTS | CC BY-NC 4.0 (non-commercial) | 441 s (7:21) | 152 s | -33.8 LUFS raw | "Saint Vrain" heard as "st rain"; reads slowly |
+| Gemini Flash TTS (hosted, free tier) | hosted service, not open source; outside PLAN.md §6 | rendered | n/a | n/a | read word for word |
+
+Not run: Orpheus (gated on Hugging Face; needs Scott to accept its terms) and ElevenLabs (needs Scott's sign-in).
+
+Step-Audio-EditX setup on nvideablackwell: WSL Ubuntu-24.04, checkout `~/r3/Step-Audio-EditX` (`uv sync`:
+torch 2.9.1+cu128, vLLM 0.14), models in `~/r3/models`. Each line is cloned on its own from that host's
+reference, then lines are joined with 0.3 s of silence. Lines must stay under about 30 s of speech.
+Renderer: `C:\dev\civiccast-brief-bakeoff\step\render_step.py` on the box. The engine adapter is
+`stepaudio` in `src/civiccast_brief/audio/engines.py`.
+
+## Decision
+
+- **Default: Step-Audio-EditX.** Scott, 2026-11-06: "step audio - use that one for now." The CLI uses it
+  when `--engine` is not given.
+- **Backup: not picked.** Chatterbox Turbo and Dia2 stay available with `--engine chatterbox` or `--engine dia2`.
+
+Check run after wiring it in (2026-11-06): a 4-line test script through
+`python -m civiccast_brief.audio` rendered 25.5 s in 1 min 42 s including model load, -16.6 LUFS,
+-1.4 dBTP. Whisper heard every word; the only differences were numbers written as digits.

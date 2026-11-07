@@ -106,8 +106,10 @@ python -m civiccast_brief.review export --db review.db --out exported
 ## 6. Make the audio
 
 ```
-python -m civiccast_brief.audio runs/2026-11-03/script.txt --engine chatterbox --out runs/2026-11-03/audio
+python -m civiccast_brief.audio runs/2026-11-03/script.txt --out runs/2026-11-03/audio
 ```
+
+The default voice is Step-Audio-EditX (`stepaudio`). Add `--engine chatterbox` or `--engine dia2` to use another.
 
 This writes `episode.mp3`, `chapters.json` and `transcript.vtt`.
 

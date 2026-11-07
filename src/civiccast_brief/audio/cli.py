@@ -1,9 +1,9 @@
 """Command line for the audio package.
 
-    python -m civiccast_brief.audio SCRIPT --engine chatterbox|dia2|fake --out DIR
+    python -m civiccast_brief.audio SCRIPT [--engine stepaudio|chatterbox|dia2|fake] --out DIR
                                     [--intro FILE] [--outro FILE] [--config FILE]
 
-There is no default engine: Scott has not yet picked between the two. Output in DIR:
+The default engine is stepaudio (Step-Audio-EditX), Scott's pick on 2026-11-06 "for now". Output in DIR:
 episode.mp3, chapters.json, transcript.vtt, and work/ (the raw voice WAV, the program and master
 WAVs, and render.json with the line timings).
 """
@@ -15,7 +15,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from civiccast_brief.audio.engines import ENGINE_NAMES, load_config, make_engine
+from civiccast_brief.audio.engines import DEFAULT_ENGINE, ENGINE_NAMES, load_config, make_engine
 from civiccast_brief.audio.errors import AudioError
 from civiccast_brief.audio.finish import finish_episode
 from civiccast_brief.audio.lines import read_script
@@ -36,9 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--engine",
-        required=True,
+        default=DEFAULT_ENGINE,
         choices=ENGINE_NAMES,
-        help="voice engine; required, there is no default",
+        help=f"voice engine (default: {DEFAULT_ENGINE})",
     )
     parser.add_argument(
         "--out", required=True, type=Path, help="output directory (created if missing)"
