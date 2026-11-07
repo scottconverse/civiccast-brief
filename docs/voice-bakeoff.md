@@ -1,6 +1,6 @@
 # Voice bake-off
 
-Status: rounds 1–3 done. Default voice: Step-Audio-EditX (Scott, 2026-11-06, "for now"). Backup: not picked.
+Status: rounds 1–3 done. Default voice: Step-Audio-EditX (Scott, 2026-11-06, "for now"). Backup: Dia2 (Scott, 2026-11-07).
 
 Phase 1 compares five free, open-source voice engines on the same two-host script, written from the
 Longmont City Council regular session of October 20, 2026 (14 lines, 228 words). The script was
@@ -61,7 +61,8 @@ Renderer: `C:\dev\civiccast-brief-bakeoff\step\render_step.py` on the box. The e
 
 - **Default: Step-Audio-EditX.** Scott, 2026-11-06: "step audio - use that one for now." The CLI uses it
   when `--engine` is not given.
-- **Backup: not picked.** Chatterbox Turbo and Dia2 stay available with `--engine chatterbox` or `--engine dia2`.
+- **Backup: Dia2-2B.** Scott, 2026-11-07: "backup voice dia2". Use it with `--engine dia2` (round 2 settings,
+  variant C). Chatterbox Turbo also stays available with `--engine chatterbox`.
 
 Check run after wiring it in (2026-11-06): a 4-line test script through
 `python -m civiccast_brief.audio` rendered 25.5 s in 1 min 42 s including model load, -16.6 LUFS,

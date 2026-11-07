@@ -9,7 +9,7 @@ An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED
 |---|---|---|---|
 | 1 | Phase 0: TownRecord tests + one Longmont capture + `docs/townrecord-state.md` | done | docs/townrecord-state.md, commit 6b801b1: local 1113 pass/2 skip; origin/main 1466 pass/41 skip; grounding 67 pass/6 skip; one capture done, 8,032 segments |
 | 2 | Phase 1: Scott listens to round 2 | done | Scott listened to rounds 2 and 3 and picked Step-Audio-EditX, 2026-11-06: "step audio - use that one for now." |
-| 3 | Phase 1: default + backup voice recorded in `docs/voice-bakeoff.md` | default recorded; backup waits on Scott | docs/voice-bakeoff.md "Decision": default Step-Audio-EditX; backup not picked |
+| 3 | Phase 1: default + backup voice recorded in `docs/voice-bakeoff.md` | done | docs/voice-bakeoff.md "Decision": default Step-Audio-EditX (Scott, 2026-11-06); backup Dia2 (Scott, 2026-11-07) |
 | 4 | Phase 2: recap → two-host script writer | built, committed | src/civiccast_brief/script; 72 script tests |
 | 5 | Phase 2: no-new-claims checker | built, committed | checker + repair step; real script PASS after dropping 4 lines |
 | 6 | Phase 2: writer model + GPU load order decided; one Longmont script passes | done | PLAN.md §6 (2026-11-06): deepseek-v4.1-flash:1017-cloud via Ollama; order diarize → writer/judge → voice. All 5 Longmont scripts from Phase 4 recaps pass the check (Oct 6 on rewrite; 4 after repair); no caption-garbled names in any script ("Prom McCoy" stays only inside a verbatim quote) |
