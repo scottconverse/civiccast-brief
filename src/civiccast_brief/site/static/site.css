@@ -166,7 +166,7 @@ button { font: inherit; }
 .card--cream { background: var(--c-cream); }
 
 /* Home */
-.home { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; }
+.home-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; }
 .lead { padding: 26px 28px; border-left: 4px solid var(--c-gold); background: var(--c-cream); }
 .lead__title { font-size: 34px; line-height: 1.12; margin-bottom: 12px; }
 .lead__title a { color: var(--c-ink-teal); text-decoration: none; }
@@ -327,7 +327,7 @@ a.cite:hover { color: var(--c-teal); border-color: var(--c-teal); }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .aside { order: -1; }
-  .home { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .home-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .home__aside { order: 2; }
 }
 

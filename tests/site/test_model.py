@@ -157,3 +157,17 @@ def test_time_formats() -> None:
     assert vtt_time(3.14159) == "00:00:03.142"
     assert iso_duration(327.4) == "PT5M27S"
     assert iso_duration(3725) == "PT1H2M5S"
+
+
+def test_episodes_published_together_list_the_newest_meeting_first(episodes_dir: Path) -> None:
+    council = _episode(episodes_dir / "ep-2026-10-20-example-council.json")
+    sample_path = episodes_dir / "ep-2026-10-06-example-sample.json"
+    sample = _episode(sample_path)
+    sample["published"] = council["published"]
+    _write(episodes_dir, sample_path.name, sample)
+    # The older meeting's file sorts first by name, so only the meeting date can put it second.
+    site = load_site_input(episodes_dir)
+    assert [e.id for e in site.episodes] == [
+        "2026-10-20-example-council",
+        "2026-10-06-example-sample",
+    ]

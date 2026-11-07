@@ -169,3 +169,17 @@ def test_city_settings_are_applied_to_the_footer_and_feed(built: tuple[Path, obj
     assert "CivicCast Brief: Example City is published by CivicCast Brief" in footer_html
     site = load_site_input(FIXTURES)
     assert site.city.name == "Example City"
+
+
+def test_body_class_never_picks_up_a_layout_rule(built: tuple[Path, object]) -> None:
+    # The body carries the nav name ("home", "search"...). A CSS rule for the same class name
+    # made the body a two-column grid and squeezed the home episode list to 0 px wide.
+    from civiccast_brief.site.build import STATIC_DIR
+
+    out, _ = built
+    css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
+    for file in out.rglob("*.html"):
+        match = re.search(r'<body class="([^"]*)"', file.read_text(encoding="utf-8"))
+        assert match, file
+        for name in match.group(1).split():
+            assert not re.search(rf"\.{re.escape(name)}(?![\w-])", css), (file, name)

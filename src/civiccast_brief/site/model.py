@@ -289,7 +289,7 @@ def load_site_input(directory: Path) -> SiteInput:
 
     if problems:
         raise InputError(problems)
-    approved.sort(key=lambda item: item.published, reverse=True)
+    approved.sort(key=lambda item: (item.published, item.meeting_date, item.id), reverse=True)
     return SiteInput(city=city, episodes=tuple(approved), excluded=tuple(excluded))
 
 

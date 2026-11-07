@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "civiccast-brief"
-version = "0.0.1"
+version = "0.1.0"
 description = "A lite, self-hosted tool: city meeting video in, cited recap, podcast episode and static city site out."
 readme = "README.md"
 requires-python = ">=3.12"
