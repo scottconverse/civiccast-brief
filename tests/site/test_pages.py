@@ -183,3 +183,10 @@ def test_body_class_never_picks_up_a_layout_rule(built: tuple[Path, object]) -> 
         assert match, file
         for name in match.group(1).split():
             assert not re.search(rf"\.{re.escape(name)}(?![\w-])", css), (file, name)
+
+
+def test_headers_file_stops_host_script_injection(built: tuple[Path, object]) -> None:
+    out, _ = built
+    headers = (out / "_headers").read_text(encoding="utf-8")
+    assert headers.startswith("/*\n")
+    assert "no-transform" in headers

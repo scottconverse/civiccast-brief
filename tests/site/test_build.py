@@ -28,6 +28,7 @@ def test_build_writes_every_expected_file(built: tuple[Path, object]) -> None:
         "feed.xml",
         "sitemap.xml",
         "robots.txt",
+        "_headers",
         "assets/site.css",
         "assets/print.css",
         "assets/player.js",

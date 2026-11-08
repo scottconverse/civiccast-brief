@@ -25,7 +25,8 @@ const HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Content-Security-Policy":
     "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-  "Cache-Control": "no-store",
+  // no-transform stops Cloudflare from adding its analytics script to the page.
+  "Cache-Control": "no-store, no-transform",
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
 };
