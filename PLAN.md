@@ -212,3 +212,12 @@ in Phase One; the home page lists only live cities.
 ### Phase Three - Boulder County, CO
 - Every city and town in Boulder County, using the Phase Two search-and-build step.
 
+
+### Requirement added 2026-11-08 (Scott): automatic from the start
+- Stories are written automatically on every weekly run, over all available meetings and their
+  documents (video, agenda packets, minutes). No manual run per meeting.
+- A "just the facts" reference publication: local government and school board news only.
+- Editor controls like TownReporter's (review, edit, redraft, hold, kill, publish, corrections).
+- Scott allows borrowing code and methods from TownReporter and TownRecord for this project.
+- Research report (TownRecord vs. this project, three open decisions):
+  https://claude.ai/artifact/9PhqJA4mdyixwXUfx2DDML
