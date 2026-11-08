@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "civiccast-brief-signup",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-07",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "signup.civiccastbrief.org", "custom_domain": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "civiccast-brief-signup",
+      "database_id": "a239de37-4415-4950-85bc-c159cf7dbaf6",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "send_email": [{ "name": "EMAIL" }],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true },
+  // TOKEN_KEY and EMAIL_KEY are secrets: wrangler secret put
+  "vars": {
+    "FROM_EMAIL": "brief@civiccastbrief.org",
+    "PUBLIC_URL": "https://signup.civiccastbrief.org",
+    "CITIES": {
+      "longmont": {
+        "title": "CivicCast Brief: Longmont",
+        "site": "https://longmont.civiccastbrief.org",
+        "feed": "https://longmont.civiccastbrief.org/feed.xml"
+      }
+    }
+  }
+}

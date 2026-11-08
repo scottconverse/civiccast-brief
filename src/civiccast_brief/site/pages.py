@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from civiccast_brief.site import seo
 from civiccast_brief.site.feed import FEED_PATH
@@ -54,7 +55,13 @@ def _base(city: City, urls: Urls, *, path: str, title: str, description: str) ->
         },
         "feed_href": urls.href(FEED_PATH),
         "feed_url": urls.absolute(FEED_PATH),
+        "form_action": _origin(city.signup_url) if city.signup_url else None,
     }
+
+
+def _origin(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:

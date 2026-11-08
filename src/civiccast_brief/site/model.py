@@ -63,6 +63,7 @@ class City:
     podcast: PodcastInfo
     official_site: str | None
     contact_email: str | None
+    signup_url: str | None
     about: tuple[str, ...]
     artwork_source: Path | None
     share_image_source: Path | None
@@ -198,6 +199,16 @@ class _Checker:
         parsed = urlparse(value)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             self.fail(key, "must be an http or https address, or a path starting with /")
+            return None
+        return value
+
+    def https_url(self, data: dict[str, Any], key: str) -> str | None:
+        value = self.text(data, key, required=False, limit=2048)
+        if not value:
+            return None
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.hostname:
+            self.fail(key, "must be an https address, such as https://signup.example.org/subscribe")
             return None
         return value
 
@@ -365,6 +376,7 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         podcast=podcast,
         official_site=check.url(data, "official_site", required=False),
         contact_email=check.text(data, "contact_email", required=False, limit=200) or None,
+        signup_url=check.https_url(data, "signup_url"),
         about=tuple(about),
         artwork_source=artwork,
         share_image_source=share,

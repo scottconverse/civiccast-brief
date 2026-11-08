@@ -323,6 +323,23 @@ a.cite:hover { color: var(--c-teal); border-color: var(--c-teal); }
 .foot p { margin-bottom: 8px; }
 .foot__note { font-weight: 600; color: var(--c-ink-teal); }
 .foot__links a { margin-right: 14px; }
+.signup { max-width: 640px; margin: 0 0 22px; padding: 0 0 20px; border-bottom: 1px solid var(--c-line); }
+.signup__title { font-size: 20px; margin: 0 0 6px; }
+.signup__help { margin: 0 0 10px; }
+.signup__label { display: block; font-weight: 600; color: var(--c-ink-teal); margin-bottom: 6px; }
+.signup__row { display: flex; gap: 8px; }
+.signup__row input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font: 16px var(--f-sans);
+  color: var(--c-navy);
+  background: var(--c-white);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-control);
+}
+.signup__row input:focus { outline: 3px solid var(--c-focus); outline-offset: 1px; }
+.signup__trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
@@ -346,6 +363,8 @@ a.cite:hover { color: var(--c-teal); border-color: var(--c-teal); }
   .search-row { flex-direction: column; }
   .search-row .btn-solid { width: 100%; padding: 12px 18px; }
   .search-row input { font-size: 16px; padding: 12px; }
+  .signup__row { flex-direction: column; }
+  .signup__row .btn-solid { width: 100%; padding: 12px 18px; }
   .player__play { width: 44px; height: 44px; }
   .player__speed { min-height: 36px; }
   .player__track { flex-basis: 100%; order: 3; }

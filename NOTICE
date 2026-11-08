@@ -1,2 +1,6 @@
 CivicCast Brief
 Copyright 2026 Scott Converse
+
+The email sign-up Worker (worker/signup) adapts the subscribe flow, signed links
+and rate limit from civiccast-native, Copyright (c) The CivicCast Authors,
+licensed under the Apache License, Version 2.0.

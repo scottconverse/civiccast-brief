@@ -20,7 +20,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action {% if form_action %}{{ form_action }}{% else %}'none'{% endif %}">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>{{ page.title }}</title>
 <meta name="description" content="{{ page.description }}">
@@ -69,6 +69,22 @@
 </main>
 <footer class="foot">
   <div class="shell">
+{% if city.signup_url %}
+    <form class="signup" action="{{ city.signup_url }}" method="post">
+      <h2 class="signup__title">Get new episodes by email</h2>
+      <p class="signup__help">We email you once to confirm. After that, one email per new episode. Every email has an unsubscribe link.</p>
+      <input type="hidden" name="city" value="{{ city.slug }}">
+      <div class="signup__trap" aria-hidden="true">
+        <label for="signup-website">Leave this empty</label>
+        <input id="signup-website" type="text" name="website" tabindex="-1" autocomplete="off">
+      </div>
+      <label for="signup-email" class="signup__label">Email address</label>
+      <div class="signup__row">
+        <input id="signup-email" type="email" name="email" autocomplete="email" maxlength="254" required>
+        <button type="submit" class="btn-solid">Sign up</button>
+      </div>
+    </form>
+{% endif %}
     <p class="foot__note">{{ city.disclaimer }}</p>
     <p>{{ city.site_title }} is published by {{ city.publisher }}. It is independent and is not run by or affiliated with the City of {{ city.name }}. This site uses no analytics or tracking.</p>
     <p class="foot__links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/corrections/') }}">Corrections</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a></p>

@@ -17,3 +17,8 @@ media/
 *.sqlite
 *.db
 .env
+
+# Worker (Node)
+node_modules/
+.wrangler/
+.dev.vars
