@@ -231,3 +231,7 @@ in Phase One; the home page lists only live cities.
 - Writer model: a TownReporter-style model picker that Scott sets per task. Defaults: Claude (claude -p on
   Scott's subscription) for City Council, DeepSeek for boards and commissions.
 - No corrections page.
+- Adding a city's sources: option 2. Phase One gets a simple "add source" screen, and Longmont's sources
+  are entered by hand on it. The search-and-build step that finds sources stays in Phase Two.
+- Order: fix the five TownRecord bugs found in the live test first, then rerun the 30-day live test with
+  no workarounds until Milestone 1's "done when" passes.
