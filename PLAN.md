@@ -216,8 +216,18 @@ in Phase One; the home page lists only live cities.
 ### Requirement added 2026-11-08 (Scott): automatic from the start
 - Stories are written automatically on every weekly run, over all available meetings and their
   documents (video, agenda packets, minutes). No manual run per meeting.
-- A "just the facts" reference publication: local government and school board news only.
-- Editor controls like TownReporter's (review, edit, redraft, hold, kill, publish, corrections).
+- A record of what a government or school district is doing, based only on the public record. Deep dives
+  into records most people never read, made simple and easy to digest. Not journalism: no corrections page.
+- Editor controls like TownReporter's (review, edit, redraft, hold, kill, publish).
 - Scott allows borrowing code and methods from TownReporter and TownRecord for this project.
 - Research report (TownRecord vs. this project, three open decisions):
   https://claude.ai/artifact/9PhqJA4mdyixwXUfx2DDML
+
+### Decisions 2026-11-08 (Scott)
+- A = 1: CivicCast Brief reads TownRecord through its API. A new evidence endpoint is added to TownRecord.
+- B = 1: the producer screen grows into a Python/FastAPI editor desk with TownReporter's states and actions.
+- Stories may publish without Scott's press (automatic publishing allowed).
+- Code may be added to the TownRecord repo.
+- Writer model: a TownReporter-style model picker that Scott sets per task. Defaults: Claude (claude -p on
+  Scott's subscription) for City Council, DeepSeek for boards and commissions.
+- No corrections page.
