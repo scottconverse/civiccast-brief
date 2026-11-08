@@ -32,7 +32,7 @@ Repo: github.com/scottconverse/civiccast-brief. License: Apache-2.0.
 
 ### Out of scope (this is what makes it lite)
 TownReporter beats and daily scans, dark desk, records requests, opinion pieces, sponsor ledger and
-underwriting, hosted multi-city network, analytics or tracking, live server features.
+underwriting, live server features. (Multi-city and analytics moved in scope on 2026-11-08; see section 10.)
 
 ## 2. Target machine
 
@@ -153,7 +153,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 - Voice: free and open-source engines only. No hosted TTS.
 - Stack: Python, SQLite, static site, separate sign-up worker.
 - Capture runs on the operator's machine.
-- No tracking or analytics on city sites.
+- ~~No tracking or analytics on city sites.~~ Replaced 2026-11-08 (Scott): add Cloudflare Web Analytics.
 - Hosting: Cloudflare Pages for the site, Cloudflare R2 for MP3s (Scott, 2026-11-05). Free tier per Cloudflare docs checked 2026-11-05: Pages 20,000 files, 25 MiB per file; R2 10 GB-month storage, free egress, 10M reads/month.
 
 - Writer LLM (Phase 2, item 6, 2026-11-06): `deepseek-v4.1-flash:1017-cloud` through Ollama at
@@ -180,3 +180,35 @@ Each phase ends only when its "done when" is shown, not claimed.
 1. Create the repo (Phase 0).
 2. Run the GPU check on nvideablackwell.
 3. Install Kokoro and Dia2 in a scratch folder on nvideablackwell and render the test script (Phase 1 start).
+
+## 10. News-site expansion (Scott, 2026-11-08)
+
+Scott compared the live Longmont site with bozeman.civiccast.ai and expanded the scope. These three
+phases are separate from the build Phases 0-10 above. Plan and mockups:
+https://claude.ai/artifact/8gRFbUHzAzTb3hzzGY64wM
+
+Decisions (Scott, 2026-11-08): logo A (the cast mark); add Cloudflare Web Analytics; City Council only
+in Phase One; the home page lists only live cities.
+
+### Phase One - news site for Longmont
+1. Home page at civiccastbrief.org listing live cities (apex DNS record, own Pages project).
+2. New look and logo across the site, sign-up pages and emails. Fonts served from our own site.
+3. Cloudflare Web Analytics on every page; About page, footer, README and docs updated to say so.
+4. Speaker names: fix why most claims say "an unidentified speaker".
+5. Article writer: a news story per meeting (headline, dek, sections, votes, quotes), every paragraph
+   cited to the meeting video, checked by the existing no-new-claims checker, approved on the producer screen.
+6. Site pages: front page, article pages, board pages, topic pages, monthly archive, header search,
+   podcast page, email block (when Workers Paid is on), republish notice.
+7. Written roundup titles.
+8. Deploy and walk the live site on desktop and phone width.
+
+### Phase Two - every public body in a city
+- All of the city's boards and commissions.
+- The public school district board(s) serving the city.
+- Charter school boards in the city, if any exist.
+- A search-and-build step for adding a city: find each body, where its video and agendas are posted,
+  and set up capture for it.
+
+### Phase Three - Boulder County, CO
+- Every city and town in Boulder County, using the Phase Two search-and-build step.
+
