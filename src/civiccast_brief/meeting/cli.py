@@ -3,7 +3,7 @@
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
     python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
     python -m civiccast_brief.meeting run <video_or_clip_id> --city CITY_DIR --out DIR
-        [--agenda AGENDA.txt] [--roster ROSTER.json] [--townrecord-python PATH]
+        [--agenda AGENDA.txt] [--roster ROSTER.json] [--ytdlp-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
 Writes transcript.json, speakers.json and recap.json (plus draft.json, verify-report.json and
@@ -42,14 +42,13 @@ def _run(args: argparse.Namespace) -> int:
         summary = run(
             args.video_id,
             args.out,
-            townrecord_python=args.townrecord_python,
+            ytdlp_python=args.ytdlp_python,
             roster_path=args.roster,
             agenda_path=args.agenda,
             window_s=args.window_minutes * 60.0,
             model=args.model,
             reuse_draft=args.reuse_draft,
             diarize=args.diarize,
-            textflowkit_python=args.textflowkit_python,
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
         )
@@ -90,8 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: the --city roster)")
     run_cmd.add_argument(
-        "--townrecord-python",
-        help="TownRecord's python.exe (default: $CIVICCAST_TOWNRECORD_PYTHON or the scratch venv)",
+        "--ytdlp-python",
+        help="the python.exe that runs yt-dlp (default: CivicCast Brief's private yt-dlp runtime)",
     )
     run_cmd.add_argument(
         "--window-minutes",
@@ -108,11 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     run_cmd.add_argument(
         "--diarize",
         action="store_true",
-        help="label caption lines with voices using textflowkit's diarizer (needs the audio)",
-    )
-    run_cmd.add_argument(
-        "--textflowkit-python",
-        help="textflowkit's python.exe (default: $CIVICCAST_TEXTFLOWKIT_PYTHON or its venv)",
+        help="label caption lines with voices (needs the audio and the diarize extra)",
     )
     run_cmd.set_defaults(run=_run)
 

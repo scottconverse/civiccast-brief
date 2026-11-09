@@ -9,7 +9,7 @@ Scott's decisions, 2026-11-09:
 - No separate TownRecord install, and none for textflowkit. The code CivicCast Brief needs is copied into CivicCast Brief. TownRecord is not a finished product.
 - City setup must be in the program and must not need an AI to run.
 - No paid services. Email goes through Brevo's free plan (Scott creates the account and enters the key himself).
-- Phase Three is all 10 Boulder County towns and cities.
+- Phase Three is all 10 Boulder County towns and cities (Boulder, Longmont, Louisville, Lafayette, Superior, Erie, Lyons, Nederland, Jamestown, Ward) plus the Boulder County Commissioners, each with its council, all boards and schools.
 - Items 24 and 25 wait until Scott says it is time.
 
 | # | Item | Status | Evidence |
@@ -40,7 +40,7 @@ Scott's decisions, 2026-11-09:
 | 21 | Charter school boards, if any | open | |
 | 22 | In-program search-and-build step for a new city, no AI needed | open | |
 | **D** | **Phase Three** | | |
-| 23 | All 10 Boulder County towns and cities, set up with step 22 | open | |
+| 23 | All 10 Boulder County towns and cities plus the County Commissioners, each with council, boards and schools, set up with step 22 | open | |
 | **E** | **Older open items** | | |
 | 24 | Apple Podcasts and Spotify listing (Scott's sign-in, when he says) | waits on Scott | |
 | 25 | Email end-to-end through Brevo free plan; clear the `nobody@example.com` row | waits on Scott | |

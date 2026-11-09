@@ -1,8 +1,11 @@
 """Voice diarization: who spoke when, as voice labels on the caption lines.
 
-1. The meeting audio is fetched once with yt-dlp in TownRecord's venv, as 16 kHz mono WAV.
-2. textflowkit's diarizer runs in textflowkit's own venv (textflowkit_bridge.py), from the local
-   model cache, offline. It writes diarization.json: a list of (start, end, label) spans.
+1. The meeting audio is fetched once with yt-dlp (CivicCast Brief's private yt-dlp runtime), as
+   16 kHz mono WAV.
+2. The diarizer copied into CivicCast Brief from textflowkit runs as a child process
+   (``python -m civiccast_brief.speech diarize``), from the local model cache, offline. It needs
+   the optional ``diarize`` extra. It writes diarization.json: a list of (start, end, label)
+   spans.
 3. Each caption line gets the voice that overlaps it most. Labels are renumbered "voice 01",
    "voice 02", ... in order of first appearance.
 
@@ -13,18 +16,17 @@ come only from the roll call (speakers.py).
 from __future__ import annotations
 
 import json
-import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.meeting.capture import townrecord_python
+from civiccast_brief.meeting.capture import CaptureError, ytdlp
 from civiccast_brief.meeting.transcript import Segment
 
-BRIDGE = Path(__file__).with_name("textflowkit_bridge.py")
-TEXTFLOWKIT_PYTHON_ENV = "CIVICCAST_TEXTFLOWKIT_PYTHON"
-DEFAULT_TEXTFLOWKIT_PYTHON = r"C:\Users\scott\Desktop\Code\textflowkit\.venv\Scripts\python.exe"
+#: The speech program, run by the same Python that runs CivicCast Brief.
+SPEECH = [sys.executable, "-m", "civiccast_brief.speech"]
 AUDIO_TIMEOUT_S = 1800
 DIARIZE_TIMEOUT_S = 7200
 
@@ -40,18 +42,18 @@ class Span:
     label: str
 
 
-def textflowkit_python(explicit: str | None = None) -> str:
-    return explicit or os.environ.get(TEXTFLOWKIT_PYTHON_ENV) or DEFAULT_TEXTFLOWKIT_PYTHON
-
-
 def fetch_audio(video_id: str, work_dir: Path, *, python: str | None = None) -> Path:
     """The meeting audio as ``<work_dir>/<video_id>.wav``. Reused when it is already there."""
     work_dir.mkdir(parents=True, exist_ok=True)
     wav = work_dir / f"{video_id}.wav"
     if wav.exists() and wav.stat().st_size > 0:
         return wav
+    try:
+        interpreter = ytdlp(python).python
+    except CaptureError as exc:
+        raise DiarizeError(str(exc)) from exc
     argv = [
-        townrecord_python(python),
+        interpreter,
         "-I",
         "-m",
         "yt_dlp",
@@ -78,16 +80,16 @@ def fetch_audio(video_id: str, work_dir: Path, *, python: str | None = None) -> 
     return wav
 
 
-def run_diarization(audio: Path, out_json: Path, *, python: str | None = None) -> dict[str, Any]:
-    """Run textflowkit's diarizer on ``audio`` into ``out_json``. Reused when it exists."""
+def run_diarization(audio: Path, out_json: Path) -> dict[str, Any]:
+    """Run the speech program's diarizer on ``audio`` into ``out_json``. Reused when it exists."""
     if not out_json.exists():
-        argv = [textflowkit_python(python), "-I", str(BRIDGE), str(audio), str(out_json)]
+        argv = [*SPEECH, "diarize", str(audio), str(out_json)]
         try:
             done = subprocess.run(argv, capture_output=True, timeout=DIARIZE_TIMEOUT_S, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
-            raise DiarizeError(f"could not run textflowkit's diarizer: {exc}") from exc
+            raise DiarizeError(f"could not run the diarizer: {exc}") from exc
         lines = done.stdout.decode("utf-8", errors="replace").strip().splitlines()
-        payload = json.loads(lines[-1]) if lines else {"error": "no output from the bridge"}
+        payload = json.loads(lines[-1]) if lines else {"error": "no output from the diarizer"}
         if done.returncode != 0 or "error" in payload or not out_json.exists():
             raise DiarizeError(f"diarization failed: {payload.get('error', payload)}")
     return dict(json.loads(out_json.read_text(encoding="utf-8")))

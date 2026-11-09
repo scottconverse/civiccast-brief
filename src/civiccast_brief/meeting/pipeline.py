@@ -1,10 +1,10 @@
 """Run the Phase 4 stages for one meeting (YouTube or Granicus) and write each stage's file.
 
-out/raw/                caption file and info from the TownRecord bridge
+out/raw/                caption file and yt-dlp's info file
 out/transcript.json     normalized caption lines, with speaker labels
 out/speakers.json       turns, roll-call decisions and the diarization status
 out/audio/              the meeting audio (only with diarize=True)
-out/diarization.json    textflowkit's voice spans (only with diarize=True)
+out/diarization.json    the diarizer's voice spans (only with diarize=True)
 out/draft.json          the model's draft items per window (with receipts)
 out/draft-answers/      the model's raw answer per window
 out/judge.json          the claim judge's verdict on every claim that passed the code checks
@@ -66,14 +66,13 @@ def run(
     video_id: str,
     out_dir: Path,
     *,
-    townrecord_python: str | None = None,
+    ytdlp_python: str | None = None,
     roster_path: Path | None = None,
     agenda_path: Path | None = None,
     window_s: float = DEFAULT_WINDOW_S,
     model: str = llm.DEFAULT_MODEL,
     reuse_draft: bool = False,
     diarize: bool = False,
-    textflowkit_python: str | None = None,
     granicus_host: str | None = None,
     granicus_view_id: int | None = None,
     complete: Complete | None = None,
@@ -116,8 +115,8 @@ def run(
             return granicus_mod.fetch_audio(gcap, audio_dir)
 
     else:
-        log(f"[{video_id}] capture: TownRecord caption command")
-        capture = capture_captions(video_id, raw_dir, python=townrecord_python)
+        log(f"[{video_id}] capture: caption command")
+        capture = capture_captions(video_id, raw_dir, python=ytdlp_python)
         title = str(capture.info.get("title") or "")
         found = transcript_mod.meeting_date_from_title(title)
         if found is None:
@@ -133,14 +132,14 @@ def run(
             "caption_file": capture.caption_file.name,
             "caption_download_reused": capture.caption_reused,
             "capture": (
-                "TownRecord caption command (townrecord.capture.command) run in TownRecord's "
-                "venv by townrecord_bridge.py; srv3 parsed by townrecord.captions.parse"
+                "caption command (civiccast_brief.record.capture.command, copied from "
+                "TownRecord); srv3 parsed by civiccast_brief.record.captions.parse"
             ),
         }
         youtube_id = video_id
 
         def fetch_audio(audio_dir: Path) -> Path:
-            return diarize_mod.fetch_audio(youtube_id, audio_dir, python=townrecord_python)
+            return diarize_mod.fetch_audio(youtube_id, audio_dir, python=ytdlp_python)
 
     segments = transcript_mod.segments_from_capture(items)
 
@@ -148,7 +147,7 @@ def run(
     turns = split_turns(segments)
     roll_call = label_roll_call(turns, roster)
     apply_turns(segments, turns)
-    diarization = _diarize(video_id, out, segments, diarize, fetch_audio, textflowkit_python, log)
+    diarization = _diarize(video_id, out, segments, diarize, fetch_audio, log)
     speakers = speakers_report(video_id, segments, turns, roll_call, diarization)
     speakers["roster"] = {
         "file": str(roster_path),
@@ -264,7 +263,6 @@ def _diarize(
     segments: list[transcript_mod.Segment],
     requested: bool,
     fetch_audio: Callable[[Path], Path],
-    textflowkit_python: str | None,
     log: Callable[[str], None],
 ) -> dict[str, Any]:
     """Put voice labels on the caption lines. A failed run is recorded, not hidden, and the
@@ -274,10 +272,8 @@ def _diarize(
     try:
         log(f"[{video_id}] diarize: audio")
         audio = fetch_audio(out / "audio")
-        log(f"[{video_id}] diarize: textflowkit")
-        data = diarize_mod.run_diarization(
-            audio, out / "diarization.json", python=textflowkit_python
-        )
+        log(f"[{video_id}] diarize: voices")
+        data = diarize_mod.run_diarization(audio, out / "diarization.json")
     except (diarize_mod.DiarizeError, granicus_mod.GranicusError) as exc:
         log(f"[{video_id}] diarize FAILED: {exc}")
         return {"status": "failed", "reason": str(exc)}
