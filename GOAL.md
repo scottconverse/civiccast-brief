@@ -1,4 +1,55 @@
-# Goal: finish CivicCast Brief (set by Scott, 2026-11-05)
+# Goal: finish CivicCast Brief, 28 items A to F (set by Scott, 2026-11-09)
+
+Scott: "merge PR #30 and do the P&Z rule first. Then implement ALL 28 items, phased by letter (A through F). ... Make this your goal."
+
+The list is fixed at 28 items. Nothing is added without Scott's OK. An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED or SKIPPED never count as done.
+
+Scott's decisions, 2026-11-09:
+- Podcasts are the main product; news stories are second.
+- No separate TownRecord install, and none for textflowkit. The code CivicCast Brief needs is copied into CivicCast Brief. TownRecord is not a finished product.
+- City setup must be in the program and must not need an AI to run.
+- No paid services. Email goes through Brevo's free plan (Scott creates the account and enters the key himself).
+- Phase Three is all 10 Boulder County towns and cities.
+- Items 24 and 25 wait until Scott says it is time.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| **A** | **TownRecord Milestone 1** | | |
+| 1 | Captions for Sustainability Board Oct 21 (other apps stay off YouTube) | open | |
+| 2 | Show M1 passes: per-meeting result and the reason each non-aligned meeting did not align | open | |
+| 3 | PR #30 description lists all 8 fixes | done | scottconverse/townrecord#30 body, 2026-11-09 |
+| 4 | Merge PR #30 | done | merge commit a574028, 2026-11-09 |
+| 5 | P&Z title rule (city name ignored; missing last word OK when one board fits; else skip and report) | done | scottconverse/townrecord#31, merge feecd4d. 5 tests, the main one fails on the old code. Live Longmont copy: P&Z titles find the Planning and Zoning Commission |
+| **B** | **Phase One: the Longmont news site** | | |
+| 6 | Evidence lookup (now inside CivicCast Brief, not a TownRecord server) | open | |
+| 7 | Speaker names: fix "unidentified speaker" (textflowkit code copied in) | open | |
+| 8 | Article per Council meeting, every paragraph cited to the video and checked for new claims | open | |
+| 9 | Automatic weekly run over all meetings and their documents | open | |
+| 10 | Model picker per task (Claude `claude -p` for Council, DeepSeek for boards) | open | |
+| 11 | Editor desk: review, edit, redraft, hold, kill, publish; auto-publish allowed | open | |
+| 12 | Add-source screen (part of the in-program city setup) | open | |
+| 13 | Site pages; Corrections page and link removed | open | |
+| 14 | Written roundup titles | open | |
+| 15 | civiccastbrief.org home page listing live cities | open | |
+| 16 | Logo A and the new look everywhere, self-hosted fonts | open | |
+| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | open | |
+| 18 | Deploy and walk the live site at desktop and phone widths | open | |
+| **C** | **Phase Two** | | |
+| 19 | All Longmont boards and commissions | open | |
+| 20 | School district board(s) | open | |
+| 21 | Charter school boards, if any | open | |
+| 22 | In-program search-and-build step for a new city, no AI needed | open | |
+| **D** | **Phase Three** | | |
+| 23 | All 10 Boulder County towns and cities, set up with step 22 | open | |
+| **E** | **Older open items** | | |
+| 24 | Apple Podcasts and Spotify listing (Scott's sign-in, when he says) | waits on Scott | |
+| 25 | Email end-to-end through Brevo free plan; clear the `nobody@example.com` row | waits on Scott | |
+| **F** | **Issues** | | |
+| 26 | YouTube shared limit: other apps paused for now; CivicCast Brief reads captions with the copied TownRecord code | open | Scott OK'd 2026-11-09 |
+| 27 | Running on other machines: no separate installs; release work after A to E | open | |
+| 28 | Someone other than me sets up a city with the in-program setup | open | |
+
+## Earlier goal: the 24 PLAN.md items (set by Scott, 2026-11-05)
 
 Scott: "finish all of these items. make it your goal."
 
