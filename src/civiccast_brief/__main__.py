@@ -6,13 +6,19 @@
 
     python -m civiccast_brief tools [--test-video URL]
 
+    python -m civiccast_brief evidence (--meeting ID | --video VIDEO_ID) [--db PATH]
+        [--check DRAFT.txt] [--out FILE.json]
+
 ``setup`` starts a city folder (see civiccast_brief/city.py and docs/set-up-a-city.md).
 ``tools`` installs or updates yt-dlp in CivicCast Brief's own folder (see civiccast_brief/tools.py).
+``evidence`` shows what the record holds for one meeting, or checks a draft against it
+(see civiccast_brief/record/lookup.py).
 """
 
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -59,6 +65,42 @@ def _tools(args: argparse.Namespace) -> int:
     return 1 if outcome.failed else 0
 
 
+def _evidence(args: argparse.Namespace) -> int:
+    import json
+
+    from civiccast_brief.record import lookup
+    from civiccast_brief.record.config import default_db_path
+
+    db = args.db or default_db_path()
+    if not db.exists():
+        print(f"evidence failed: no record database at {db}", file=sys.stderr)
+        return 1
+    conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        meeting_id = lookup.find_meeting(conn, meeting_id=args.meeting, video_id=args.video)
+        captions = lookup.caption_video(conn, meeting_id, args.video)
+        pack = lookup.pack_for(conn, meeting_id, video_id=captions.video_id)
+        print(captions.note)
+        if args.check:
+            result = lookup.check(pack, args.check.read_text(encoding="utf-8"))
+            print(f"{result['grounded']} of {result['sentences']} sentences stand on the record")
+        else:
+            result = lookup.describe(conn, meeting_id, pack, captions)
+            print(result["summary"])
+    except LookupError as exc:
+        print(f"evidence failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+    if args.out:
+        args.out.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"wrote {args.out}")
+    if args.check:
+        return 0 if result["grounded"] == result["sentences"] else 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m civiccast_brief")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -82,6 +124,14 @@ def main(argv: list[str] | None = None) -> int:
         help="a public YouTube meeting video with captions (default: $CIVICCAST_RECORD_TEST_VIDEO)",
     )
     cmd.set_defaults(run=_tools)
+    cmd = commands.add_parser("evidence", help="what the record holds for one meeting")
+    which = cmd.add_mutually_exclusive_group(required=True)
+    which.add_argument("--meeting", type=int, help="the meeting's id in the record")
+    which.add_argument("--video", help="the meeting's YouTube video id")
+    cmd.add_argument("--db", type=Path, help="the record database (default: the usual place)")
+    cmd.add_argument("--check", type=Path, help="a draft to check, one sentence after another")
+    cmd.add_argument("--out", type=Path, help="write the full result here as JSON")
+    cmd.set_defaults(run=_evidence)
     args = parser.parse_args(argv)
     return args.run(args)
 
