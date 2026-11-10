@@ -14,7 +14,7 @@ def test_built_fixture_site_has_no_broken_internal_links(built: tuple[Path, obje
     report = check_site(out, BASE_URL)
     assert report.broken == []
     # The check really ran over the pages, the XML and the links in them.
-    assert report.pages == 8
+    assert report.pages == 18
     assert report.xml_files == 2
     assert report.links > 150
     assert report.internal > 100
