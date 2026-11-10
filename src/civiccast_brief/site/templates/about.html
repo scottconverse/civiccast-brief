@@ -1,17 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<article class="prose-page" aria-labelledby="about-title">
-  <h1 id="about-title" class="section-title">About</h1>
-  <p class="lead-text">{{ city.site_title }} turns a city meeting into a short, cited recap and a podcast episode. It is published by {{ city.publisher }}.</p>
+<article class="listing prose" aria-labelledby="about-title">
+  <h1 id="about-title">About</h1>
+  <p class="dek">{{ city.site_title }} turns a public meeting into a short, cited news story and a podcast episode. It is published by {{ city.publisher }}.</p>
   {% for paragraph in paragraphs %}
   <p>{{ paragraph }}</p>
   {% endfor %}
-  <h2>Privacy</h2>
-  <p>This site uses no analytics, advertising or tracking. The search runs in your browser. The audio player remembers your place and playback speed for the current browser tab only, and sends nothing anywhere.</p>
+  <h2 id="privacy">Privacy</h2>
+  <p>This site uses Cloudflare Web Analytics to count visits. It sets no cookies and does not track you across sites. There is no advertising. The search runs in your browser. The audio player remembers your place and playback speed for the current browser tab only, and sends nothing anywhere.</p>
   {% if city.contact_email %}
   <h2>Contact</h2>
-  <p>Email <a href="mailto:{{ city.contact_email }}">{{ city.contact_email }}</a> with corrections or questions.</p>
+  <p>Email <a href="mailto:{{ city.contact_email }}">{{ city.contact_email }}</a> with questions or to report an error.</p>
   {% endif %}
+  <h2 id="republish">Republishing</h2>
+  <p>{{ republish }}</p>
   <h2>Not affiliated</h2>
   <p>{{ city.site_title }} is independent. It is not run by or affiliated with the City of {{ city.name }}.</p>
 </article>

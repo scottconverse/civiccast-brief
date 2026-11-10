@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="search-page" aria-labelledby="search-title">
-  <h1 id="search-title" class="section-title">Search episodes</h1>
+<section class="listing search-page" aria-labelledby="search-title">
+  <h1 id="search-title">Search meetings</h1>
   <form class="search-form" role="search" data-index="{{ index_href }}">
-    <label for="search-q">Search titles, topics and recaps</label>
+    <label for="search-q">Search headlines, topics and stories</label>
     <div class="search-row">
       <input id="search-q" name="q" type="search" autocomplete="off" spellcheck="false" placeholder="For example: annexation or ordinance">
-      <button type="submit" class="btn-solid">Search</button>
+      <button type="submit" class="btn solid">Search</button>
     </div>
   </form>
-  <p id="search-status" class="search-status" role="status" aria-live="polite">Search runs in your browser. Nothing you type is sent anywhere.</p>
+  <p id="search-status" class="small" role="status" aria-live="polite">Search runs in your browser. Nothing you type is sent anywhere.</p>
+  <h2 class="visually-hidden">Results</h2>
   <ul id="search-results" class="story-list"></ul>
-  <noscript><p>Search needs JavaScript. You can still <a href="{{ href('/') }}">browse the latest episodes</a>.</p></noscript>
+  <noscript><p>Search needs JavaScript. You can still <a href="{{ href('/') }}">browse the latest meetings</a>.</p></noscript>
 </section>
 {% endblock %}

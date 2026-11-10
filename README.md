@@ -18,7 +18,7 @@ To set up your own city, follow [docs/set-up-a-city.md](docs/set-up-a-city.md).
 3. Writes a short recap to a wire-service standard: attributed claims, votes, public comment, and every sentence cited.
 4. Writes a two-host podcast script from the approved recap, with an on-air disclaimer, chapters and a transcript.
 5. Renders the script to audio with a free, open-source voice engine.
-6. Builds a static city site: articles, board pages, audio player, transcript pages linked to the source video, search, corrections page, sitemap and podcast feed.
+6. Builds a static city site: news stories with every paragraph cited to the meeting video, board, topic and monthly archive pages, audio player, transcript pages linked to the source video, search, a podcast page, sitemap and podcast feed. A separate command builds the civiccastbrief.org home page that lists the live cities.
 7. Runs email sign-up with double opt-in, and sends new-article emails.
 
 A producer reviews speakers, recap and script on a local screen, then approves or rejects each episode.
@@ -27,8 +27,14 @@ Only approved items reach the export.
 ## What it is not
 
 CivicCast Brief is not full community coverage. It has no beats, no daily scans, no dark desk, no records
-requests, no opinion pieces, no sponsor ledger or underwriting, no hosted multi-city network, no analytics or
-tracking on city sites, and no live server features. It covers one city meeting at a time.
+requests, no opinion pieces, no sponsor ledger or underwriting, no hosted multi-city network, no ads or
+cross-site tracking, and no live server features. It covers one city meeting at a time.
+
+## Privacy
+
+City sites, the home page and the sign-up pages use Cloudflare Web Analytics to count visits. It sets
+no cookies and does not track readers across sites. Emails carry no analytics. The audio player keeps
+your place in the browser tab only.
 
 ## Family
 

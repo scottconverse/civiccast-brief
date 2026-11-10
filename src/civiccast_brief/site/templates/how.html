@@ -1,22 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
-<article class="prose-page" aria-labelledby="how-title">
-  <h1 id="how-title" class="section-title">How this is made</h1>
-  <p class="lead-text"><strong>Each episode is AI-generated from a public meeting video.</strong> Software writes the recap and the two-host script, and a computer voice reads the script. Every episode carries this label.</p>
-  <p class="notice">{{ disclaimer }}</p>
+<article class="listing prose" aria-labelledby="how-title">
+  <h1 id="how-title">How this is made</h1>
+  <p class="dek"><strong>Each episode is AI-generated from a public meeting video.</strong> Software writes the story, the recap and the two-host script, and a computer voice reads the script. Every episode carries this label.</p>
+  <p class="box">{{ disclaimer }}</p>
 
   <h2>The steps</h2>
   <ol class="steps">
     <li><strong>Capture.</strong> The meeting video is taken from the city's public recording. Each episode links to the video it came from.</li>
     <li><strong>Transcript.</strong> Speech is turned into text with timestamps. Speaker names come from the agenda and the roll call. Where the record does not say who spoke, the speaker is shown as Unknown speaker.</li>
     <li><strong>Recap.</strong> The recap is a list of claims. Each claim states one fact, gives the timestamp where it starts, and quotes the words from the transcript that support it. Votes, numbers and names must match the quoted words.</li>
+    <li><strong>Story.</strong> The news story is written from the recap claims only. Each cited sentence links to the moment in the video where its claim starts.</li>
     <li><strong>Script check.</strong> The two-host script may use only the facts in the recap. A check rejects any script that adds a claim the recap does not have.</li>
     <li><strong>Review.</strong> A person reads the recap and the script and approves or rejects the episode. Only approved episodes are published.</li>
     <li><strong>Publish.</strong> The site, the search index and the podcast feed are rebuilt from approved episodes only.</li>
   </ol>
 
   <h2>What to check yourself</h2>
-  <p>Each claim links to the meeting video at its timestamp. For anything that matters, watch that part of the video or read the official minutes. If an episode is wrong, the correction is listed on the <a href="{{ href('/corrections/') }}">corrections page</a>.</p>
+  <p>Each claim links to the meeting video at its timestamp. For anything that matters, watch that part of the video or read the official minutes. If something is wrong, email the address on the <a href="{{ href('/about/') }}">About page</a>.</p>
 
   <h2>What this is not</h2>
   <p>It is not a news outlet, it does not cover every meeting, it does not give opinions, and it does not tell you what to think about a vote.</p>

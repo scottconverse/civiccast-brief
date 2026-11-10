@@ -10,7 +10,13 @@ from pathlib import Path
 from civiccast_brief.site import images, seo
 from civiccast_brief.site.feed import artwork_path, build_feed
 from civiccast_brief.site.model import InputError, SiteInput, load_site_input
-from civiccast_brief.site.pages import ROBOTS_PATH, SEARCH_INDEX_PATH, SITEMAP_PATH, build_pages
+from civiccast_brief.site.pages import (
+    FAVICON_PNG,
+    ROBOTS_PATH,
+    SEARCH_INDEX_PATH,
+    SITEMAP_PATH,
+    build_pages,
+)
 from civiccast_brief.site.render import make_environment, render
 from civiccast_brief.site.urls import Urls
 
@@ -29,7 +35,7 @@ class BuildReport:
     files_written: int
 
 
-def _prepare_output(out_dir: Path) -> None:
+def prepare_output(out_dir: Path) -> None:
     if out_dir.exists() and not out_dir.is_dir():
         raise ValueError(f"{out_dir} exists and is not a folder")
     if out_dir.is_dir() and any(out_dir.iterdir()):
@@ -48,13 +54,13 @@ def _prepare_output(out_dir: Path) -> None:
 
 
 # Response headers for hosts that read a _headers file (Cloudflare Pages, Netlify).
-# no-transform stops the host from adding scripts, such as Cloudflare's analytics
-# beacon, to pages that promise no analytics.
+# no-transform stops the host from rewriting pages or adding its own scripts. The only
+# analytics script is the Cloudflare Web Analytics beacon the templates add themselves.
 HEADERS_PATH = "/_headers"
 HEADERS_FILE = "/*\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n"
 
 
-def _write(out_dir: Path, rel: str, data: str | bytes) -> None:
+def write_file(out_dir: Path, rel: str, data: str | bytes) -> None:
     target = out_dir / rel.lstrip("/")
     target.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(data, bytes):
@@ -68,24 +74,32 @@ def _page_file(path: str) -> str:
     return path.lstrip("/") + "index.html" if path.endswith("/") else path.lstrip("/")
 
 
-def _write_assets(site: SiteInput, out_dir: Path) -> int:
+def write_static(out_dir: Path) -> int:
+    """Copy static/ (with fonts/) to /assets/ and write the PNG favicon. Returns the file count."""
     count = 0
-    for source in sorted(STATIC_DIR.iterdir()):
+    for source in sorted(STATIC_DIR.rglob("*")):
         if source.is_file():
-            _write(out_dir, f"assets/{source.name}", source.read_bytes())
+            rel = source.relative_to(STATIC_DIR).as_posix()
+            write_file(out_dir, f"assets/{rel}", source.read_bytes())
             count += 1
+    write_file(out_dir, FAVICON_PNG, images.favicon_png())
+    return count + 1
+
+
+def _write_assets(site: SiteInput, out_dir: Path) -> int:
+    count = write_static(out_dir)
     city = site.city
     if city.share_image_source is not None:
         share = city.share_image_source.read_bytes()
     else:
         share = images.share_png()
-    _write(out_dir, seo.share_image_path(city), share)
+    write_file(out_dir, seo.share_image_path(city), share)
     count += 1
     if city.artwork_source is not None:
         art = city.artwork_source.read_bytes()
     else:
         art = images.artwork_png()
-    _write(out_dir, artwork_path(city), art)
+    write_file(out_dir, artwork_path(city), art)
     return count + 1
 
 
@@ -103,21 +117,21 @@ def build_site(
         raise InputError([f"{episodes_dir}: no approved episodes to build"])
     stamp = now or datetime.now().astimezone()
     pages, sitemap_paths = build_pages(site, urls, stamp)
-    _prepare_output(out_dir)
+    prepare_output(out_dir)
     files = _write_assets(site, out_dir)
 
     env = make_environment(urls)
     for spec in pages:
         context = {**spec.context, "scripts": list(spec.scripts)}
         html = render(env, spec.template, context)
-        _write(out_dir, _page_file(spec.path), html)
+        write_file(out_dir, _page_file(spec.path), html)
         files += 1
 
-    _write(out_dir, SITEMAP_PATH, seo.sitemap_xml(urls, sitemap_paths))
-    _write(out_dir, ROBOTS_PATH, seo.robots_txt(urls))
-    _write(out_dir, SEARCH_INDEX_PATH, seo.search_index_json(urls, site.episodes))
-    _write(out_dir, "feed.xml", build_feed(site.city, urls, site.episodes, stamp))
-    _write(out_dir, HEADERS_PATH, HEADERS_FILE)
+    write_file(out_dir, SITEMAP_PATH, seo.sitemap_xml(urls, sitemap_paths))
+    write_file(out_dir, ROBOTS_PATH, seo.robots_txt(urls))
+    write_file(out_dir, SEARCH_INDEX_PATH, seo.search_index_json(urls, site.episodes))
+    write_file(out_dir, "feed.xml", build_feed(site.city, urls, site.episodes, stamp))
+    write_file(out_dir, HEADERS_PATH, HEADERS_FILE)
     files += 5
 
     return BuildReport(

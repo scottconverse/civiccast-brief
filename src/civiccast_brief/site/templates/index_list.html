@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="listing" aria-labelledby="list-title">
+  <h1 id="list-title">{{ heading }}</h1>
+  <p class="dek">{{ intro }}</p>
+  {% if items %}
+  <ul class="index">
+    {% for item in items %}
+    <li><a href="{{ item.href }}">{{ item.name }}</a> <span>{{ item.note }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Nothing here yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

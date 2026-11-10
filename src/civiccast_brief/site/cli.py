@@ -1,4 +1,8 @@
-"""Command line for the site builder: ``python -m civiccast_brief.site build``."""
+"""Command line for the site builder.
+
+``python -m civiccast_brief.site build`` writes one city's site. ``python -m civiccast_brief.site home``
+writes the civiccastbrief.org home page that lists the live cities.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from civiccast_brief.site.build import build_site
+from civiccast_brief.site.home import DEFAULT_CITIES, build_home
 from civiccast_brief.site.model import InputError
 
 
@@ -29,11 +34,41 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="public address of the site, such as https://longmont.civiccast.org",
     )
+    home = commands.add_parser("home", help="write the civiccastbrief.org home page")
+    home.add_argument(
+        "--cities",
+        type=Path,
+        default=DEFAULT_CITIES,
+        help='JSON list of cities; only those with "live": true are shown (default: the packaged list)',
+    )
+    home.add_argument(
+        "--out", required=True, type=Path, help="output folder (empty, or from an earlier build)"
+    )
+    home.add_argument(
+        "--base-url", default="https://civiccastbrief.org", help="public address of the home page"
+    )
     return parser
+
+
+def _home(args: argparse.Namespace) -> int:
+    try:
+        report = build_home(args.cities, args.out, args.base_url)
+    except InputError as exc:
+        for problem in exc.problems:
+            print(f"input error: {problem}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    listed = ", ".join(report.cities) or "none"
+    print(f"built the home page into {report.out_dir}; live cities: {listed}")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "home":
+        return _home(args)
     if args.command != "build":
         return 2
     try:

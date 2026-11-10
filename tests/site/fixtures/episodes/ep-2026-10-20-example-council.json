@@ -32,7 +32,25 @@
     {"t": "0:00:19", "speaker": "Mayor", "text": "Roll call, please."},
     {"t": "0:28:00", "text": "Motion to approve the consent agenda. Seconded. That carries unanimously."}
   ],
-  "corrections": [
-    {"date": "2026-10-23", "note": "An earlier version gave the vote count as 5-2. The recorded vote was 6-1."}
-  ]
+  "article": {
+    "headline": "Example City approves an annexation on a 6-1 vote",
+    "dek": "The council also passed its consent agenda and heard a call for a traffic study on Test Road.",
+    "topics": ["annexation", "traffic"],
+    "sections": [
+      {"heading": null, "paragraphs": [
+        {"text": "The Example City Council approved the annexation resolution 6-1 on October 20.", "cites": [{"claim": 2, "start_s": 5502}]},
+        {"text": "Earlier, the council passed the consent agenda without objection.", "cites": [{"claim": 1, "start_s": 1680}]}
+      ]},
+      {"heading": "Public comment", "paragraphs": [
+        {"text": "A resident asked the council for more study of traffic on Test Road.", "cites": [{"claim": 3, "start_s": 4866}]}
+      ]}
+    ],
+    "votes": [
+      {"motion": "Annexation resolution", "result": "Passed", "tally": "6-1", "start_s": 5502},
+      {"motion": "Consent agenda", "result": "Passed unanimously", "tally": null, "start_s": 1680}
+    ],
+    "quotes": [
+      {"text": "We need more study of the traffic on Test Road.", "speaker": "A resident", "start_s": 4866}
+    ]
+  }
 }

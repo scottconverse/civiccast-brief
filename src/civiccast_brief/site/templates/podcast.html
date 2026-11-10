@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_parts.html" as parts %}
+{% block content %}
+<section class="listing podcast-page" aria-labelledby="podcast-title">
+  <div class="podcast-intro">
+    <img class="podcast-art" src="{{ artwork_href }}" width="180" height="180" alt="{{ city.podcast.name }} podcast artwork: the CivicCast Brief logo">
+    <div>
+      <p class="kicker">Podcast</p>
+      <h1 id="podcast-title">{{ city.podcast.name }}</h1>
+      <p class="dek">{{ city.podcast.description }}</p>
+      <p class="btns">{{ parts.button_links(podcast_links) }}</p>
+      <p class="small">Paste the RSS feed address into any podcast app: <code>{{ feed_url }}</code></p>
+    </div>
+  </div>
+  <h2 class="month">Episodes</h2>
+  {% for r in episodes %}
+  {{ parts.row(r, 3) }}
+  {% else %}
+  <p class="empty">No episodes yet.</p>
+  {% endfor %}
+</section>
+{% endblock %}

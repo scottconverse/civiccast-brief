@@ -26,6 +26,7 @@ ROSTER_FILE = "roster.json"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 SCRIPT_LINE_RE = re.compile(r"^\[([A-Za-z0-9_ -]{1,24})\]\s*(\S.*)$")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+DEFAULT_BOARD = "City Council"
 DEFAULT_DISCLAIMER = (
     "This episode is AI-generated from the public meeting video. Check the official record "
     "before you rely on anything it says."
@@ -70,6 +71,11 @@ class City:
     about: tuple[str, ...]
     artwork_source: Path | None
     share_image_source: Path | None
+    #: Show page links for Apple Podcasts and Spotify, set once the show is listed there.
+    apple_podcasts_url: str | None = None
+    spotify_url: str | None = None
+    #: Show the "By email" band on the front page. Off by default; needs signup_url.
+    email_signup: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,9 +115,49 @@ class Audio:
 
 
 @dataclass(frozen=True)
-class Correction:
-    date: date
-    note: str
+class ArticleCite:
+    #: Position of the cited claim in recap.claims, counting from 0.
+    claim: int
+    seconds: float
+
+
+@dataclass(frozen=True)
+class ArticleParagraph:
+    text: str
+    cites: tuple[ArticleCite, ...]
+
+
+@dataclass(frozen=True)
+class ArticleSection:
+    heading: str | None
+    paragraphs: tuple[ArticleParagraph, ...]
+
+
+@dataclass(frozen=True)
+class ArticleVote:
+    motion: str
+    result: str
+    tally: str | None
+    seconds: float
+
+
+@dataclass(frozen=True)
+class ArticleQuote:
+    text: str
+    speaker: str
+    seconds: float
+
+
+@dataclass(frozen=True)
+class Article:
+    """A written news story for one meeting. Every paragraph cites recap claims."""
+
+    headline: str
+    dek: str
+    sections: tuple[ArticleSection, ...]
+    votes: tuple[ArticleVote, ...]
+    quotes: tuple[ArticleQuote, ...]
+    topics: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -135,12 +181,20 @@ class Episode:
     vtt_url: str | None
     video_url: str | None
     transcript: tuple[TranscriptLine, ...] | None
-    corrections: tuple[Correction, ...]
+    article: Article | None = None
 
     @property
     def display_headline(self) -> str:
-        """The headline with a SAMPLE label on test renders."""
-        return f"SAMPLE: {self.headline}" if self.sample else self.headline
+        """The story headline (the article's when there is one), with a SAMPLE label on test renders."""
+        headline = self.article.headline if self.article is not None else self.headline
+        return f"SAMPLE: {headline}" if self.sample else headline
+
+    @property
+    def display_dek(self) -> str:
+        """The article's dek when it has one, otherwise the episode dek."""
+        if self.article is not None and self.article.dek:
+            return self.article.dek
+        return self.dek
 
 
 @dataclass(frozen=True)
@@ -372,6 +426,11 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
     else:
         about = [p.strip() for p in about_raw if p.strip()]
 
+    signup_url = check.https_url(data, "signup_url")
+    email_signup = check.boolean(data, "email_signup", False)
+    if email_signup and not signup_url:
+        check.fail("email_signup", "needs signup_url, the address the sign-up form posts to")
+
     return City(
         slug=slug,
         name=name,
@@ -384,10 +443,13 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         podcast=podcast,
         official_site=check.url(data, "official_site", required=False),
         contact_email=check.text(data, "contact_email", required=False, limit=200) or None,
-        signup_url=check.https_url(data, "signup_url"),
+        signup_url=signup_url,
         about=tuple(about),
         artwork_source=artwork,
         share_image_source=share,
+        apple_podcasts_url=check.https_url(data, "apple_podcasts_url"),
+        spotify_url=check.https_url(data, "spotify_url"),
+        email_signup=email_signup,
     )
 
 
@@ -439,7 +501,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
         check.fail("approved_by", "is required when approved is true")
     if not approved:
         approved_by = ""
-    board = check.text(data, "board", limit=120)
+    board = check.text(data, "board", required=False, limit=120) or DEFAULT_BOARD
     meeting_title = check.text(data, "meeting_title", limit=200)
     meeting_date = check.day(data, "meeting_date")
     published = check.moment(data, "published")
@@ -455,7 +517,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
     vtt_url = check.url(data, "vtt_url", required=False)
     video_url = check.url(data, "video_url", required=False)
     transcript = _transcript(check, data)
-    corrections = _corrections(check, data)
+    article = _article(check, data, len(claims))
 
     if len(problems) > before:
         return None
@@ -481,7 +543,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
         vtt_url=vtt_url,
         video_url=video_url,
         transcript=transcript,
-        corrections=corrections,
+        article=article,
     )
 
 
@@ -600,30 +662,173 @@ def _transcript(check: _Checker, data: dict[str, Any]) -> tuple[TranscriptLine, 
     return tuple(lines)
 
 
-def _corrections(check: _Checker, data: dict[str, Any]) -> tuple[Correction, ...]:
-    raw = data.get("corrections", [])
+def _start(check: _Checker, item: dict[str, Any], label: str) -> float | None:
+    value = item.get("start_s")
+    if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+        check.fail(f"{label}.start_s", "must be a number of seconds, 0 or more")
+        return None
+    return float(value)
+
+
+def _list(check: _Checker, data: dict[str, Any], key: str) -> list[Any]:
+    raw = data.get(key, [])
     if not isinstance(raw, list):
-        check.fail("corrections", "must be a list")
+        check.fail(key, "must be a list")
+        return []
+    return raw
+
+
+def _cites(
+    check: _Checker, paragraph: dict[str, Any], label: str, claim_count: int
+) -> tuple[ArticleCite, ...]:
+    raw = paragraph.get("cites")
+    if not isinstance(raw, list) or not raw:
+        check.fail(f"{label}.cites", "must list at least one claim")
         return ()
-    items: list[Correction] = []
-    for index, item in enumerate(raw, start=1):
-        label = f"corrections[{index}]"
-        if not isinstance(item, dict):
+    cites: list[ArticleCite] = []
+    for index, cite in enumerate(raw, start=1):
+        c_label = f"{label}.cites[{index}]"
+        if not isinstance(cite, dict):
+            check.fail(c_label, "must be an object")
+            continue
+        claim = cite.get("claim")
+        if isinstance(claim, bool) or not isinstance(claim, int):
+            check.fail(f"{c_label}.claim", "must be a whole number")
+            continue
+        if not 0 <= claim < claim_count:
+            check.fail(
+                f"{c_label}.claim",
+                f"is {claim}, but the recap has claims 0 to {claim_count - 1}"
+                if claim_count
+                else f"is {claim}, but the recap has no claims",
+            )
+            continue
+        start = _start(check, cite, c_label)
+        if start is not None:
+            cites.append(ArticleCite(claim=claim, seconds=start))
+    return tuple(cites)
+
+
+def _sections(check: _Checker, raw: dict[str, Any], claim_count: int) -> tuple[ArticleSection, ...]:
+    items = raw.get("sections")
+    if not isinstance(items, list) or not items:
+        check.fail("sections", "must be a list with at least one section")
+        return ()
+    sections: list[ArticleSection] = []
+    for s_index, section in enumerate(items, start=1):
+        label = f"sections[{s_index}]"
+        if not isinstance(section, dict):
             check.fail(label, "must be an object")
             continue
-        day = check.day(item, "date")
-        note = check.text(item, "note", limit=1000)
-        if day is not None and note:
-            items.append(Correction(date=day, note=note))
-    return tuple(sorted(items, key=lambda c: c.date, reverse=True))
+        heading = section.get("heading")
+        if heading is not None and (not isinstance(heading, str) or not heading.strip()):
+            check.fail(f"{label}.heading", "must be text or null")
+            heading = None
+        raw_paragraphs = section.get("paragraphs")
+        if not isinstance(raw_paragraphs, list) or not raw_paragraphs:
+            check.fail(f"{label}.paragraphs", "must be a list with at least one paragraph")
+            continue
+        paragraphs: list[ArticleParagraph] = []
+        for p_index, paragraph in enumerate(raw_paragraphs, start=1):
+            p_label = f"{label}.paragraphs[{p_index}]"
+            if not isinstance(paragraph, dict):
+                check.fail(p_label, "must be an object")
+                continue
+            text = check.text(paragraph, "text", limit=4000)
+            cites = _cites(check, paragraph, p_label, claim_count)
+            paragraphs.append(ArticleParagraph(text=text, cites=cites))
+        sections.append(
+            ArticleSection(
+                heading=heading.strip()[:200] if isinstance(heading, str) else None,
+                paragraphs=tuple(paragraphs),
+            )
+        )
+    return tuple(sections)
+
+
+def _votes(check: _Checker, raw: dict[str, Any]) -> tuple[ArticleVote, ...]:
+    votes: list[ArticleVote] = []
+    for index, vote in enumerate(_list(check, raw, "votes"), start=1):
+        label = f"votes[{index}]"
+        if not isinstance(vote, dict):
+            check.fail(label, "must be an object")
+            continue
+        motion = check.text(vote, "motion", limit=300)
+        result = check.text(vote, "result", limit=80)
+        tally = vote.get("tally")
+        if tally is not None and (not isinstance(tally, str) or len(tally) > 40):
+            check.fail(f"{label}.tally", "must be short text such as 5-2, or null")
+            tally = None
+        start = _start(check, vote, label)
+        if motion and result and start is not None:
+            votes.append(
+                ArticleVote(
+                    motion=motion,
+                    result=result,
+                    tally=(tally.strip() or None) if isinstance(tally, str) else None,
+                    seconds=start,
+                )
+            )
+    return tuple(votes)
+
+
+def _quotes(check: _Checker, raw: dict[str, Any]) -> tuple[ArticleQuote, ...]:
+    quotes: list[ArticleQuote] = []
+    for index, quote in enumerate(_list(check, raw, "quotes"), start=1):
+        label = f"quotes[{index}]"
+        if not isinstance(quote, dict):
+            check.fail(label, "must be an object")
+            continue
+        text = check.text(quote, "text", limit=1000)
+        speaker = check.text(quote, "speaker", limit=120)
+        start = _start(check, quote, label)
+        if text and speaker and start is not None:
+            quotes.append(ArticleQuote(text=text, speaker=speaker, seconds=start))
+    return tuple(quotes)
+
+
+def _article(check: _Checker, data: dict[str, Any], claim_count: int) -> Article | None:
+    """The optional written story. Every paragraph must cite claims that are in recap.claims."""
+    if data.get("article") is None:
+        return None
+    raw = data["article"]
+    if not isinstance(raw, dict):
+        check.fail("article", "must be an object")
+        return None
+    sub = _Checker(f"{check.where} article", check.problems)
+    before = len(check.problems)
+    headline = sub.text(raw, "headline", limit=200)
+    dek = sub.text(raw, "dek", required=False, limit=400)
+    sections = _sections(sub, raw, claim_count)
+    votes = _votes(sub, raw)
+    quotes = _quotes(sub, raw)
+    topics_raw = _list(sub, raw, "topics")
+    if not all(isinstance(t, str) for t in topics_raw):
+        sub.fail("topics", "must be a list of words")
+        topics_raw = []
+    if len(check.problems) > before:
+        return None
+    return Article(
+        headline=headline,
+        dek=dek,
+        sections=sections,
+        votes=votes,
+        quotes=quotes,
+        topics=tuple(t.strip() for t in topics_raw if t.strip())[:12],
+    )
 
 
 __all__ = [
+    "Article",
+    "ArticleCite",
+    "ArticleParagraph",
+    "ArticleQuote",
+    "ArticleSection",
+    "ArticleVote",
     "Audio",
     "Chapter",
     "City",
     "Claim",
-    "Correction",
     "Episode",
     "InputError",
     "PodcastInfo",

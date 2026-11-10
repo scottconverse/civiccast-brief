@@ -105,14 +105,27 @@ def test_no_image_is_missing_alt_text(built: tuple[Path, object]) -> None:
         assert page.images_without_alt == 0, file
 
 
-def _css_tokens() -> dict[str, str]:
+def _token_block(css: str, selector: str) -> dict[str, str]:
+    match = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert match, selector
+    body = match.group(1)
+    return dict(re.findall(r"(--[\w-]+):\s*([^;]+);", body))
+
+
+def _themes() -> dict[str, dict[str, str]]:
+    """Light tokens, and the dark tokens from both the media query and the data-theme switch."""
     css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
-    root = css.split(":root", 1)[1].split("}", 1)[0]
-    return {name: value for name, value in re.findall(r"(--[\w-]+):\s*([^;]+);", root)}
+    light = _token_block(css, ":root")
+    media = _token_block(css, ':root:not([data-theme="light"])')
+    forced = _token_block(css, ':root[data-theme="dark"]')
+    assert media == forced, "the two dark-mode blocks must match"
+    return {"light": light, "dark": {**light, **media}}
 
 
 def _luminance(hex_colour: str) -> float:
     hex_colour = hex_colour.strip().lstrip("#")
+    if len(hex_colour) == 3:
+        hex_colour = "".join(c * 2 for c in hex_colour)
     channels = [int(hex_colour[i : i + 2], 16) / 255 for i in (0, 2, 4)]
 
     def linear(c: float) -> float:
@@ -127,36 +140,41 @@ def _ratio(a: str, b: str) -> float:
     return (light + 0.05) / (dark + 0.05)
 
 
-def test_text_colours_meet_wcag_aa_on_every_background_they_sit_on() -> None:
-    tokens = _css_tokens()
-    backgrounds = {
-        "white": tokens["--c-white"],
-        "cream": tokens["--c-cream"],
-        "mist": tokens["--c-mist"],
-        "sample": tokens["--c-sample"],
-        "ink": tokens["--c-ink-teal"],
-    }
-    text = {
-        "navy": tokens["--c-navy"],
-        "slate": tokens["--c-slate"],
-        "teal": tokens["--c-teal"],
-        "ink-teal": tokens["--c-ink-teal"],
-        "error": tokens["--c-error"],
-        "sample-ink": tokens["--c-sample-ink"],
-    }
-    on = {
-        "white": ["navy", "slate", "teal", "ink-teal", "error"],
-        "cream": ["navy", "slate", "teal", "ink-teal"],
-        "mist": ["navy", "slate", "teal", "ink-teal"],
-        "sample": ["sample-ink"],
-        "ink": ["white"],
-    }
+#: Text colour on background colour, as the stylesheet pairs them.
+PAIRS = [
+    ("--ink", "--paper"),
+    ("--ink", "--surface"),
+    ("--ink", "--frame"),
+    ("--ink", "--split-soft"),
+    ("--muted", "--paper"),
+    ("--muted", "--surface"),
+    ("--muted", "--frame"),
+    ("--docket", "--surface"),
+    ("--docket", "--paper"),
+    ("--docket", "--docket-soft"),
+    ("--surface", "--docket"),
+    ("--surface", "--ink"),
+    ("--pass", "--pass-soft"),
+    ("--split", "--split-soft"),
+]
+
+
+def test_text_colours_meet_wcag_aa_in_light_and_dark_mode() -> None:
+    themes = _themes()
+    assert themes["light"]["--paper"] == "#f6f7fa"
+    assert themes["dark"]["--paper"] == "#0e1120"
     failures = []
-    for background, names in on.items():
-        for name in names:
-            background_value = backgrounds[background]
-            text_value = {**text, "white": tokens["--c-white"]}[name]
-            ratio = _ratio(text_value, background_value)
+    for theme, tokens in themes.items():
+        for text, background in PAIRS:
+            ratio = _ratio(tokens[text], tokens[background])
             if ratio < 4.5:
-                failures.append(f"{name} on {background}: {ratio:.2f}")
+                failures.append(f"{theme}: {text} on {background}: {ratio:.2f}")
     assert failures == []
+
+
+def test_static_assets_include_fonts_with_their_licences() -> None:
+    fonts = STATIC_DIR / "fonts"
+    files = {path.name for path in fonts.iterdir()}
+    for family in ("bricolage-grotesque", "public-sans", "source-serif-4", "ibm-plex-mono"):
+        assert f"LICENSE-{family}.txt" in files, family
+        assert any(name.startswith(family) and name.endswith(".woff2") for name in files), family

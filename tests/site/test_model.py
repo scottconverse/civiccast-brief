@@ -34,7 +34,15 @@ def test_fixture_loads_approved_episodes_newest_first_and_excludes_unapproved() 
     assert council.transcript is not None
     assert council.transcript[1].speaker == "Mayor"
     assert council.transcript[0].speaker == "unknown"
-    assert council.corrections[0].note.startswith("An earlier version")
+    article = council.article
+    assert article is not None
+    assert council.display_headline == "Example City approves an annexation on a 6-1 vote"
+    assert council.display_dek == article.dek
+    assert [section.heading for section in article.sections] == [None, "Public comment"]
+    assert [c.claim for c in article.sections[1].paragraphs[0].cites] == [3]
+    assert article.votes[0].tally == "6-1"
+    assert article.votes[1].tally is None
+    assert article.topics == ("annexation", "traffic")
     sample = site.episodes[1]
     assert sample.sample is True
     assert sample.display_headline.startswith("SAMPLE: ")
@@ -171,3 +179,72 @@ def test_episodes_published_together_list_the_newest_meeting_first(episodes_dir:
         "2026-10-20-example-council",
         "2026-10-06-example-sample",
     ]
+
+
+def _council(episodes_dir: Path) -> tuple[Path, dict]:
+    path = episodes_dir / "ep-2026-10-20-example-council.json"
+    return path, _episode(path)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda a: a.update(sections=[]), "sections must be a list with at least one section"),
+        (
+            lambda a: a["sections"][0]["paragraphs"][0].update(cites=[]),
+            "cites must list at least one claim",
+        ),
+        (
+            lambda a: a["sections"][0]["paragraphs"][0]["cites"][0].update(claim=9),
+            "is 9, but the recap has claims 0 to 3",
+        ),
+        (
+            lambda a: a["sections"][0]["paragraphs"][0]["cites"][0].update(start_s=-1),
+            "start_s must be a number of seconds, 0 or more",
+        ),
+        (lambda a: a["votes"][0].update(tally=5), "tally must be short text"),
+        (lambda a: a.update(topics=["ok", 3]), "topics must be a list of words"),
+        (lambda a: a.pop("headline"), "headline"),
+    ],
+)
+def test_bad_articles_are_refused_with_the_field_named(
+    episodes_dir: Path, change: object, message: str
+) -> None:
+    path, data = _council(episodes_dir)
+    change(data["article"])  # type: ignore[operator]
+    _write(episodes_dir, path.name, data)
+    with pytest.raises(InputError) as caught:
+        load_site_input(episodes_dir)
+    assert any("article" in p and message in p for p in caught.value.problems), (
+        caught.value.problems
+    )
+
+
+def test_article_must_be_an_object(episodes_dir: Path) -> None:
+    path, data = _council(episodes_dir)
+    data["article"] = "a story"
+    _write(episodes_dir, path.name, data)
+    with pytest.raises(InputError) as caught:
+        load_site_input(episodes_dir)
+    assert any("article must be an object" in p for p in caught.value.problems)
+
+
+def test_board_defaults_to_city_council(episodes_dir: Path) -> None:
+    path, data = _council(episodes_dir)
+    del data["board"]
+    _write(episodes_dir, path.name, data)
+    assert load_site_input(episodes_dir).episodes[0].board == "City Council"
+
+
+def test_podcast_links_and_email_signup_are_checked(episodes_dir: Path) -> None:
+    city_path = episodes_dir / "city.json"
+    city = json.loads(city_path.read_text(encoding="utf-8"))
+    city["apple_podcasts_url"] = "http://podcasts.apple.com/x"
+    city["email_signup"] = True
+    city.pop("signup_url", None)
+    city_path.write_text(json.dumps(city), encoding="utf-8")
+    with pytest.raises(InputError) as caught:
+        load_site_input(episodes_dir)
+    problems = " ".join(caught.value.problems)
+    assert "apple_podcasts_url" in problems
+    assert "email_signup needs signup_url" in problems

@@ -1,133 +1,159 @@
 {% extends "base.html" %}
+{% import "_parts.html" as parts %}
 {% block content %}
-<article class="episode" aria-labelledby="episode-title">
-  <header class="head">
+<article class="article" aria-labelledby="episode-title">
+  <div class="a-body">
     {% if episode.sample %}
-    <p class="notice notice--sample" role="note"><strong>SAMPLE.</strong> This is a test render for layout and voice checks. It is not a published episode.</p>
+    <p class="notice" role="note"><strong>SAMPLE.</strong> This is a test render for layout and voice checks. It is not a published episode.</p>
     {% endif %}
-    <p class="kicker">{{ episode.board }}</p>
-    <h1 id="episode-title" class="head__title">{{ headline }}</h1>
-    <p class="head__formal">{{ episode.meeting_title }}, {{ meeting_date }}</p>
-    {% if dek %}<p class="head__dek">{{ dek }}</p>{% endif %}
-    <p class="credit">
-      <span class="credit__by">AI-generated from the public meeting video</span>
-      <span class="credit__sep" aria-hidden="true">|</span>
-      <span>Published {{ published_date }}</span>
-      <span class="credit__sep" aria-hidden="true">|</span>
-      <span>{{ audio.length }} listen</span>
-    </p>
-  </header>
+    <p class="kicker"><a href="{{ board_href }}">{{ episode.board }}</a> · {{ meeting_date }}</p>
+    <h1 id="episode-title">{{ headline }}</h1>
+    {% if dek %}<p class="dek">{{ dek }}</p>{% endif %}
+    <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_title }}, {{ meeting_date }}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
 
-  <div class="layout">
-    <div class="layout__main">
-      <section class="recap" aria-labelledby="recap-title">
-        <h2 id="recap-title">Recap</h2>
-        {% if claims %}
-        <ol class="claims">
-          {% for claim in claims %}
-          <li class="claim" id="claim-{{ claim.id }}">
-            {% if claim.topic %}<p class="claim__topic">{{ claim.topic }}</p>{% endif %}
-            <p class="claim__text">{{ claim.text }}
-              {% if claim.link %}
-              <a class="cite" href="{{ claim.link }}" target="_blank" rel="noopener">Video at {{ claim.timestamp }}<span class="visually-hidden"> (opens the meeting video in a new tab)</span></a>
-              {% else %}
-              <span class="cite">At {{ claim.timestamp }}</span>
-              {% endif %}
-            </p>
-            {% if claim.quote %}
-            <details class="quote">
-              <summary>Words from the meeting</summary>
-              <blockquote>{{ claim.quote }}</blockquote>
-            </details>
-            {% endif %}
-          </li>
-          {% endfor %}
-        </ol>
-        {% if video_url %}
-        <p><a href="{{ video_url }}" target="_blank" rel="noopener">Watch the full meeting video<span class="visually-hidden"> (opens in a new tab)</span></a></p>
-        {% endif %}
-        {% else %}
-        <p>There is no recap for this episode.</p>
-        {% endif %}
-      </section>
+    {% if article %}
+    {% for section in article.sections %}
+    {% if section.heading %}<h2>{{ section.heading }}</h2>{% endif %}
+    {% for p in section.paragraphs %}
+    <p class="t">{{ p.text }}{% for c in p.cites %} {{ parts.cite(c) }}{% endfor %}</p>
+    {% endfor %}
+    {% endfor %}
 
-      <section class="script" aria-labelledby="script-title">
-        <details>
-          <summary id="script-title">Episode transcript: what the hosts say</summary>
-          <p class="script__note">This is the audio script with speaker names. It is not the meeting record.{% if vtt_url %} <a href="{{ vtt_url }}">Timed transcript (WebVTT)</a>.{% endif %}</p>
-          <ol class="script__lines">
-            {% for line in script %}
-            <li><span class="script__speaker">{{ line.speaker }}:</span> {{ line.text }}</li>
-            {% endfor %}
-          </ol>
-        </details>
-      </section>
-
-      {% if transcript_href %}
-      <p class="meeting-transcript"><a href="{{ transcript_href }}">Read the meeting transcript, with timestamps</a></p>
-      {% endif %}
-
-      {% if tags %}
-      <ul class="tags" aria-label="Topics">
-        {% for tag in tags %}<li class="tag">{{ tag }}</li>{% endfor %}
-      </ul>
-      {% endif %}
-
-      {% if corrections %}
-      <section class="corrections-note" aria-labelledby="corrections-title">
-        <h2 id="corrections-title">Correction</h2>
-        {% for item in corrections %}
-        <p><strong>{{ item.date }}:</strong> {{ item.note }}</p>
-        {% endfor %}
-        <p><a href="{{ href('/corrections/') }}">All corrections</a></p>
-      </section>
-      {% endif %}
-
-      <section class="reuse" aria-label="About this episode">
-        <p>This episode is AI-generated. Check the official record before you rely on anything in it. <a href="{{ href('/how-this-is-made/') }}">How this is made</a>.</p>
-      </section>
+    {% if article.votes %}
+    <h2>Votes</h2>
+    <div class="votes">
+      {% for v in article.votes %}
+      <div><span>{{ v.motion }} {{ parts.cite(v) }}</span><span class="vote {{ v.kind }}">{{ v.label }}</span></div>
+      {% endfor %}
     </div>
+    {% endif %}
 
-    <aside class="aside" aria-label="Listen and subscribe">
-      <section class="card card--cream listen" aria-labelledby="listen-title">
-        <h2 id="listen-title">Listen</h2>
-        <div class="player" data-player>
-          <audio class="player__audio" controls preload="metadata" src="{{ audio.url }}">
-            Your browser cannot play this audio. <a href="{{ audio.url }}">Download the MP3</a>.
-          </audio>
-          <div class="player__custom" hidden>
-            <div class="player__row">
-              <button type="button" class="player__play" data-play aria-label="Play">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z"/></svg>
-              </button>
-              <div class="player__track">
-                <span class="player__time" data-now aria-hidden="true">0:00</span>
-                <div class="player__bar" role="slider" tabindex="0" aria-label="Position in episode" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00 of {{ audio.length }}" data-bar>
-                  <div class="player__fill" data-fill></div>
-                </div>
-                <span class="player__time" data-total aria-hidden="true">{{ audio.length }}</span>
-              </div>
-              <button type="button" class="player__speed" data-speed aria-label="Playback speed 1.2x. Change speed">1.2x</button>
-            </div>
-            <p class="player__msg" role="status" aria-live="polite" data-msg></p>
-          </div>
-        </div>
-        <p class="listen__meta">{{ audio.length }} long, {{ audio.size }} MP3. <a href="{{ audio.url }}">Download</a></p>
-        {% if chapters %}
-        <h3 class="chapters-title">In this episode</h3>
-        <ol class="chapters">
-          {% for ch in chapters %}
-          <li><a href="{{ ch.href }}" data-start="{{ ch.start }}"><span class="chapters__t">{{ ch.clock }}</span> {{ ch.title }}</a></li>
+    {% if article.quotes %}
+    <h2>In their words</h2>
+    {% for q in article.quotes %}
+    <figure class="pull">
+      <blockquote>{{ q.text }}</blockquote>
+      <figcaption>{{ q.speaker }} {{ parts.cite(q) }}</figcaption>
+    </figure>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+    {% if claims %}
+    <section class="recap" aria-labelledby="recap-title">
+      {% if article %}
+      <details>
+        <summary id="recap-title">The checked facts this story is built from ({{ claims|length }})</summary>
+      {% else %}
+      <h2 id="recap-title">Recap</h2>
+      {% endif %}
+      <ol class="claims">
+        {% for claim in claims %}
+        <li class="claim" id="claim-{{ claim.id }}">
+          {% if claim.topic %}<p class="claim-topic">{{ claim.topic }}</p>{% endif %}
+          <p class="t">{{ claim.text }}
+            {% if claim.link %}
+            <a class="cite" href="{{ claim.link }}" target="_blank" rel="noopener">Video at {{ claim.timestamp }}<span class="visually-hidden"> (opens the meeting video in a new tab)</span></a>
+            {% else %}
+            <span class="cite">At {{ claim.timestamp }}</span>
+            {% endif %}
+          </p>
+          {% if claim.quote %}
+          <details class="quote">
+            <summary>Words from the meeting</summary>
+            <blockquote>{{ claim.quote }}</blockquote>
+          </details>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% if article %}</details>{% endif %}
+    </section>
+    {% elif not article %}
+    <p>There is no recap for this episode.</p>
+    {% endif %}
+
+    {% if video_url %}
+    <p><a href="{{ video_url }}" target="_blank" rel="noopener">Watch the full meeting video<span class="visually-hidden"> (opens in a new tab)</span></a></p>
+    {% endif %}
+
+    <section class="script" aria-labelledby="script-title">
+      <details>
+        <summary id="script-title">Podcast transcript: what the hosts say</summary>
+        <p class="small">This is the audio script with speaker names. It is not the meeting record.{% if vtt_url %} <a href="{{ vtt_url }}">Timed transcript (WebVTT)</a>.{% endif %}</p>
+        <ol class="script-lines">
+          {% for line in script %}
+          <li><span class="speaker">{{ line.speaker }}:</span> {{ line.text }}</li>
           {% endfor %}
         </ol>
-        {% if chapters_url %}<p class="listen__meta"><a href="{{ chapters_url }}">Chapter file (JSON)</a></p>{% endif %}
-        {% endif %}
-      </section>
-      <section class="card subscribe" aria-labelledby="subscribe-title">
-        <h2 id="subscribe-title">Subscribe</h2>
-        <p><a href="{{ feed_href }}">Podcast feed (RSS)</a>. Add it in any podcast app.</p>
-      </section>
-    </aside>
+      </details>
+    </section>
+
+    {% if transcript_href %}
+    <p><a href="{{ transcript_href }}">Read the meeting transcript, with timestamps</a></p>
+    {% endif %}
+
+    <section class="box notes" aria-label="About this story">
+      <p><strong>Written with AI.</strong> {{ city.disclaimer }} <a href="{{ href('/how-this-is-made/') }}">How this is made</a>.</p>
+      <p id="republish">{{ republish }}</p>
+    </section>
   </div>
+
+  <aside class="side" aria-label="Listen and more">
+    <section class="player" id="listen" data-player aria-labelledby="listen-title">
+      <h2 id="listen-title">Listen · {{ audio.length }}</h2>
+      <audio class="player__audio" controls preload="metadata" src="{{ audio.url }}">
+        Your browser cannot play this audio. <a href="{{ audio.url }}">Download the MP3</a>.
+      </audio>
+      <div class="player__custom" hidden>
+        <div class="player-row">
+          <button type="button" class="play" data-play aria-label="Play">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <div class="track">
+            <div class="bar" role="slider" tabindex="0" aria-label="Position in episode" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00 of {{ audio.length }}" data-bar>
+              <div class="fill" data-fill></div>
+            </div>
+            <p class="times"><span data-now aria-hidden="true">0:00</span><span data-total aria-hidden="true">{{ audio.length }}</span></p>
+          </div>
+          <button type="button" class="speed" data-speed aria-label="Playback speed 1.2x. Change speed">1.2x</button>
+        </div>
+        <p class="player-msg" role="status" aria-live="polite" data-msg></p>
+      </div>
+      <p class="player-meta">{{ audio.size }} MP3. <a href="{{ audio.url }}">Download</a></p>
+      {% if chapters %}
+      <h3>In this episode</h3>
+      <ol class="chapters chap">
+        {% for ch in chapters %}
+        <li><a href="{{ ch.href }}" data-start="{{ ch.start }}"><span>{{ ch.clock }}</span> {{ ch.title }}</a></li>
+        {% endfor %}
+      </ol>
+      {% if chapters_url %}<p class="player-meta"><a href="{{ chapters_url }}">Chapter file (JSON)</a></p>{% endif %}
+      {% endif %}
+    </section>
+
+    {% if topics %}
+    <section class="box" aria-labelledby="topics-title">
+      <h2 id="topics-title">Topics</h2>
+      <p class="chips">{% for t in topics %}<a class="chip" href="{{ t.href }}">{{ t.name }}</a> {% endfor %}</p>
+    </section>
+    {% endif %}
+
+    {% if more %}
+    <section class="box" aria-labelledby="more-title">
+      <h2 id="more-title">More from the {{ episode.board }}</h2>
+      <ol class="more">
+        {% for card in more %}
+        <li><span>{{ card.short_date }}</span> <a href="{{ card.href }}">{{ card.headline }}</a></li>
+        {% endfor %}
+      </ol>
+    </section>
+    {% endif %}
+
+    <section class="box" aria-labelledby="subscribe-title">
+      <h2 id="subscribe-title">Subscribe</h2>
+      <p><a href="{{ feed_href }}">Podcast feed (RSS)</a>. Add it in any podcast app. <a href="{{ href('/podcast/') }}">More ways to listen</a>.</p>
+    </section>
+  </aside>
 </article>
 {% endblock %}

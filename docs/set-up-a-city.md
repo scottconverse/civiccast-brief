@@ -128,3 +128,30 @@ python -m civiccast_brief.site build --episodes cities/yourcity --out site --bas
 `assemble` refuses an item whose recap or script changed after approval. The site build reads
 `city.json` and every episode JSON in the folder (not `roster.json`) and publishes only approved
 episodes. Upload `site/` to the static host and the MP3s to the media address.
+
+Optional `city.json` settings for the site:
+
+- `apple_podcasts_url`, `spotify_url`: https addresses of the show once it is listed. The Apple and
+  Spotify buttons on the front page and the podcast page appear only when these are set.
+- `email_signup`: `true` shows the sign-up form and the "By email" band. Needs `signup_url`
+  (see `docs/email-signup.md`).
+
+An episode can carry an `article` (headline, dek, sections, votes, quotes, topics). Every paragraph
+cites claims from `recap.claims` by position. Without an article the episode page shows the claim
+list. Pages: front page, story pages, `/boards/`, `/topics/`, `/archive/` (by month), `/podcast/`,
+`/search/`, `/about/` and `/how-this-is-made/`.
+
+Every page loads the Cloudflare Web Analytics beacon (no cookies). The About page and footer say so.
+
+## 8. List the city on the home page
+
+Add the city to `src/civiccast_brief/site/home_cities.json` with `"live": true` once its site is up,
+then build and deploy the home page (Pages project `civiccast-brief-home`):
+
+```
+python -m civiccast_brief.site home --out home
+cd worker/signup && npx wrangler pages deploy ../../home --project-name civiccast-brief-home
+```
+
+Only cities with `"live": true` are listed. Use `wrangler pages deploy`: other upload tools skip
+the `_headers` file that keeps Cloudflare from changing the pages.
