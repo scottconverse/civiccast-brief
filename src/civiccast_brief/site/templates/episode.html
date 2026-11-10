@@ -9,13 +9,13 @@
     <p class="kicker"><a href="{{ board_href }}">{{ episode.board }}</a> · {{ meeting_date }}</p>
     <h1 id="episode-title">{{ headline }}</h1>
     {% if dek %}<p class="dek">{{ dek }}</p>{% endif %}
-    <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_title }}, {{ meeting_date }}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
+    <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_title }}, {{ meeting_date }}{% if article and article.uses_documents %}, and from the meeting documents{% endif %}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
 
     {% if article %}
     {% for section in article.sections %}
     {% if section.heading %}<h2>{{ section.heading }}</h2>{% endif %}
     {% for p in section.paragraphs %}
-    <p class="t">{{ p.text }}{% for c in p.cites %} {{ parts.cite(c) }}{% endfor %}</p>
+    <p class="t">{{ p.text }}{% for c in p.cites %} {{ parts.cite(c) }}{% endfor %}{% for d in p.pages %} {{ parts.doc_cite(d) }}{% endfor %}</p>
     {% endfor %}
     {% endfor %}
 

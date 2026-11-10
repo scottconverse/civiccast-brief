@@ -24,6 +24,7 @@ from typing import Any
 
 from civiccast_brief.city import CityError, load_city
 from civiccast_brief.sources import SourceError, load_sources
+from civiccast_brief.weekly.documents import Fetcher, read_documents
 from civiccast_brief.weekly.find import Agenda, Listers, find_meetings
 from civiccast_brief.weekly.run import Settings, Site, run_week
 
@@ -56,10 +57,18 @@ def real_listers(client: Any) -> Listers:
                 return Agenda(content.citation_url, lines) if lines else None
         return None
 
+    fetchers: dict[str, Fetcher] = {}
+
+    def primegov_documents(url: str, meeting: Any, body: str) -> tuple[dict[str, Any], list[str]]:
+        if url not in fetchers:
+            fetchers[url] = Fetcher(adapter(url))
+        return read_documents(fetchers[url], meeting, body)
+
     rss = RssLister(client)
     return Listers(
         primegov=primegov,
         primegov_agenda=primegov_agenda,
+        primegov_documents=primegov_documents,
         youtube=rss.list_videos,
         granicus=granicus.list_clips,
     )

@@ -159,6 +159,7 @@ def _article_view(article: Article, video: str | None) -> dict[str, Any]:
     return {
         "headline": article.headline,
         "dek": article.dek,
+        "uses_documents": any(p.pages for s in article.sections for p in s.paragraphs),
         "sections": [
             {
                 "heading": section.heading,
@@ -166,6 +167,13 @@ def _article_view(article: Article, video: str | None) -> dict[str, Any]:
                     {
                         "text": paragraph.text,
                         "cites": [_cite(video, cite.seconds) for cite in paragraph.cites],
+                        "pages": [
+                            {
+                                "label": f"{page.kind} p. {page.page}",
+                                "link": f"{page.url}#page={page.page}",
+                            }
+                            for page in paragraph.pages
+                        ],
                     }
                     for paragraph in section.paragraphs
                 ],

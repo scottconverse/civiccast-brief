@@ -142,3 +142,33 @@ def test_agenda_text_is_the_format_the_pipeline_reads(tmp_path):
     assert loaded.source == "https://longmont.primegov.com/agenda/1"
     assert "Golf Course lease" in loaded.text
     assert "golf" in loaded.vocabulary
+
+
+def test_the_portals_documents_go_with_the_meeting_and_survive_the_merge():
+    council = _meeting(
+        "City Council Regular Session",
+        datetime(2026, 11, 3, 18, 0),
+        "https://www.youtube.com/watch?v=oWZpzjzjwnE",
+    )
+    video = NS(
+        video_id="oWZpzjzjwnE",
+        title="City Council Regular Session",
+        published="2026-11-03T20:00:00-07:00",
+    )
+    asked = []
+
+    def documents(url, meeting, body):
+        asked.append((url, meeting, body))
+        return {"format": 1, "documents": []}, ["packet: 12 pages"]
+
+    listers = Listers(
+        primegov=lambda url, first, last: [council],
+        primegov_documents=documents,
+        youtube=lambda cid: [video],
+    )
+    # The channel is read first, so the documents have to be merged into what it found.
+    found, _ = find_meetings([CHANNEL, PORTAL], FIRST, LAST, listers)
+    assert len(found) == 1 and found[0].documents is not None
+    assert asked == []  # nothing is fetched until the run gets to the meeting
+    assert found[0].documents() == ({"format": 1, "documents": []}, ["packet: 12 pages"])
+    assert asked == [("https://longmont.primegov.com", council, COUNCIL)]

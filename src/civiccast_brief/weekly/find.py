@@ -1,14 +1,15 @@
 """Find the city's meetings for a weekly run, from the sources in ``sources.json``.
 
 - A **PrimeGov** portal lists every meeting with its documents. A meeting whose video is on
-  YouTube carries that link, and an HTML agenda becomes the run's ``agenda.txt``.
+  YouTube carries that link, an HTML agenda becomes the run's ``agenda.txt``, and its packet
+  and minutes become ``documents.json`` (fetched when the run gets to them).
 - A **YouTube** channel's public feed lists its newest videos. A title must read as a meeting
   and name one of the source's bodies.
 - A **Granicus** archive lists its clips with their names and dates.
 
-The same video found by two sources is one meeting; the portal's agenda goes with it. A meeting
-that cannot be run (no video, or a body no source covers) is kept with the reason, so the run
-reports it instead of passing over it.
+The same video found by two sources is one meeting; the portal's agenda and documents go
+with it. A meeting that cannot be run (no video, or a body no source covers) is kept with the
+reason, so the run reports it instead of passing over it.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
+from functools import partial
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -51,6 +53,11 @@ class Found:
     granicus_host: str = ""
     granicus_view_id: int | None = None
     agenda: Agenda | None = None
+    #: Fetches the meeting's documents when called: (documents.json data, report lines). None
+    #: when the source lists no documents (a channel or an archive).
+    documents: Callable[[], tuple[dict[str, Any], list[str]]] | None = field(
+        default=None, compare=False, repr=False
+    )
     #: Why this meeting cannot be run; empty when it can.
     reason: str = ""
 
@@ -71,6 +78,8 @@ class Listers:
     primegov: Callable[[str, date, date], Sequence[Any]] | None = None
     #: (meeting) -> Agenda, or None when the meeting has no HTML agenda
     primegov_agenda: Callable[[str, Any], Agenda | None] | None = None
+    #: (portal url, meeting, body) -> (documents.json data, report lines); fetched when called
+    primegov_documents: Callable[[str, Any, str], tuple[dict[str, Any], list[str]]] | None = None
     #: (channel id) -> listings with .video_id, .title, .published
     youtube: Callable[[str], Sequence[Any]] | None = None
     #: (host, view id) -> clips with .clip_id, .name, .date ("October 6, 2026")
@@ -143,7 +152,22 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
         reason = "" if video else "the portal lists no video for this meeting"
         if "cancel" in title.lower():
             reason = "the meeting was cancelled"
-        found.append(Found(body, day, title, source.id, video, agenda=agenda, reason=reason))
+        documents = None
+        if listers.primegov_documents is not None:
+            fetch = listers.primegov_documents
+            documents = partial(fetch, source.url, meeting, body)
+        found.append(
+            Found(
+                body,
+                day,
+                title,
+                source.id,
+                video,
+                agenda=agenda,
+                documents=documents,
+                reason=reason,
+            )
+        )
     return found
 
 
@@ -211,7 +235,15 @@ def find_meetings(
             if held is None:
                 by_key[meeting.key] = meeting
             elif held.agenda is None and meeting.agenda is not None:
-                by_key[meeting.key] = replace(held, agenda=meeting.agenda)
+                by_key[meeting.key] = replace(
+                    held, agenda=meeting.agenda, documents=held.documents or meeting.documents
+                )
             elif held.reason and not meeting.reason:
-                by_key[meeting.key] = replace(meeting, agenda=meeting.agenda or held.agenda)
+                by_key[meeting.key] = replace(
+                    meeting,
+                    agenda=meeting.agenda or held.agenda,
+                    documents=meeting.documents or held.documents,
+                )
+            elif held.documents is None and meeting.documents is not None:
+                by_key[meeting.key] = replace(held, documents=meeting.documents)
     return sorted(by_key.values(), key=lambda m: (m.day, m.body, m.key)), problems

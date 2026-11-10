@@ -1,6 +1,8 @@
 {# Small shared pieces. Import with: {% import "_parts.html" as parts %} #}
 {% macro cite(c) %}{% if c.link %}<a class="cite" href="{{ c.link }}" target="_blank" rel="noopener">{{ c.timestamp }}<span class="visually-hidden"> (opens the meeting video at this moment in a new tab)</span></a>{% else %}<span class="cite">{{ c.timestamp }}</span>{% endif %}{% endmacro %}
 
+{% macro doc_cite(d) %}<a class="cite" href="{{ d.link }}" target="_blank" rel="noopener">{{ d.label }}<span class="visually-hidden"> (opens this page of the meeting document in a new tab)</span></a>{% endmacro %}
+
 {% macro row(r, level=3) %}
 <article class="row">
   <time datetime="{{ r.iso_date }}">{{ r.day }}</time>

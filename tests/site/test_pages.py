@@ -7,10 +7,11 @@ import re
 import shutil
 from pathlib import Path
 
+import pytest
 from site_support import BASE_URL, FIXTURES, NOW
 
 from civiccast_brief.site.build import build_site
-from civiccast_brief.site.model import load_site_input
+from civiccast_brief.site.model import InputError, load_site_input
 
 COUNCIL = "episodes/2026-10-20-example-council/index.html"
 SAMPLE = "episodes/2026-10-06-example-sample/index.html"
@@ -302,3 +303,33 @@ def test_pages_link_the_logo_favicon_and_fonts(built: tuple[Path, object]) -> No
     assert len(fonts) >= 4
     for font in fonts:
         assert (out / "assets" / font).is_file(), font
+
+
+def test_a_paragraph_that_cites_document_pages_links_each_page(tmp_path: Path) -> None:
+    episodes = tmp_path / "episodes"
+    shutil.copytree(FIXTURES, episodes)
+    path = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    doc = (
+        "https://portal.example.org/Public/CompiledDocument?meetingTemplateId=1&compileOutputType=1"
+    )
+    data["article"]["sections"][0]["paragraphs"][0]["pages"] = [
+        {"kind": "minutes", "url": doc, "page": 24}
+    ]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+    page = _text(out, COUNCIL)
+    link = doc.replace("&", "&amp;") + "#page=24"
+    assert f'<a class="cite" href="{link}" target="_blank" rel="noopener">minutes p. 24' in page
+    assert "opens this page of the meeting document in a new tab" in page
+    assert ", and from the meeting documents." in page
+
+    data["article"]["sections"][0]["paragraphs"][0]["pages"] = [
+        {"kind": "minutes", "url": "javascript:alert(1)", "page": 0}
+    ]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(InputError) as caught:
+        load_site_input(episodes)
+    problems = " ".join(caught.value.problems)
+    assert "pages[1].url must be the https address of the document" in problems

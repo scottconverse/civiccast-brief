@@ -6,11 +6,18 @@ votes and quotes. Every paragraph, vote and quote names the claims it relies on.
 carries a verbatim quote and the time in the video where it starts, so every part of the story
 is cited to the video through its claims.
 
+With the meeting's documents (``documents.json``: the agenda packet and the minutes), the
+writer also sees the pages that share names and numbers with the claims, and a paragraph may
+cite those pages as well as its claims.
+
 The check is deterministic and runs on every part:
 
 - every paragraph, vote and quote cites at least one claim, and only claims the recap holds;
-- every number in it is in the cited claims or their captions (digits and number words alike);
-- every capitalised name in it is in the cited claims, their captions, or the meeting header.
+  a paragraph cites only pages the documents hold;
+- every number in it is in the cited claims, their captions or the cited pages (digits and
+  number words alike);
+- every capitalised name in it is in the cited claims, their captions, the cited pages, or the
+  meeting header.
 
 The headline and dek may use any claim the story cites; a section heading, any claim its
 paragraphs cite. A quote's words are the claim's own verbatim quote, never the model's.
@@ -36,6 +43,15 @@ NOTE = (
     "This article was written by AI from the public meeting video. Each paragraph links to the "
     "moment in the video it comes from. Check the official record."
 )
+#: The note for a story that also cites the meeting documents.
+NOTE_DOCUMENTS = (
+    "This article was written by AI from the public meeting video and the meeting documents. "
+    "Each paragraph links to the moment in the video and the document pages it comes from. "
+    "Check the official record."
+)
+#: How many document pages the writer is shown, and how much of each.
+PAGE_LIMIT = 12
+PAGE_CHARS = 2500
 #: Words a headline or paragraph may use without a claim: the publication's own name.
 HOUSE_WORDS = frozenset({"civiccast", "brief"})
 #: "One speaker" is how the prompt tells the writer to name an unidentified speaker. It is not
@@ -110,6 +126,40 @@ class ArticleFormatError(ValueError):
 class Paragraph:
     text: str
     claim_ids: tuple[str, ...]
+    #: Document pages the paragraph also cites ("d1p17": document 1, page 17).
+    page_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DocPage:
+    """One page of a meeting document, as ``documents.json`` holds it."""
+
+    id: str
+    kind: str
+    url: str
+    page: int
+    text: str
+
+    @property
+    def link(self) -> str:
+        return f"{self.url}#page={self.page}"
+
+
+def load_documents(path: Path) -> dict[str, DocPage]:
+    """Every page of ``documents.json`` by its id, "d<document>p<page>" counting from 1."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    pages: dict[str, DocPage] = {}
+    for number, document in enumerate(data.get("documents") or [], start=1):
+        for page in document.get("pages") or []:
+            page_id = f"d{number}p{int(page['page'])}"
+            pages[page_id] = DocPage(
+                page_id,
+                str(document.get("kind", "")),
+                str(document["url"]),
+                int(page["page"]),
+                str(page.get("text") or ""),
+            )
+    return pages
 
 
 @dataclass(frozen=True)
@@ -151,6 +201,10 @@ class Article:
             for claim_id in paragraph.claim_ids:
                 seen.setdefault(claim_id, None)
         return tuple(seen)
+
+    @property
+    def cited_pages(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(i for p in self.paragraphs for i in p.page_ids))
 
 
 def caption_windows(
@@ -198,7 +252,45 @@ STYLE: plain news writing in the past tense. Use digits for numbers (6-1, $200,0
 """
 
 
-def build_prompt(recap: Recap, feedback: str = "", windows: dict[str, str] | None = None) -> str:
+DOCUMENTS_PROMPT = """DOCUMENTS: the pages listed under "Document pages" are from the meeting's own documents (the agenda packet, the minutes). A paragraph may also rely on them: list the page ids it uses in "pages", for example {"text": "...", "claim_ids": ["c03"], "pages": ["d1p17"]}. Every paragraph still cites at least one claim, and the page must be about the same item as that claim. Use a page for the item's number, title, amounts and names, and for a vote as the minutes record it. Never cite a page for something it does not say.
+"""
+
+
+def _tokens(text: str) -> set[str]:
+    """The names and numbers of a text that can tie a page to a claim."""
+    numbers = {n for n in number_atoms(text) if len(n) >= 3}
+    return numbers | {n.lower() for n in _names(text) if len(n) >= 4}
+
+
+def pick_pages(
+    recap: Recap,
+    pages: dict[str, DocPage],
+    windows: dict[str, str] | None = None,
+    limit: int = PAGE_LIMIT,
+) -> list[DocPage]:
+    """The pages that share the most names and numbers with the claims and their captions.
+
+    Minutes pages come before packet pages at the same score: they say what the body did.
+    """
+    wanted: set[str] = set()
+    for claim in recap.claims:
+        wanted |= _tokens(claim.text)
+        if windows and windows.get(claim.id):
+            wanted |= _tokens(windows[claim.id])
+    scored = []
+    for order, page in enumerate(pages.values()):
+        score = len(_tokens(page.text) & wanted)
+        if score:
+            scored.append((-score, page.kind != "minutes", order, page))
+    return [page for *_, page in sorted(scored, key=lambda row: row[:3])[:limit]]
+
+
+def build_prompt(
+    recap: Recap,
+    feedback: str = "",
+    windows: dict[str, str] | None = None,
+    pages: list[DocPage] | None = None,
+) -> str:
     # No topics: the recap model writes them and nothing verifies them, so a name taken from a
     # topic would be a name the evidence does not back. The captions said around each claim are
     # verbatim meeting words, so they are shown and the check accepts them.
@@ -210,6 +302,7 @@ def build_prompt(recap: Recap, feedback: str = "", windows: dict[str, str] | Non
         claims.append(entry)
     parts = [
         PROMPT,
+        *([DOCUMENTS_PROMPT] if pages else []),
         f"Meeting (from the recap header): {recap.body} of {recap.city}, {recap.meeting_date}.",
     ]
     if feedback.strip():
@@ -220,6 +313,12 @@ def build_prompt(recap: Recap, feedback: str = "", windows: dict[str, str] | Non
     parts.append(
         "Claims (the only facts you may use):\n" + json.dumps(claims, indent=1, ensure_ascii=False)
     )
+    if pages:
+        shown = [
+            {"id": p.id, "document": p.kind, "page": p.page, "text": p.text[:PAGE_CHARS]}
+            for p in pages
+        ]
+        parts.append("Document pages:\n" + json.dumps(shown, indent=1, ensure_ascii=False))
     return "\n\n".join(parts) + "\n"
 
 
@@ -261,7 +360,10 @@ def article_from_dict(data: Any) -> Article:
                 raise ArticleFormatError(f"section {s_no}: bad paragraph {json.dumps(item)[:120]}")
             # The model writes "claim_ids"; the desk stores the same ids as "cites".
             ids = _ids(item.get("claim_ids", item.get("cites", [])), f"section {s_no}")
-            paragraphs.append(Paragraph(text=str(item["text"]).strip(), claim_ids=ids))
+            page_ids = _ids(item.get("pages", []), f"section {s_no} pages")
+            paragraphs.append(
+                Paragraph(text=str(item["text"]).strip(), claim_ids=ids, page_ids=page_ids)
+            )
         heading = _one_line(raw.get("heading")) or None
         sections.append(Section(heading=heading, paragraphs=tuple(paragraphs)))
     votes = []
@@ -296,6 +398,13 @@ def article_from_dict(data: Any) -> Article:
     )
 
 
+def _paragraph_dict(paragraph: Paragraph) -> dict[str, Any]:
+    out: dict[str, Any] = {"text": paragraph.text, "cites": list(paragraph.claim_ids)}
+    if paragraph.page_ids:
+        out["pages"] = list(paragraph.page_ids)
+    return out
+
+
 def article_to_dict(article: Article) -> dict[str, Any]:
     """The story in the desk's format: each paragraph's claim ids are its "cites"."""
     return {
@@ -304,7 +413,7 @@ def article_to_dict(article: Article) -> dict[str, Any]:
         "sections": [
             {
                 "heading": s.heading,
-                "paragraphs": [{"text": p.text, "cites": list(p.claim_ids)} for p in s.paragraphs],
+                "paragraphs": [_paragraph_dict(p) for p in s.paragraphs],
             }
             for s in article.sections
         ],
@@ -322,8 +431,10 @@ def write_article(
     *,
     feedback: str = "",
     windows: dict[str, str] | None = None,
+    pages: dict[str, DocPage] | None = None,
 ) -> Article:
-    return parse_article(complete(build_prompt(recap, feedback, windows)))
+    shown = pick_pages(recap, pages, windows) if pages else None
+    return parse_article(complete(build_prompt(recap, feedback, windows, shown)))
 
 
 @dataclass(frozen=True)
@@ -364,17 +475,23 @@ def _check_text(
     recap: Recap,
     issues: list[Issue],
     windows: dict[str, str] | None = None,
+    page_ids: tuple[str, ...] = (),
+    pages: dict[str, DocPage] | None = None,
 ) -> None:
     known = {c.id: c for c in recap.claims}
     for claim_id in claim_ids:
         if claim_id not in known:
             issues.append(Issue(where, "unknown_claim", f"cites unknown claim {claim_id}"))
+    for page_id in page_ids:
+        if not pages or page_id not in pages:
+            issues.append(Issue(where, "unknown_page", f"cites unknown document page {page_id}"))
     cited = [known[c].text for c in claim_ids if c in known]
     if not cited:
         issues.append(Issue(where, "uncited", "states facts but cites no claim"))
         return
     said = [windows[c] for c in claim_ids if windows and windows.get(c)]
-    sources = [*cited, *said, header_text(recap)]
+    read = [pages[p].text for p in page_ids if pages and p in pages]
+    sources = [*cited, *said, *read, header_text(recap)]
     allowed_numbers: set[str] = set()
     for source in sources:
         allowed_numbers |= number_atoms(source)
@@ -407,19 +524,31 @@ def _check_quote(where: str, quote: Quote, recap: Recap, issues: list[Issue], wi
 
 
 def check_article(
-    recap: Recap, article: Article, windows: dict[str, str] | None = None
+    recap: Recap,
+    article: Article,
+    windows: dict[str, str] | None = None,
+    pages: dict[str, DocPage] | None = None,
 ) -> ArticleReport:
     report = ArticleReport(article=article)
     issues = report.issues
     number = 0
     for s_no, section in enumerate(article.sections, 1):
         section_ids: dict[str, None] = {}
+        section_pages: dict[str, None] = {}
         for paragraph in section.paragraphs:
             number += 1
             _check_text(
-                f"paragraph {number}", paragraph.text, paragraph.claim_ids, recap, issues, windows
+                f"paragraph {number}",
+                paragraph.text,
+                paragraph.claim_ids,
+                recap,
+                issues,
+                windows,
+                paragraph.page_ids,
+                pages,
             )
             section_ids.update(dict.fromkeys(paragraph.claim_ids))
+            section_pages.update(dict.fromkeys(paragraph.page_ids))
         if section.heading:
             _check_text(
                 f"section {s_no} heading",
@@ -428,10 +557,13 @@ def check_article(
                 recap,
                 issues,
                 windows,
+                tuple(section_pages),
+                pages,
             )
-    _check_text("headline", article.headline, article.cited, recap, issues, windows)
+    cited, cited_pages = article.cited, article.cited_pages
+    _check_text("headline", article.headline, cited, recap, issues, windows, cited_pages, pages)
     if article.dek:
-        _check_text("dek", article.dek, article.cited, recap, issues, windows)
+        _check_text("dek", article.dek, cited, recap, issues, windows, cited_pages, pages)
     for v_no, vote in enumerate(article.votes, 1):
         _check_vote(f"vote {v_no}", vote, recap, issues, windows)
     for q_no, quote in enumerate(article.quotes, 1):
@@ -455,21 +587,24 @@ class Dropped:
 
 
 def drop_unsupported(
-    recap: Recap, article: Article, windows: dict[str, str] | None = None
+    recap: Recap,
+    article: Article,
+    windows: dict[str, str] | None = None,
+    pages: dict[str, DocPage] | None = None,
 ) -> tuple[Article, Dropped]:
     """Remove the parts that fail the check. The headline is kept as it is."""
     dropped = Dropped()
 
-    def fails(where: str, text: str, ids: tuple[str, ...]) -> bool:
+    def fails(where: str, text: str, ids: tuple[str, ...], page_ids: tuple[str, ...]) -> bool:
         issues: list[Issue] = []
-        _check_text(where, text, ids, recap, issues, windows)
+        _check_text(where, text, ids, recap, issues, windows, page_ids, pages)
         return bool(issues)
 
     sections = []
     for section in article.sections:
         kept = []
         for paragraph in section.paragraphs:
-            if fails("paragraph", paragraph.text, paragraph.claim_ids):
+            if fails("paragraph", paragraph.text, paragraph.claim_ids, paragraph.page_ids):
                 dropped.paragraphs.append(paragraph)
             else:
                 kept.append(paragraph)
@@ -477,12 +612,13 @@ def drop_unsupported(
             continue
         heading = section.heading
         ids = tuple(dict.fromkeys(i for p in kept for i in p.claim_ids))
-        if heading and fails("heading", heading, ids):
+        page_ids = tuple(dict.fromkeys(i for p in kept for i in p.page_ids))
+        if heading and fails("heading", heading, ids, page_ids):
             dropped.texts.append(heading)
             heading = None
         sections.append(Section(heading=heading, paragraphs=tuple(kept)))
     out = replace(article, sections=tuple(sections))
-    if out.dek and fails("dek", out.dek, out.cited):
+    if out.dek and fails("dek", out.dek, out.cited, out.cited_pages):
         dropped.texts.append(out.dek)
         out = replace(out, dek="")
     votes, quotes = [], []
@@ -518,11 +654,30 @@ def citations(recap: Recap, paragraph: Paragraph) -> list[dict[str, str]]:
     return out
 
 
-def site_article(recap: Recap, article: Article) -> dict[str, Any]:
+def page_citations(paragraph: Paragraph, pages: dict[str, DocPage] | None) -> list[dict[str, Any]]:
+    """The document pages a paragraph rests on, each with its ``#page=N`` link."""
+    out = []
+    for page_id in paragraph.page_ids:
+        page = (pages or {}).get(page_id)
+        if page is None:
+            raise ArticleFormatError(f"the story cites page {page_id}, which the documents lack")
+        out.append({"page_id": page.id, "kind": page.kind, "page": page.page, "url": page.link})
+    return out
+
+
+def note_for(article: Article) -> str:
+    """The fixed note: it names the documents when the story cites them."""
+    return NOTE_DOCUMENTS if article.cited_pages else NOTE
+
+
+def site_article(
+    recap: Recap, article: Article, pages: dict[str, DocPage] | None = None
+) -> dict[str, Any]:
     """The story in the site's episode format: cites are claim positions and start times.
 
-    Raises ArticleFormatError when a part cites a claim the recap lacks, so a story edited on
-    the desk cannot point at nothing.
+    A paragraph that cites document pages lists them under "pages", each with its document's
+    URL and page number. Raises ArticleFormatError when a part cites a claim the recap lacks
+    or a page the documents lack, so a story edited on the desk cannot point at nothing.
     """
     position = {c.id: n for n, c in enumerate(recap.claims)}
 
@@ -535,22 +690,27 @@ def site_article(recap: Recap, article: Article) -> dict[str, Any]:
     def start(claim_id: str) -> int:
         return seconds_of(claim_of(claim_id).timestamp)
 
+    def paragraph(p: Paragraph) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "text": p.text,
+            "cites": [
+                {"claim": position[claim_of(c).id], "start_s": start(c)} for c in p.claim_ids
+            ],
+        }
+        if p.page_ids:
+            out["pages"] = [
+                {"kind": c["kind"], "url": c["url"].split("#", 1)[0], "page": c["page"]}
+                for c in page_citations(p, pages)
+            ]
+        return out
+
     return {
         "headline": article.headline,
         "dek": article.dek,
         "sections": [
             {
                 "heading": s.heading,
-                "paragraphs": [
-                    {
-                        "text": p.text,
-                        "cites": [
-                            {"claim": position[claim_of(c).id], "start_s": start(c)}
-                            for c in p.claim_ids
-                        ],
-                    }
-                    for p in s.paragraphs
-                ],
+                "paragraphs": [paragraph(p) for p in s.paragraphs],
             }
             for s in article.sections
         ],
@@ -571,23 +731,27 @@ def site_article(recap: Recap, article: Article) -> dict[str, Any]:
     }
 
 
-def published_dict(recap: Recap, article: Article) -> dict[str, Any]:
+def published_dict(
+    recap: Recap, article: Article, pages: dict[str, DocPage] | None = None
+) -> dict[str, Any]:
     """The story as the desk stores it: the model's parts plus each paragraph's citations."""
     data = article_to_dict(article)
     for section, raw in zip(article.sections, data["sections"], strict=True):
         for paragraph, raw_p in zip(section.paragraphs, raw["paragraphs"], strict=True):
             raw_p["citations"] = citations(recap, paragraph)
+            if paragraph.page_ids:
+                raw_p["documents"] = page_citations(paragraph, pages)
     return {
         "city": recap.city,
         "body": recap.body,
         "meeting_date": recap.meeting_date,
         "video_id": recap.video_id,
-        "note": NOTE,
+        "note": note_for(article),
         **data,
     }
 
 
-def render_markdown(recap: Recap, article: Article) -> str:
+def render_markdown(recap: Recap, article: Article, pages: dict[str, DocPage] | None = None) -> str:
     out = [f"# {article.headline}", ""]
     if article.dek:
         out += [f"**{article.dek}**", ""]
@@ -599,7 +763,14 @@ def render_markdown(recap: Recap, article: Article) -> str:
             links = ", ".join(
                 f"[{c['timestamp']}]({c['url']})" for c in citations(recap, paragraph)
             )
-            out += [f"{paragraph.text} (Video: {links})", ""]
+            sources = f"Video: {links}"
+            if paragraph.page_ids:
+                docs = ", ".join(
+                    f"[{c['kind']} p. {c['page']}]({c['url']})"
+                    for c in page_citations(paragraph, pages)
+                )
+                sources += f"; Documents: {docs}"
+            out += [f"{paragraph.text} ({sources})", ""]
     if article.votes:
         out += ["## Votes", ""]
         for vote in article.votes:
@@ -612,21 +783,23 @@ def render_markdown(recap: Recap, article: Article) -> str:
         claim = recap.claim(quote.claim_id)
         if claim is not None:
             out += [f'> "{claim.quote}" ({quote.speaker}, {claim.timestamp})', ""]
-    out.append(f"*{NOTE}*")
+    out.append(f"*{note_for(article)}*")
     return "\n".join(out) + "\n"
 
 
-def save_article(recap: Recap, article: Article, out: Path) -> tuple[Path, Path]:
+def save_article(
+    recap: Recap, article: Article, out: Path, pages: dict[str, DocPage] | None = None
+) -> tuple[Path, Path]:
     """Write ``article.json`` (with citations) and ``article.md`` next to it."""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     json_path = out.with_suffix(".json")
     md_path = out.with_suffix(".md")
     json_path.write_text(
-        json.dumps(published_dict(recap, article), indent=2, ensure_ascii=False) + "\n",
+        json.dumps(published_dict(recap, article, pages), indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    md_path.write_text(render_markdown(recap, article), encoding="utf-8")
+    md_path.write_text(render_markdown(recap, article, pages), encoding="utf-8")
     return json_path, md_path
 
 

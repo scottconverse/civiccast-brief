@@ -389,3 +389,43 @@ def test_stage_without_a_city_waits_and_a_failing_script_is_never_auto_published
         item = store.get_item(failing)
     assert item.checks_passed is False
     assert item.status == "review"
+
+
+def test_a_story_citing_a_document_page_keeps_its_page_in_the_site_format(
+    tmp_path, meeting, monkeypatch
+):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 61.234)
+    url = "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=9&compileOutputType=1"
+    (meeting_dir / "documents.json").write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "documents": [
+                    {
+                        "kind": "minutes",
+                        "url": url,
+                        "sha256": "0" * 64,
+                        "pages": [{"page": 3, "text": "Consent Agenda. Carried: 7 - 0"}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    story = _story("The consent agenda passed 7-0.")
+    story["sections"][0]["paragraphs"][0]["pages"] = ["d1p3"]
+    item_dir = _approved_export(tmp_path, meeting_dir)
+    _, article_dir = _published_article(tmp_path, meeting_dir, story)
+    episode = B.assemble(
+        item_dir=item_dir,
+        meeting_dir=meeting_dir,
+        script_json=meeting_dir / "script.json",
+        audio_dir=audio,
+        media_base_url="https://media.example.com/longmont/",
+        city_slug="example",
+        published="2026-10-21T09:00:00-06:00",
+        article_dir=article_dir,
+    )
+    paragraph = episode["article"]["sections"][0]["paragraphs"][0]
+    assert paragraph["pages"] == [{"kind": "minutes", "url": url, "page": 3}]

@@ -296,3 +296,35 @@ def test_publish_builds_each_published_episode_once_with_its_story(tmp_path):
     rerun.exported = fake.exported
     run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
     assert rerun.names() == [("review", "export"), ("site", "build")]
+
+
+def test_the_meetings_documents_are_written_passed_to_the_story_and_reported(tmp_path):
+    from dataclasses import replace
+
+    data = {"format": 1, "documents": [{"kind": "packet", "url": "https://x.test/p", "pages": []}]}
+    lines = ["packet: 38 pages", "minutes: draft minutes on pages 17-38 of the November 17 packet"]
+    asked = []
+
+    def documents():
+        asked.append(1)
+        return data, lines
+
+    fake = Fake(fail={"article": 1})
+    settings = _settings(tmp_path)
+    meeting = replace(COUNCIL_MEETING, documents=documents)
+    run_week(settings, [meeting], LAST, fake.steps())
+    report = run_week(settings, [meeting], LAST, fake.steps())
+
+    folder = settings.work / "2026-11-03-city-council-owzpzjzjwne"
+    written = folder / "documents.json"
+    assert json.loads(written.read_text(encoding="utf-8")) == data
+    # Fetched once; the rerun after the failed story does not ask the portal again.
+    assert asked == [1]
+    articles = [argv for step, argv in fake.calls if step == "article"]
+    assert [a[0] for a in articles] == ["write", "write", "stage"]
+    assert all(_opt(a, "--documents") == str(written) for a in articles)
+    assert report.lines[:3] == [
+        "2026-11-03 City Council Regular Session: done",
+        "2026-11-03 City Council Regular Session: packet: 38 pages",
+        "2026-11-03 City Council Regular Session: " + lines[1],
+    ]
