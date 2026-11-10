@@ -1,16 +1,17 @@
-"""Export approved review items to a folder. This is the gate: nothing else is written.
+"""Export published desk items to a folder. This is the gate: nothing else is written.
 
 An item is written only when all three hold:
-  - its status is "approved";
-  - it has an approval record (approved_at and approved_hash);
-  - the hash of its current content equals the hash recorded at approval.
+  - its status is "published";
+  - it has a publish record (published_at and published_hash);
+  - the hash of its current content equals the hash recorded when it was published.
 
 Every other item is skipped, and the reason is logged and returned. A skipped item never
-reaches the folder: if an item was exported earlier and is now rejected or edited, its folder
-from the earlier export is removed.
+reaches the folder: if an item was exported earlier and is now held, killed or edited, its
+folder from the earlier export is removed.
 
-The output folder belongs to the export. It holds one folder per exported item (recap.txt,
-script.txt, item.json) and a manifest.json that lists them. Use a folder for this export only.
+The output folder belongs to the export. It holds one folder per exported item and a
+manifest.json that lists them. An episode folder has recap.txt, script.txt and item.json; an
+article folder has article.json and item.json. Use a folder for this export only.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from civiccast_brief.review.store import ReviewError, ReviewItem, ReviewStore
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME: Final = "manifest.json"
-MANIFEST_FORMAT: Final = 1
+MANIFEST_FORMAT: Final = 2
 _FOLDER_PATTERN: Final = re.compile(r"^\d+-[A-Za-z0-9-]*$")
 
 
@@ -47,12 +48,12 @@ class ExportResult:
 
 def gate_reason(item: ReviewItem) -> str | None:
     """Return why the item may not be exported, or None if it may."""
-    if item.status != "approved":
-        return f"status is {item.status}; only approved items are exported"
-    if item.approved_at is None or item.approved_hash is None:
-        return "approval record is missing; approve the item again"
-    if item.approved_hash != item.content_hash:
-        return "content changed after approval; approve the item again"
+    if item.status != "published":
+        return f"status is {item.status}; only published items are exported"
+    if item.published_at is None or item.published_hash is None:
+        return "publish record is missing; publish the item again"
+    if item.published_hash != item.content_hash:
+        return "content changed after publishing; publish the item again"
     return None
 
 
@@ -62,8 +63,8 @@ def folder_name(item: ReviewItem) -> str:
     return f"{item.id:04d}-{slug}"
 
 
-def export_approved(db: str | Path, out_dir: str | Path) -> ExportResult:
-    """Write every approved item that passes the gate into out_dir; skip the rest."""
+def export_published(db: str | Path, out_dir: str | Path) -> ExportResult:
+    """Write every published item that passes the gate into out_dir; skip the rest."""
     db_path = Path(db)
     if not db_path.is_file():
         raise ReviewError(f"database not found: {db_path}")
@@ -115,21 +116,32 @@ def _remove_folder(out: Path, name: str) -> None:
 def _write_item(out: Path, name: str, item: ReviewItem) -> Path:
     folder = out / name
     folder.mkdir(exist_ok=True)
-    (folder / "recap.txt").write_text(item.recap, encoding="utf-8", newline="\n")
-    (folder / "script.txt").write_text(item.script, encoding="utf-8", newline="\n")
-    meta = {
+    meta: dict[str, object] = {
         "status": item.status,
+        "kind": item.kind,
         "meeting_id": item.meeting_id,
+        "body": item.body,
         "title": item.title,
         "meeting_date": item.meeting_date,
-        "speakers": item.speakers,
-        "approved_at": item.approved_at,
+    }
+    if item.kind == "article":
+        _write_json(folder / "article.json", item.article)
+    else:
+        (folder / "recap.txt").write_text(item.recap, encoding="utf-8", newline="\n")
+        (folder / "script.txt").write_text(item.script, encoding="utf-8", newline="\n")
+        meta["speakers"] = item.speakers
+    meta |= {
+        "published_at": item.published_at,
+        "published_by": item.published_by,
         "content_hash": item.content_hash,
     }
-    (folder / "item.json").write_text(
-        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
-    )
+    _write_json(folder / "item.json", meta)
     return folder
+
+
+def _write_json(path: Path, data: object) -> None:
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def _write_manifest(out: Path, ready: dict[str, ReviewItem]) -> None:
@@ -139,8 +151,9 @@ def _write_manifest(out: Path, ready: dict[str, ReviewItem]) -> None:
             {
                 "folder": name,
                 "item_id": item.id,
+                "kind": item.kind,
                 "meeting_id": item.meeting_id,
-                "approved_at": item.approved_at,
+                "published_at": item.published_at,
                 "content_hash": item.content_hash,
             }
             for name, item in ready.items()
@@ -149,3 +162,7 @@ def _write_manifest(out: Path, ready: dict[str, ReviewItem]) -> None:
     (out / MANIFEST_NAME).write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
     )
+
+
+#: The earlier name, kept for code that imports it.
+export_approved = export_published

@@ -77,7 +77,7 @@ def _same(label: str, exported: str, expected: str) -> None:
     if exported.replace("\r\n", "\n").strip() != expected.replace("\r\n", "\n").strip():
         raise EpisodeError(
             f"the approved {label} differs from the one that would be published; "
-            "stage and approve the item again"
+            "stage and publish the item again"
         )
 
 
@@ -99,8 +99,10 @@ def assemble(
 ) -> dict[str, Any]:
     """One site episode from an exported, approved item. Refuses if anything was changed."""
     meta = json.loads((item_dir / "item.json").read_text(encoding="utf-8"))
-    if meta.get("status") != "approved" or not meta.get("approved_at"):
-        raise EpisodeError(f"{item_dir} is not an approved export")
+    # "approved"/"approved_at" are from exports made before the editor desk.
+    published_at = meta.get("published_at") or meta.get("approved_at")
+    if meta.get("status") not in ("published", "approved") or not published_at:
+        raise EpisodeError(f"{item_dir} is not a published export")
     recap, data = _meeting(meeting_dir)
     script = load_script(script_json)
     _same("recap", (item_dir / "recap.txt").read_text(encoding="utf-8"), recap_text(recap))
@@ -119,7 +121,7 @@ def assemble(
         "id": slug,
         "city": city_slug,
         "approved": True,
-        "approved_by": f"producer screen, {meta['approved_at']}",
+        "approved_by": f"editor desk, {published_at}",
         "board": recap.body,
         "meeting_title": "Weekly roundup" if roundup else str(data.get("title") or recap.body),
         "meeting_date": day,

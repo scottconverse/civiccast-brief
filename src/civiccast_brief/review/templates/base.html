@@ -3,32 +3,56 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title }} | CivicCast Brief producer screen</title>
+  <title>{{ title }} | CivicCast Brief editor desk</title>
   <style>
-    :root { color-scheme: light dark; }
+    :root { color-scheme: light dark; --line: #8885; --ok: #2a7; --bad: #c33; --muted: #777; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45;
-           max-width: 60rem; margin: 0 auto; padding: 1rem; }
-    header a { color: inherit; text-decoration: none; }
-    h1 { font-size: 1.4rem; }
+           max-width: 62rem; margin: 0 auto; padding: 1rem; }
+    header { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; align-items: baseline;
+             border-bottom: 1px solid var(--line); margin-bottom: .5rem; }
+    header h1 { font-size: 1.3rem; margin: .5rem 0; }
+    header a { color: inherit; }
+    nav { display: flex; gap: 1rem; flex-wrap: wrap; }
+    nav a[aria-current=page], .tabs a[aria-current=page] { font-weight: 700; }
+    h2 { font-size: 1.25rem; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #8885;
+    th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line);
              vertical-align: top; }
-    textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 12rem; }
-    input[type=text] { font: inherit; min-width: 16rem; }
-    fieldset { border: 1px solid #8886; margin: 1rem 0; }
-    .notice { border-left: 4px solid #2a7; padding: .5rem .75rem; background: #2a72;
+    textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 7rem; }
+    textarea.tall { min-height: 14rem; }
+    input[type=text], select { font: inherit; padding: .2rem .3rem; }
+    input.wide { width: 100%; box-sizing: border-box; }
+    fieldset { border: 1px solid var(--line); margin: 1rem 0; }
+    .notice { border-left: 4px solid var(--ok); padding: .5rem .75rem; background: #2a72;
               margin: 1rem 0; }
-    .notice.error { border-color: #c33; background: #c332; }
-    .status { font-weight: 600; text-transform: uppercase; font-size: .8em;
-              letter-spacing: .04em; }
-    .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: 1rem 0; }
-    .actions form { margin: 0; }
+    .notice.error { border-color: var(--bad); background: #c332; }
+    .field-error { color: var(--bad); font-weight: 600; margin: .2rem 0; }
+    [aria-invalid=true] { outline: 2px solid var(--bad); }
+    .status { font-weight: 600; text-transform: uppercase; font-size: .8em; letter-spacing: .04em; }
+    .status.published { color: var(--ok); } .status.killed { color: var(--bad); }
+    .actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin: 1rem 0; }
+    .actions form, td form { margin: 0; display: inline; }
     button { font: inherit; padding: .4rem .9rem; cursor: pointer; }
-    .muted { color: #777; }
+    button.busy { cursor: progress; opacity: .75; }
+    button.primary { font-weight: 700; }
+    .muted { color: var(--muted); }
+    .tabs { display: flex; gap: .75rem; flex-wrap: wrap; margin: .5rem 0 1rem; }
+    .cites { font-size: .85em; color: var(--muted); margin: .2rem 0 .8rem; }
+    pre { white-space: pre-wrap; background: #8881; padding: .5rem; }
+    #busy-status { min-height: 1.2em; margin: 0; }
   </style>
+  <script src="/static/desk.js" defer></script>
 </head>
 <body>
-<header><h1><a href="/">CivicCast Brief producer screen</a></h1></header>
+<header>
+  <h1><a href="/">CivicCast Brief editor desk</a></h1>
+  <nav aria-label="Desk">
+    <a href="/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
+    <a href="/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models and auto-publish</a>
+    <a href="/sources" {% if nav == "sources" %}aria-current="page"{% endif %}>Sources</a>
+  </nav>
+</header>
+<p id="busy-status" class="muted" role="status" aria-live="polite"></p>
 <main>
 {% block content %}{% endblock %}
 </main>

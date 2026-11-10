@@ -43,6 +43,63 @@ This writes two files and never overwrites one that is already there:
   host names and the podcast description here.
 - `cities/yourcity/roster.json`: the council roster, with no members yet.
 
+### Add the city's sources
+
+Open the editor desk on the city folder (see step 5 for the command) and go to **Sources**. Add each
+place the city's meetings come from, with the bodies (council, boards) it covers:
+
+| Kind | What to enter | Example |
+|---|---|---|
+| PrimeGov portal | the portal's home address | `https://longmont.primegov.com` |
+| YouTube channel | the channel id: `UC` and 22 more letters, digits, `-` or `_` | `UCH5_wkpLrKYb1JuUk6-UdNg` |
+| Granicus video archive | the host and the `view_id` number | `yourcity.granicus.com`, `2` |
+
+A channel handle such as `@yourcity` is not a channel id; YouTube shows the id under About > Share
+channel > Copy channel ID. The screen checks each field, names the one that is wrong, and keeps what
+you typed. Each source can be edited or removed later. The desk saves them to
+`cities/yourcity/sources.json`:
+
+```json
+{
+  "format": 1,
+  "sources": [
+    {"id": "primegov:longmont.primegov.com", "kind": "primegov",
+     "url": "https://longmont.primegov.com", "bodies": ["City Council"]},
+    {"id": "youtube:UCH5_wkpLrKYb1JuUk6-UdNg", "kind": "youtube",
+     "channel_id": "UCH5_wkpLrKYb1JuUk6-UdNg", "bodies": ["City Council"]},
+    {"id": "granicus:yourcity.granicus.com/2", "kind": "granicus",
+     "host": "yourcity.granicus.com", "view_id": "2", "bodies": ["City Council"]}
+  ]
+}
+```
+
+### Pick the models
+
+Go to **Models and auto-publish** in the desk. Each task (recap, judge, article, script, roundup)
+has a default model, and any body can use a different one. Out of the box, City Council uses Claude
+and every other body uses DeepSeek (`deepseek-v4.1-flash:1017-cloud` through Ollama). The desk
+saves the picks to `cities/yourcity/models.json`:
+
+```json
+{
+  "format": 1,
+  "tasks": {
+    "recap":   {"default": "ollama:deepseek-v4.1-flash:1017-cloud", "bodies": {"City Council": "claude:claude-opus-5-5"}},
+    "judge":   {"default": "ollama:deepseek-v4.1-flash:1017-cloud", "bodies": {"City Council": "claude:claude-opus-5-5"}},
+    "article": {"default": "ollama:deepseek-v4.1-flash:1017-cloud", "bodies": {"City Council": "claude:claude-opus-5-5"}},
+    "script":  {"default": "ollama:deepseek-v4.1-flash:1017-cloud", "bodies": {"City Council": "claude:claude-opus-5-5"}},
+    "roundup": {"default": "ollama:deepseek-v4.1-flash:1017-cloud", "bodies": {"City Council": "claude:claude-opus-5-5"}}
+  }
+}
+```
+
+A pick is `provider:model`. `claude:<model>` runs `claude -p` on your Claude subscription (signed in
+with `claude` or `claude setup-token`; no API key: CivicCast Brief removes any `ANTHROPIC_API_KEY`
+from the `claude` process). `ollama:<model>` runs through Ollama. With no `models.json`, the defaults above
+apply. Code gets a writer for a task with
+`civiccast_brief.models.complete_for(city_dir, task, body)`, which returns a function that takes a
+prompt and returns the text and a receipt (provider, model, seconds).
+
 ## 2. Fill in the roster
 
 Open the city's own council page and add each member to `roster.json`, with the name exactly as the
@@ -91,20 +148,66 @@ For a weekly roundup, combine the week's recaps first, then write from the combi
 python -m civiccast_brief.script roundup --recap runs/a/recap.json --recap runs/b/recap.json --out runs/week/recap.json
 ```
 
-## 5. Review and approve
+## 5. Review and publish on the editor desk
 
 ```
 python -m civiccast_brief.episode stage --db review.db --meeting runs/2026-11-03 --script runs/2026-11-03/script.json
-python -m civiccast_brief.review serve --db review.db
+python -m civiccast_brief.review serve --db review.db --city cities/yourcity
 ```
 
-The producer screen runs at `http://127.0.0.1:8765`. Name the unknown voices, read the recap and the
-script, then approve or reject. Approval is locked to the exact text; any later change needs a new
-approval. Then export the approved items:
+The editor desk runs at `http://127.0.0.1:8765` (`--port` picks another). `--city` turns on the
+Sources and Models and auto-publish pages; without it the desk only reviews items.
+
+An item is an **episode** (speakers, recap, podcast script) or an **article** (headline, dek and
+sections of paragraphs, each with its citations; votes, quotes and topics come from the writer and
+are not edited on the desk). Each item is in one state:
+
+| State | Meaning | Exported |
+|---|---|---|
+| review | waiting for the editor | no |
+| held | set aside | no |
+| killed | will not run until it is edited or redrafted | no |
+| published | ready to go out | yes |
+
+The buttons on an item page:
+
+- **Save** keeps your edits and sends the item back to review.
+- **Publish** locks the item to its exact saved text. Any later change sends it back to review, and
+  it must be published again. A killed item cannot be published until it is edited or redrafted.
+- **Hold** and **Kill** take an item out of the export.
+- **Redraft** sends your note to the writer and puts the new draft in review. The desk needs a
+  writer connected for this; until the real writers are wired in, it says that no writer is
+  connected.
+- **Regenerate audio** (episodes only) records a request for new audio for the current text.
+
+Each button shows what it is doing while it works, and each page says what happened. The item's
+history lists every action.
+
+**Auto-publish.** On the Models and auto-publish page, tick a body to let its items publish with no
+press when they pass their checks. Items that fail their checks still wait for you. The setting is
+saved to `cities/yourcity/desk.json`:
+
+```json
+{"format": 1, "auto_publish": {"City Council": false, "Planning and Zoning Commission": true}}
+```
+
+The weekly run stages items with `civiccast_brief.review.desk.stage_item(db, city_dir, kind=...,
+meeting_id=..., title=..., meeting_date=..., body=..., checks_passed=...)`, which applies
+auto-publish.
+
+Then export the published items:
 
 ```
 python -m civiccast_brief.review export --db review.db --out exported
 ```
+
+The export writes only published items whose text is unchanged since publishing, and removes items
+that were pulled back. Each item gets `item.json`, plus `recap.txt` and `script.txt` for an episode
+or `article.json` for an article.
+
+**An older review.db.** The first time the desk opens a database from the old producer screen, it
+moves the items over: approved items become published (their approval still matches their text),
+drafts go to review, and rejected items are killed. Keep a copy of the file before the first run.
 
 ## 6. Make the audio
 
@@ -118,13 +221,13 @@ This writes `episode.mp3`, `chapters.json` and `transcript.vtt`.
 
 ## 7. Build the site
 
-Turn each approved item into a site episode, saved in the city folder:
+Turn each exported item into a site episode, saved in the city folder:
 
 ```
 python -m civiccast_brief.episode assemble --item exported/<item> --meeting runs/2026-11-03 --script runs/2026-11-03/script.json --audio runs/2026-11-03/audio --media-base-url https://media.example.org --city yourcity --published 2026-11-04T09:00:00-07:00 --out cities/yourcity/2026-11-03.json
 python -m civiccast_brief.site build --episodes cities/yourcity --out site --base-url https://yourcity.example.org
 ```
 
-`assemble` refuses an item whose recap or script changed after approval. The site build reads
+`assemble` refuses an item whose recap or script changed after publishing. The site build reads
 `city.json` and every episode JSON in the folder (not `roster.json`) and publishes only approved
 episodes. Upload `site/` to the static host and the MP3s to the media address.
