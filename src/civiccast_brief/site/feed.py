@@ -7,7 +7,8 @@ Sources (see the NOTICE comment in site/__init__.py):
   rule (UUID v5 of the feed address without its scheme, in the Podcast Index namespace), and
   the RFC 822 date rule.
 Elements added here: content:encoded, podcast:chapters, podcast:transcript and per-item
-itunes:explicit and itunes:episodeType.
+itunes:explicit and itunes:episodeType. The Apple Podcasts and Spotify rules the feed keeps are
+listed in site/directories.py; the city settings are checked against them when they load.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from datetime import UTC, datetime
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
 
+from civiccast_brief.site.directories import EPISODE_DESCRIPTION_MAX_CHARS
 from civiccast_brief.site.model import City, Episode
 from civiccast_brief.site.timecode import clock
 from civiccast_brief.site.urls import Urls, timestamp_link
@@ -48,7 +50,8 @@ def _item_html(city: City, urls: Urls, episode: Episode) -> str:
     parts = [f"<p>{escape(episode.dek)}</p>"] if episode.dek else []
     parts.append(f"<p>{escape(city.disclaimer)}</p>")
     if episode.claims:
-        parts.append("<h2>Recap</h2>")
+        # Apple allows only p, ol, ul, li and a in episode notes, so no heading tag.
+        parts.append("<p>Recap:</p>")
     for claim in episode.claims:
         cite = ""
         if episode.video_url:
@@ -66,7 +69,10 @@ def _sentence(text: str) -> str:
 
 def _description(city: City, episode: Episode) -> str:
     lead = episode.dek or episode.display_headline
-    return f"{_sentence(lead)} {city.disclaimer}"
+    text = f"{_sentence(lead)} {city.disclaimer}"
+    if len(text) > EPISODE_DESCRIPTION_MAX_CHARS:
+        text = text[: EPISODE_DESCRIPTION_MAX_CHARS - 1].rstrip() + "…"
+    return text
 
 
 def build_feed(city: City, urls: Urls, episodes: tuple[Episode, ...], now: datetime) -> str:
@@ -95,7 +101,7 @@ def build_feed(city: City, urls: Urls, episodes: tuple[Episode, ...], now: datet
         f"<itunes:owner>{owner}</itunes:owner>",
         f'<itunes:image href="{_attr(artwork)}"/>',
         image_tag,
-        f'<itunes:category text="{_attr(podcast.category)}"/>',
+        _category(podcast.category, podcast.subcategory),
         f"<itunes:explicit>{'true' if podcast.explicit else 'false'}</itunes:explicit>",
         "<itunes:type>episodic</itunes:type>",
         "<podcast:locked>no</podcast:locked>",
@@ -140,6 +146,16 @@ def build_feed(city: City, urls: Urls, episodes: tuple[Episode, ...], now: datet
         'xmlns:content="http://purl.org/rss/1.0/modules/content/">\n'
         "<channel>\n"
         f"{body}\n" + (f"{item_xml}\n" if items else "") + "</channel>\n</rss>\n"
+    )
+
+
+def _category(category: str, subcategory: str) -> str:
+    """itunes:category, with the subcategory nested inside it when there is one."""
+    if not subcategory:
+        return f'<itunes:category text="{_attr(category)}"/>'
+    return (
+        f'<itunes:category text="{_attr(category)}">'
+        f'<itunes:category text="{_attr(subcategory)}"/></itunes:category>'
     )
 
 

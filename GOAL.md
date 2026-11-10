@@ -11,11 +11,12 @@ Scott's decisions, 2026-11-09:
 - No paid services. Email goes through Brevo's free plan (Scott creates the account and enters the key himself).
 - Phase Three is all 10 Boulder County towns and cities (Boulder, Longmont, Louisville, Lafayette, Superior, Erie, Lyons, Nederland, Jamestown, Ward) plus the Boulder County Commissioners, each with its council, all boards and schools.
 - Items 24 and 25 wait until Scott says it is time.
+- 2026-11-10, Scott: "There will be no spotify or apple podcast accounts for testing. just make sure they follow the required formats for someone to fill them in and use mockups to test. Same thing with brevo." Items 24 and 25 now mean: the formats are met, the settings are documented for a person to fill in, and the code is tested against stand-ins.
 
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | **A** | **TownRecord Milestone 1** | | |
-| 1 | Captions for Sustainability Board Oct 21 (other apps stay off YouTube) | open | |
+| 1 | Captions for Sustainability Board Oct 21 (other apps stay off YouTube) | open (partly) | yt-dlp fetch of the en-orig track for qkZxO5zzi0A worked: 2,123 segments. The program's own capture has not run on it yet |
 | 2 | Show M1 passes: per-meeting result and the reason each non-aligned meeting did not align | open | |
 | 3 | PR #30 description lists all 8 fixes | done | scottconverse/townrecord#30 body, 2026-11-09 |
 | 4 | Merge PR #30 | done | merge commit a574028, 2026-11-09 |
@@ -42,8 +43,8 @@ Scott's decisions, 2026-11-09:
 | **D** | **Phase Three** | | |
 | 23 | All 10 Boulder County towns and cities plus the County Commissioners, each with council, boards and schools, set up with step 22 | open | |
 | **E** | **Older open items** | | |
-| 24 | Apple Podcasts and Spotify listing (Scott's sign-in, when he says) | waits on Scott | |
-| 25 | Email end-to-end through Brevo free plan; clear the `nobody@example.com` row | waits on Scott | |
+| 24 | Apple Podcasts and Spotify: feed meets both formats, settings documented, tested with stand-ins | built, tested with stand-ins; PR open | Branch podcast-and-brevo-formats: build checks in site/directories.py; tests/site/test_directories.py (24 pass locally). Live Longmont feed through the stand-ins: Spotify no problems; Apple flagged only the `<h2>` in episode notes, which this change removes (live site needs a rebuild). docs/podcast-directories.md. Not submitted to either service. Three live chapter titles are 59 to 62 characters; Apple's guide asks for 45 or fewer (not in Apple's submission checks) |
+| 25 | Email through Brevo's API format, settings documented, tested with a stand-in; clear the `nobody@example.com` row | built, tested with a stand-in; PR open | Row sub-f5391f814da11cfbb8154536 deleted from live D1 2026-11-10 (1 change; Scott's confirmed row kept). worker/signup/src/brevo.ts, used when the BREVO_API_KEY secret is set; test/brevo.test.ts (13 pass locally, and fail when the api-key header or the header filter is broken). Setup steps in docs/email-signup.md. No real Brevo account used |
 | **F** | **Issues** | | |
 | 26 | YouTube shared limit: other apps paused for now; CivicCast Brief reads captions with the copied TownRecord code | open | Scott OK'd 2026-11-09 |
 | 27 | Running on other machines: no separate installs; release work after A to E | open | |
