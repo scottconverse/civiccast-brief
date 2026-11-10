@@ -28,6 +28,8 @@ class Segment:
     turn_start: bool
     speaker: str | None = None
     voice: str | None = None
+    #: How this line's name was found when not from its turn ("chair"). Not saved.
+    basis: str | None = None
 
 
 def normalize_text(raw: str) -> tuple[str, bool]:

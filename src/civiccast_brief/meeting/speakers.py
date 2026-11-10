@@ -485,8 +485,119 @@ def _own_voice(segments: list[Segment], turn: Turn, chair: str | None) -> str | 
     return max(sorted(counts), key=lambda v: counts[v]) if counts else None
 
 
+#: The chair's voice is named the mayor only when, at least this many times, another voice says
+#: "Mayor" (not "Mayor Pro Tem") and the chair's voice is the next voice heard, ...
+MIN_MAYOR_ADDRESSES = 3
+#: ... and at least this share of all such addresses are to the mayor, not to a pro tem.
+MIN_MAYOR_SHARE = 0.8
+#: The chair must speak within this many seconds of the line that addresses it.
+MAX_ADDRESS_GAP_S = 10.0
+#: How many caption lines ahead to look for the next voice.
+_ADDRESS_LOOKAHEAD = 5
+_MAYOR = re.compile(r"\bmayor\b", re.IGNORECASE)
+#: "Mayor Pro Tem", and the captioner's "Mayor Prom", "Mayor Promcoy", "Mayor Port".
+_MAYOR_PRO_TEM = re.compile(
+    r"\bmayor\s*(?:pro\b|pro[\s\-]*(?:tem|team|tim)|prom|port)", re.IGNORECASE
+)
+_INTRODUCTION = re.compile(
+    r"\bmy name is\s+(?:(?:uh|um),?\s+)*(?P<name>[A-Za-z][\w'\-]*(?:\s+[A-Za-z][\w'\-]*){0,2})",
+    re.IGNORECASE,
+)
+_NAME_STOP = frozenset({"and", "i", "i'm", "im", "from", "with", "at", "the", "uh", "um", "good"})
+
+
+def _addresses(text: str) -> tuple[int, int]:
+    """(mayor, pro tem) addresses in one line. A line that says both counts as pro tem."""
+    if _MAYOR_PRO_TEM.search(text):
+        return 0, 1
+    return (1, 0) if _MAYOR.search(text) else (0, 0)
+
+
+def chair_name(segments: list[Segment], chair: str | None, roster: Roster | None) -> dict[str, Any]:
+    """Whether the chair's voice is the roster's mayor, with the count behind the decision.
+
+    The chair is whoever runs the meeting; that is the mayor unless the mayor is away and the
+    pro tem chairs. So the chair's voice is named the mayor only when the room answers to it as
+    "Mayor": another voice says "Mayor" and the chair's voice is the next one heard, at least
+    MIN_MAYOR_ADDRESSES times, and at least MIN_MAYOR_SHARE of those addresses are not to a pro
+    tem. On five Longmont meetings (Sep 22 to Nov 3, 2026) the chair answered to "Mayor" 5 to 19
+    times and the chair's voice also recognized "Mayor Pro Tem McCoy", so it was not the pro tem.
+    """
+    result: dict[str, Any] = {
+        "voice": chair,
+        "name": None,
+        "mayor_addresses": 0,
+        "pro_tem_addresses": 0,
+        "min_addresses": MIN_MAYOR_ADDRESSES,
+        "min_share": MIN_MAYOR_SHARE,
+    }
+    mayors = [m for m in roster.members if m.role.casefold() == "mayor"] if roster else []
+    if chair is None:
+        result["status"] = "no chair voice"
+        return result
+    if len(mayors) != 1:
+        result["status"] = "the roster does not list exactly one mayor"
+        return result
+    for position, segment in enumerate(segments):
+        if segment.voice in (None, chair):
+            continue
+        mayor, pro_tem = _addresses(segment.text)
+        if not mayor and not pro_tem:
+            continue
+        following = segments[position + 1 : position + 1 + _ADDRESS_LOOKAHEAD]
+        nxt = next((x for x in following if x.voice and x.voice != segment.voice), None)
+        if nxt is None or nxt.voice != chair or nxt.start - segment.end > MAX_ADDRESS_GAP_S:
+            continue
+        result["mayor_addresses"] += mayor
+        result["pro_tem_addresses"] += pro_tem
+    total = result["mayor_addresses"] + result["pro_tem_addresses"]
+    if result["mayor_addresses"] < MIN_MAYOR_ADDRESSES:
+        result["status"] = "too few lines address the chair as Mayor"
+    elif result["mayor_addresses"] / total < MIN_MAYOR_SHARE:
+        result["status"] = "the chair is also addressed as Mayor Pro Tem"
+    else:
+        result["name"] = mayors[0].name
+        result["status"] = "named: the chair answers to Mayor"
+    return result
+
+
+def introductions(segments: list[Segment]) -> list[dict[str, Any]]:
+    """Self-introductions ("My name is ..."), listed for the editor. They never name anyone.
+
+    The sound match is built for names said to council members. A visitor's own name can sound
+    like a member's: on the Longmont meetings "Joan Peek" (a resident) matched Matthew Popkin at
+    0.85 and "Morgan Lundy" (city staff) matched Jake Marsing at 0.96. Names of people not on the
+    roster are spelled by the captioner ("Espanzoriz", "Jack Bestl") and cannot be checked here.
+    """
+    found: list[dict[str, Any]] = []
+    for position, segment in enumerate(segments):
+        nxt = segments[position + 1].text if position + 1 < len(segments) else ""
+        match = _INTRODUCTION.search(f"{segment.text} {nxt}")
+        if match is None or match.start() >= len(segment.text):
+            continue
+        words: list[str] = []
+        for word in match.group("name").split():
+            if word.casefold().strip("'.,") in _NAME_STOP:
+                break
+            words.append(word.strip(".,"))
+        if not words:
+            continue
+        found.append(
+            {
+                "start": hms(segment.start),
+                "voice": segment.voice,
+                "spoken": " ".join(words),
+                "status": "not named: a self-introduction is not checked against a roster",
+            }
+        )
+    return found
+
+
 def label_voices(
-    segments: list[Segment], turns: list[Turn], recognitions: list[dict[str, Any]]
+    segments: list[Segment],
+    turns: list[Turn],
+    recognitions: list[dict[str, Any]],
+    roster: Roster | None = None,
 ) -> dict[str, Any]:
     """Name caption lines by voice, after diarization. Writes each line's speaker.
 
@@ -525,6 +636,10 @@ def label_voices(
                 "status": "named" if agree else "named turns too few or disagree",
             }
         )
+    chair_found = chair_name(segments, chair, roster)
+    if chair_found["name"] is not None and chair_found["name"] in named.values():
+        chair_found["name"] = None
+        chair_found["status"] = "another voice already has the mayor's name"
     voice_lines: dict[str, int] = {}
     home_lines: dict[tuple[str, str], int] = {}
     for turn in turns:
@@ -552,8 +667,10 @@ def label_voices(
         for position in range(turn.first, turn.last + 1):
             segment = segments[position]
             voice = segment.voice
+            segment.basis = None
             if voice is not None and voice == chair:
-                label = None
+                label = chair_found["name"]
+                segment.basis = "chair" if label else None
             elif voice in named:
                 label = named[voice]
                 if label != turn.speaker:
@@ -566,6 +683,8 @@ def label_voices(
     return {
         "method": "voice",
         "chair_voice": chair,
+        "chair": chair_found,
+        "introductions": introductions(segments),
         "min_turns": MIN_VOICE_TURNS,
         "min_share": MIN_VOICE_SHARE,
         "voices": voices,

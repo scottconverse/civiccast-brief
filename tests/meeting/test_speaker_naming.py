@@ -119,3 +119,74 @@ def test_report_counts_lines_not_turns_and_the_key_says_how_each_name_was_found(
     key = speaker_key(segments, turns, windows(segments)[0], ROSTER)
     assert "Diane Crist, ward 1 representative (the chair gave them the floor)" in key
     assert "Diane Crist, ward 1 representative (the same voice as their other named turns)" in key
+
+
+def _chaired(address: str):
+    """A chair (voice 01) hands the floor five times. Each member thanks the chair with
+    ``address`` ("Mayor" or "Mayor Pro Tem"), and the chair answers in the next turn."""
+    members = [
+        ("Crist", "voice 05"),
+        ("Popkin", "voice 06"),
+        ("Marsing", "voice 03"),
+        ("Kalkhofer", "voice 07"),
+        ("Prieto", "voice 08"),
+    ]
+    rows = []
+    for name, voice in members:
+        rows.append((f"Council member {name}.", True, "voice 01"))
+        rows.append((f"Thank you, {address}. I move approval.", True, voice))
+        rows.append(("Thank you. Is there a second?", True, "voice 01"))
+    return lines(*rows)
+
+
+def _label(segments):
+    turns = S.split_turns(segments)
+    S.label_roll_call(turns, ROSTER)
+    found = S.label_recognitions(segments, turns, ROSTER)["recognitions"]
+    S.apply_turns(segments, turns)
+    return turns, S.label_voices(segments, turns, found, ROSTER)
+
+
+def test_the_chair_voice_is_the_mayor_when_members_answer_to_the_mayor():
+    segments = _chaired("Mayor")
+    turns, report = _label(segments)
+    chair_lines = [s for s in segments if s.voice == "voice 01"]
+    assert {s.speaker for s in chair_lines} == {"Susie Hidalgo-Fahring"}
+    assert report["chair"]["name"] == "Susie Hidalgo-Fahring"
+    assert report["chair"]["mayor_addresses"] == 5
+    # The members keep their own names.
+    assert segments[1].speaker == "Diane Crist"
+    key = speaker_key(segments, turns, windows(segments)[0], ROSTER)
+    assert "Susie Hidalgo-Fahring, mayor (the chair; members address the chair as Mayor)" in key
+
+
+def test_the_chair_stays_unknown_when_members_address_a_pro_tem():
+    segments = _chaired("Mayor Pro Tem")
+    _turns, report = _label(segments)
+    assert {s.speaker for s in segments if s.voice == "voice 01"} == {"unknown"}
+    assert report["chair"]["name"] is None
+    assert report["chair"]["pro_tem_addresses"] == 5
+
+
+def test_the_chair_stays_unknown_when_too_few_lines_address_the_mayor():
+    segments = _chaired("Mayor")
+    for position in (4, 7, 10, 13):  # leave one "Thank you, Mayor."
+        segments[position].text = "I move approval."
+    _turns, report = _label(segments)
+    assert {s.speaker for s in segments if s.voice == "voice 01"} == {"unknown"}
+    assert report["chair"]["mayor_addresses"] == 1
+    assert report["chair"]["name"] is None
+
+
+def test_a_self_introduction_is_listed_but_never_names_anyone():
+    # The sound match is built for names said to members. A visitor's own name can sound
+    # like a member's: "Morgan Lundy" (city staff) scores 0.96 against Jake Marsing.
+    segments = _chaired("Mayor") + lines(
+        ("Good evening. My name is Morgan Lundy. I work for the city.", True, "voice 12")
+    )
+    segments[-1].start, segments[-1].end = 100.0, 101.0
+    _turns, report = _label(segments)
+    assert segments[-1].speaker == "unknown"
+    [intro] = report["introductions"]
+    assert intro["voice"] == "voice 12" and intro["spoken"] == "Morgan Lundy"
+    assert intro["status"].startswith("not named")
