@@ -15,10 +15,11 @@ from civiccast_brief.review.store import ReviewError
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m civiccast_brief.episode")
     commands = parser.add_subparsers(dest="command", required=True)
-    s = commands.add_parser("stage", help="add a meeting run as a draft review item")
+    s = commands.add_parser("stage", help="put a meeting run on the editor desk")
     s.add_argument("--db", type=Path, required=True, help="review database")
     s.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
     s.add_argument("--script", type=Path, required=True, help="checked script.json")
+    s.add_argument("--city", type=Path, help="city folder (desk.json auto-publish)")
     a = commands.add_parser("assemble", help="write one site episode JSON from an approved item")
     a.add_argument("--item", type=Path, required=True, help="exported item folder")
     a.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
@@ -36,7 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "stage":
-            print(f"staged item {stage(args.db, args.meeting, args.script)} as a draft")
+            print(f"staged item {stage(args.db, args.meeting, args.script, args.city)}")
             return 0
         episode = assemble(
             item_dir=args.item,

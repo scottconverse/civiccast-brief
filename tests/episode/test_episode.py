@@ -321,3 +321,71 @@ def test_assemble_refuses_an_article_edited_on_the_desk_to_add_a_number(
             published="2026-10-21T09:00:00-06:00",
             article_dir=article_dir,
         )
+
+
+def _passing_script(meeting_dir):
+    """A script that passes the deterministic check, with the recap claims it needs."""
+    from civiccast_brief.script.writer import DISCLAIMER
+
+    recap = json.loads((meeting_dir / "recap.json").read_text(encoding="utf-8"))
+    recap["claims"].append(
+        {
+            "id": "c02",
+            "topic": "Live stream",
+            "text": "The meeting video is on the city's YouTube channel.",
+            "timestamp": "0:00:05",
+            "quote": "Call to order.",
+        }
+    )
+    (meeting_dir / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
+    lines = [
+        {"speaker": "S1", "text": "CivicCast Brief, Longmont, October twentieth.", "claim_ids": []},
+        {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
+        {"speaker": "CHAPTER", "text": "Consent agenda", "claim_ids": ["c01"]},
+        {"speaker": "S1", "text": "The consent agenda passed.", "claim_ids": ["c01"]},
+        {
+            "speaker": "S2",
+            "text": "Watch the meeting video on the city's YouTube channel.",
+            "claim_ids": ["c02"],
+        },
+    ]
+    path = meeting_dir / "passing-script.json"
+    path.write_text(json.dumps(lines), encoding="utf-8")
+    return path
+
+
+def _city(tmp_path):
+    city = tmp_path / "city"
+    city.mkdir()
+    (city / "desk.json").write_text(
+        json.dumps({"format": 1, "auto_publish": {"City Council": True}}), encoding="utf-8"
+    )
+    return city
+
+
+def test_stage_checks_the_script_and_auto_publishes_for_the_city(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    script = _passing_script(meeting_dir)
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, script, _city(tmp_path))
+    with ReviewStore(db) as store:
+        item = store.get_item(item_id)
+    assert item.checks_passed is True
+    assert item.status == "published"
+    assert item.body == "City Council"
+
+
+def test_stage_without_a_city_waits_and_a_failing_script_is_never_auto_published(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    script = _passing_script(meeting_dir)
+    db = tmp_path / "review.db"
+    plain = B.stage(db, meeting_dir, script)
+    with ReviewStore(db) as store:
+        assert store.get_item(plain).status == "review"
+    # The fixture's own script has no disclaimer and no outro, so it fails the check.
+    db2 = tmp_path / "review2.db"
+    failing = B.stage(db2, meeting_dir, meeting_dir / "script.json", _city(tmp_path))
+    with ReviewStore(db2) as store:
+        item = store.get_item(failing)
+    assert item.checks_passed is False
+    assert item.status == "review"

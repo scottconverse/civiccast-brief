@@ -16,11 +16,18 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from civiccast_brief import models
 from civiccast_brief.script import llm
 from civiccast_brief.script.checker import check_script, drop_unsupported, model_check
 from civiccast_brief.script.recap import load_recap, save_recap
 from civiccast_brief.script.roundup import RoundupError, combine
-from civiccast_brief.script.writer import ScriptFormatError, load_script, save_script, write_script
+from civiccast_brief.script.writer import (
+    ROUNDUP_ID,
+    ScriptFormatError,
+    load_script,
+    save_script,
+    write_script,
+)
 
 
 def _model_call(model: str) -> Callable[[str], str]:
@@ -32,12 +39,37 @@ def _model_call(model: str) -> Callable[[str], str]:
     return complete
 
 
+def _picked_call(city: Path, task: str, body: str) -> Callable[[str], str]:
+    inner = models.complete_for(city, task, body)
+
+    def complete(prompt: str) -> str:
+        text, receipt = inner(prompt)
+        print(receipt.line(), file=sys.stderr)
+        return text
+
+    return complete
+
+
+def _writer(args: argparse.Namespace, recap) -> Callable[[str], str]:
+    """``--model`` is an Ollama model; without it a ``--city`` write takes the city's pick
+    (task "script", or "roundup" for a weekly roundup) for the recap's body."""
+    if args.model or not args.city:
+        return _model_call(args.model or llm.DEFAULT_MODEL)
+    task = "roundup" if recap.video_id == ROUNDUP_ID else "script"
+    return _picked_call(args.city, task, recap.body)
+
+
 def _write(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     feedback = args.feedback.read_text(encoding="utf-8") if args.feedback else ""
     try:
-        lines = write_script(recap, _model_call(args.model), feedback=feedback)
-    except (llm.ModelError, ScriptFormatError) as exc:
+        lines = write_script(recap, _writer(args, recap), feedback=feedback)
+    except (
+        llm.ModelError,
+        models.ModelCallError,
+        models.ModelSettingsError,
+        ScriptFormatError,
+    ) as exc:
         print(f"write failed: {exc}", file=sys.stderr)
         return 1
     json_path = args.out.with_suffix(".json")
@@ -96,7 +128,11 @@ def main(argv: list[str] | None = None) -> int:
     write.add_argument("--recap", type=Path, required=True)
     write.add_argument("--out", type=Path, required=True, help="the spoken script (.txt)")
     write.add_argument("--feedback", type=Path, help="checker problems to fix on a rerun")
-    write.add_argument("--model", default=llm.DEFAULT_MODEL)
+    write.add_argument(
+        "--model",
+        help=f"an Ollama model (default: the --city pick in models.json, or {llm.DEFAULT_MODEL})",
+    )
+    write.add_argument("--city", type=Path, help="city folder (models.json)")
     write.set_defaults(run=_write)
 
     check = commands.add_parser("check", help="check a script (script.json) against a recap")

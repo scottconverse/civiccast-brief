@@ -110,6 +110,9 @@ def capture_captions(
     """
     if not video_id.replace("-", "").replace("_", "").isalnum():
         raise CaptureError(f"not a YouTube video id: {video_id!r}")
+    # yt-dlp joins a relative output name onto --paths, so a relative folder would get the
+    # files one level too deep (raw/runs/x/raw/...). An absolute folder avoids that.
+    work_dir = Path(work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
     caption = _caption_file(work_dir, video_id)

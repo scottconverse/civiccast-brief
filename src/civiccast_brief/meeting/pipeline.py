@@ -44,6 +44,7 @@ from civiccast_brief.meeting.speakers import (
     split_turns,
 )
 from civiccast_brief.meeting.verify import TranscriptIndex, verify
+from civiccast_brief.models import ModelCallError
 from civiccast_brief.script import llm
 from civiccast_brief.script.recap import (
     DEFAULT_VIDEO_PLACE,
@@ -78,9 +79,14 @@ def run(
     granicus_host: str | None = None,
     granicus_view_id: int | None = None,
     complete: Complete | None = None,
+    judge_complete: Complete | None = None,
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
-    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id."""
+    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id.
+
+    ``complete`` writes the recap drafts and ``judge_complete`` judges the claims; each falls
+    back to the Ollama ``model``. ``models.complete_for`` makes them from the city's picks.
+    """
     if roster_path is None:
         raise PipelineError("a run needs the city's roster file (--roster, or --city)")
     out = Path(out_dir)
@@ -219,7 +225,7 @@ def run(
         claims,
         verify_report,
         out=out,
-        complete=complete or (lambda prompt: llm.chat(prompt, model=model)),
+        complete=judge_complete or complete or (lambda prompt: llm.chat(prompt, model=model)),
         log=lambda line: log(f"[{video_id}] {line}"),
     )
     recap = Recap(
@@ -386,7 +392,7 @@ def _drafts(
         )
         try:
             draft: WindowDraft = draft_window(call, prompt, window.index)
-        except (llm.ModelError, OSError) as exc:
+        except (llm.ModelError, ModelCallError, OSError) as exc:
             draft = WindowDraft(window.index, [], "", "", f"model call failed: {exc}")
         (answers / f"window-{window.index:02d}.txt").write_text(draft.answer, encoding="utf-8")
         results.append(
