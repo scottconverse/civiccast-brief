@@ -1,53 +1,71 @@
 {% extends "base.html" %}
+{% import "_parts.html" as parts %}
 {% block content %}
-<div class="home-layout">
-  <section class="home__main" aria-labelledby="home-title">
-    <h1 id="home-title" class="section-title">Latest episodes</h1>
-    {% if latest %}
-    <article class="lead card" aria-labelledby="lead-title">
-      <p class="kicker">{{ latest.board }}</p>
-      <h2 id="lead-title" class="lead__title"><a href="{{ latest.href }}">{{ latest.headline }}</a></h2>
-      {% if latest.dek %}<p class="lead__dek">{{ latest.dek }}</p>{% endif %}
-      <p class="meta">
-        <span>Meeting {{ latest.meeting_date }}</span>
-        <span class="dot" aria-hidden="true">·</span>
-        <span>Published {{ latest.published_date }}</span>
-        <span class="dot" aria-hidden="true">·</span>
-        <span class="listen-chip">{{ latest.length }} listen</span>
-        {% if latest.sample %}<span class="sample-chip">Sample</span>{% endif %}
-      </p>
-      <p><a class="button" href="{{ latest.href }}">Read the recap and listen</a></p>
-    </article>
-    {% else %}
-    <p>No episodes have been published yet.</p>
-    {% endif %}
-
-    {% if others %}
-    <h2 class="section-sub">Earlier episodes</h2>
-    <ul class="story-list">
-      {% for card in others %}
-      <li class="story card">
-        <p class="kicker">{{ card.board }}</p>
-        <h3 class="story__title"><a href="{{ card.href }}">{{ card.headline }}</a></h3>
-        {% if card.dek %}<p class="story__dek">{{ card.dek }}</p>{% endif %}
-        <p class="meta"><span>Meeting {{ card.meeting_date }}</span> <span class="dot" aria-hidden="true">·</span> <span class="listen-chip">{{ card.length }} listen</span>{% if card.sample %} <span class="sample-chip">Sample</span>{% endif %}</p>
-      </li>
+<h1 class="visually-hidden">{{ city.site_title }}: {{ city.name }} public meetings</h1>
+{% if chips %}
+<nav class="chips" aria-label="Topics">
+  <a class="chip on" href="{{ href('/') }}" aria-current="page">All</a>
+  {% for chip in chips %}
+  <a class="chip" href="{{ chip.href }}">{{ chip.short }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+{% if lead %}
+<div class="front">
+  <article class="lead" aria-labelledby="lead-title">
+    {% if lead.sample %}<p class="notice" role="note"><strong>SAMPLE.</strong> Test render, not a published story.</p>{% endif %}
+    <p class="kicker">{{ lead.board }} · {{ lead.short_date }}</p>
+    <h2 id="lead-title" class="lead-title"><a href="{{ lead.href }}">{{ lead.headline }}</a></h2>
+    {% if lead.dek %}<p class="dek">{{ lead.dek }}</p>{% endif %}
+    <p class="meta">
+      <time datetime="{{ lead.iso_date }}">{{ lead.meeting_date }}</time>
+      {% if lead.vote %}<span class="vote {{ lead.vote.kind }}">{{ lead.vote.short }}</span>{% endif %}
+      <a class="listen" href="{{ lead.href }}#listen">Listen · {{ lead.length }}</a>
+    </p>
+  </article>
+  {% if also %}
+  <aside class="week" aria-labelledby="also-title">
+    <h2 id="also-title">Also recently</h2>
+    <ol>
+      {% for card in also %}
+      <li><span>{{ card.board }} · {{ card.short_date }}</span> <a href="{{ card.href }}">{{ card.headline }}</a></li>
       {% endfor %}
-    </ul>
-    {% endif %}
-  </section>
-
-  <aside class="home__aside" aria-label="About the podcast">
-    <section class="card card--cream" aria-labelledby="podcast-title">
-      <h2 id="podcast-title">Podcast</h2>
-      <p>{{ city.podcast.name }} is a podcast of short, conversational recaps of {{ city.name }} meetings.</p>
-      <p><a href="{{ feed_href }}">Subscribe with the podcast feed (RSS)</a></p>
-    </section>
-    <section class="card" aria-labelledby="ai-title">
-      <h2 id="ai-title">AI-generated</h2>
-      <p>{{ city.disclaimer }}</p>
-      <p><a href="{{ href('/how-this-is-made/') }}">How this is made</a></p>
-    </section>
+    </ol>
   </aside>
+  {% endif %}
 </div>
+
+<section class="docket" aria-labelledby="docket-title">
+  <div class="docket-head">
+    <h2 id="docket-title">Every meeting</h2>
+    <a href="{{ archive_href }}">Archive by month</a>
+  </div>
+  {{ parts.months_list(months, 3) }}
+</section>
+{% else %}
+<p class="empty">No meetings have been published yet.</p>
+{% endif %}
+
+<section class="bands" aria-label="Ways to follow">
+  <div class="band">
+    <p class="eyebrow">Podcast</p>
+    <h2>Hear it in five minutes</h2>
+    <p>Two AI hosts read each story.</p>
+    <p class="btns">{{ parts.button_links(podcast_links) }}<a class="btn" href="{{ podcast_href }}">About the podcast</a></p>
+  </div>
+  {% if signup_url %}
+  <div class="band">
+    <p class="eyebrow">By email</p>
+    <h2>One email per meeting</h2>
+    <p>No other mail. Unsubscribe in one click.</p>
+    <p class="btns"><a class="btn solid" href="#signup-email">Sign up</a></p>
+  </div>
+  {% endif %}
+  <div class="band">
+    <p class="eyebrow">Free to republish</p>
+    <h2>Use our stories</h2>
+    <p>Local outlets may reprint with credit and a link.</p>
+    <p class="btns"><a class="btn" href="{{ href('/about/') }}#republish">Republishing terms</a></p>
+  </div>
+</section>
 {% endblock %}

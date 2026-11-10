@@ -13,18 +13,22 @@
 
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
 
-  Masthead, cards and palette: Craft kit styles (see site/__init__.py NOTICE).
+  Header, front page and story layout: CivicCast Brief design (logo A), 2026.
 #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action {% if form_action %}{{ form_action }}{% else %}'none'{% endif %}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' {{ analytics.script_origin }}; style-src 'self'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self' {{ analytics.connect_origin }}; object-src 'none'; base-uri 'none'; form-action 'self'{% if form_action %} {{ form_action }}{% endif %}">
 <meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light dark">
 <title>{{ page.title }}</title>
 <meta name="description" content="{{ page.description }}">
 <link rel="canonical" href="{{ page.canonical }}">
+<link rel="icon" href="{{ favicon_svg }}" type="image/svg+xml">
+<link rel="icon" href="{{ favicon_png }}" type="image/png" sizes="180x180">
+<link rel="apple-touch-icon" href="{{ favicon_png }}">
 <meta property="og:site_name" content="{{ city.site_title }}">
 <meta property="og:type" content="{{ page.og_type }}">
 <meta property="og:title" content="{{ page.title }}">
@@ -45,53 +49,54 @@
 {{ block|safe }}
 {% endfor %}
 </head>
-<body class="{{ page.nav }}">
+<body class="page-{{ page.nav or 'other' }}">
 <a class="skip-link" href="#main">Skip to content</a>
-<header class="mh">
-  <div class="mh__gold" aria-hidden="true"></div>
-  <div class="shell">
-    <div class="mh__line">
-      <a class="mh__brand" href="{{ href('/') }}">CivicCast Brief</a>
-      <nav class="mh__nav" aria-label="Site">
-        <a href="{{ href('/search/') }}"{% if page.nav == 'search' %} aria-current="page"{% endif %}>Search</a>
-        <a href="{{ href('/corrections/') }}"{% if page.nav == 'corrections' %} aria-current="page"{% endif %}>Corrections</a>
-        <a href="{{ href('/how-this-is-made/') }}"{% if page.nav == 'how' %} aria-current="page"{% endif %}>How this is made</a>
-        <a href="{{ href('/about/') }}"{% if page.nav == 'about' %} aria-current="page"{% endif %}>About</a>
-        <a href="{{ feed_href }}">Podcast feed</a>
-      </nav>
-    </div>
-    <p class="mh__name"><a href="{{ href('/') }}">{{ city.name }}</a></p>
-    <p class="mh__tag">{{ city.tagline }}</p>
-  </div>
+<div class="wrap">
+<header class="s-head">
+  <a class="s-brand" href="{{ href('/') }}">
+    {% include "_logo.html" %}
+    <span class="wordmark">CivicCast <b>Brief</b><small>{{ city.name }}</small></span>
+  </a>
+  <nav class="s-nav" aria-label="Site">
+    <a href="{{ href('/') }}"{% if page.nav in ('meetings', 'episode', 'archive') %} aria-current="page"{% endif %}>Meetings</a>
+    <a href="{{ href('/boards/') }}"{% if page.nav == 'boards' %} aria-current="page"{% endif %}>Boards</a>
+    <a href="{{ href('/topics/') }}"{% if page.nav == 'topics' %} aria-current="page"{% endif %}>Topics</a>
+    <a href="{{ href('/podcast/') }}"{% if page.nav == 'podcast' %} aria-current="page"{% endif %}>Podcast</a>
+    <a href="{{ href('/about/') }}"{% if page.nav in ('about', 'how') %} aria-current="page"{% endif %}>About</a>
+  </nav>
+  <form class="search" role="search" action="{{ href('/search/') }}" method="get">
+    <label class="visually-hidden" for="site-q">Search meetings</label>
+    <input id="site-q" name="q" type="search" placeholder="Search meetings" autocomplete="off">
+  </form>
 </header>
-<main id="main" class="shell page" tabindex="-1">
+<main id="main" class="page" tabindex="-1">
 {% block content %}{% endblock %}
 </main>
-<footer class="foot">
-  <div class="shell">
-{% if city.signup_url %}
-    <form class="signup" action="{{ city.signup_url }}" method="post">
-      <h2 class="signup__title">Get new episodes by email</h2>
-      <p class="signup__help">We email you once to confirm. After that, one email per new episode. Every email has an unsubscribe link.</p>
-      <input type="hidden" name="city" value="{{ city.slug }}">
-      <div class="signup__trap" aria-hidden="true">
-        <label for="signup-website">Leave this empty</label>
-        <input id="signup-website" type="text" name="website" tabindex="-1" autocomplete="off">
-      </div>
-      <label for="signup-email" class="signup__label">Email address</label>
-      <div class="signup__row">
-        <input id="signup-email" type="email" name="email" autocomplete="email" maxlength="254" required>
-        <button type="submit" class="btn-solid">Sign up</button>
-      </div>
-    </form>
+<footer class="s-foot">
+{% if signup_url %}
+  <form class="signup" action="{{ signup_url }}" method="post">
+    <h2 class="signup-title">Get new meetings by email</h2>
+    <p>We email you once to confirm. After that, one email per new meeting. Every email has an unsubscribe link.</p>
+    <input type="hidden" name="city" value="{{ city.slug }}">
+    <div class="trap" aria-hidden="true">
+      <label for="signup-website">Leave this empty</label>
+      <input id="signup-website" type="text" name="website" tabindex="-1" autocomplete="off">
+    </div>
+    <label for="signup-email">Email address</label>
+    <div class="signup-row">
+      <input id="signup-email" type="email" name="email" autocomplete="email" maxlength="254" required>
+      <button type="submit" class="btn solid">Sign up</button>
+    </div>
+  </form>
 {% endif %}
-    <p class="foot__note">{{ city.disclaimer }}</p>
-    <p>{{ city.site_title }} is published by {{ city.publisher }}. It is independent and is not run by or affiliated with the City of {{ city.name }}. This site uses no analytics or tracking.</p>
-    <p class="foot__links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/corrections/') }}">Corrections</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a></p>
-  </div>
+  <p>{{ city.disclaimer }}</p>
+  <p>{{ city.site_title }} is published by {{ city.publisher }}. It is independent and is not run by or affiliated with the City of {{ city.name }}. This site uses Cloudflare Web Analytics, which counts visits without cookies. <a href="{{ href('/about/') }}#privacy">Privacy</a>.</p>
+  <p class="foot-links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/archive/') }}">Archive</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a></p>
 </footer>
+</div>
 {% for script in scripts %}
 <script src="{{ href(script) }}" defer></script>
 {% endfor %}
+<script defer src="{{ analytics.script }}" data-cf-beacon='{"token": "{{ analytics.token }}"}'></script>
 </body>
 </html>

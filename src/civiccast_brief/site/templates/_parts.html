@@ -1,0 +1,28 @@
+{# Small shared pieces. Import with: {% import "_parts.html" as parts %} #}
+{% macro cite(c) %}{% if c.link %}<a class="cite" href="{{ c.link }}" target="_blank" rel="noopener">{{ c.timestamp }}<span class="visually-hidden"> (opens the meeting video at this moment in a new tab)</span></a>{% else %}<span class="cite">{{ c.timestamp }}</span>{% endif %}{% endmacro %}
+
+{% macro row(r, level=3) %}
+<article class="row">
+  <time datetime="{{ r.iso_date }}">{{ r.day }}</time>
+  <div>
+    <h{{ level }} class="row-title"><a href="{{ r.href }}">{{ r.headline }}</a></h{{ level }}>
+    <p>{{ r.board }}{% if r.dek %} · {{ r.dek }}{% endif %}</p>
+  </div>
+  <span class="dur"><span class="visually-hidden">Listen time </span>{{ r.length }}</span>
+</article>
+{% endmacro %}
+
+{% macro months_list(months, level=2) %}
+{% for month in months %}
+<h{{ level }} class="month"><a href="{{ month.href }}">{{ month.name }}</a></h{{ level }}>
+{% for r in month.rows %}
+{{ row(r, level + 1) }}
+{% endfor %}
+{% endfor %}
+{% endmacro %}
+
+{% macro button_links(links) %}
+{% for link in links %}
+<a class="btn{% if link.solid %} solid{% endif %}" href="{{ link.href }}"{% if link.external %} target="_blank" rel="noopener"{% endif %}>{{ link.label }}{% if link.external %}<span class="visually-hidden"> (opens in a new tab)</span>{% endif %}</a>
+{% endfor %}
+{% endmacro %}

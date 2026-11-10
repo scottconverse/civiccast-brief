@@ -1,12 +1,12 @@
-/* Print styles. Adapted from CivicNewspaper templates/print.css (MIT, Copyright (c) 2026 Scott Converse). */
+/* Print styles: the story and its cites, without the header controls, player or footer forms. */
 @media print {
   body { background: #ffffff; color: #000000; font-size: 12pt; }
-  .skip-link, .mh__nav, .mh__gold, .aside, .home__aside, .foot, .player, .cite::after, .search-form { display: none !important; }
-  .mh { border-bottom: 2px solid #000000; }
-  .layout, .home { display: block; }
-  .shell { max-width: 100%; padding: 0; }
+  .skip-link, .s-nav, .search, .chips, .side, .bands, .signup, .player, .search-form, .listen { display: none !important; }
+  .s-head { border-bottom: 2px solid #000000; }
+  .front, .article { display: block; }
+  .wrap { max-width: 100%; padding: 0; }
   h1, h2, h3 { page-break-after: avoid; }
-  .claim { page-break-inside: avoid; }
+  .claim, .row { page-break-inside: avoid; }
   a { color: #000000; text-decoration: none; }
   .cite { border: 0; padding: 0; background: none; color: #000000; }
 }

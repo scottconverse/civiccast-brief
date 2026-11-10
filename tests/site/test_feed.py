@@ -95,7 +95,7 @@ def test_items_have_enclosure_length_duration_guid_date_and_text(
     assert len(items) == 2
     # Newest first: the Oct 20 meeting was published after the Oct 6 sample.
     first, second = items
-    assert first.findtext("title") == "Council approves a test annexation and two ordinances"
+    assert first.findtext("title") == "Example City approves an annexation on a 6-1 vote"
     assert second.findtext("title") == "SAMPLE: Planning commission reviews a test zoning map"
 
     enclosure = first.find("enclosure")

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% import "_parts.html" as parts %}
+{% block content %}
+<section class="listing" aria-labelledby="list-title">
+  <p class="kicker">{{ kicker }}</p>
+  <h1 id="list-title">{{ heading }}</h1>
+  <p class="dek">{{ intro }}</p>
+  {{ parts.months_list(months, 2) }}
+</section>
+{% endblock %}

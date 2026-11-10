@@ -26,7 +26,7 @@ def test_sitemap_lists_every_page_and_nothing_else(built: tuple[Path, object]) -
     root = ET.parse(out / "sitemap.xml").getroot()
     listed = {loc.text for loc in root.findall("sm:url/sm:loc", SITEMAP_NS)}
     assert listed == _html_pages(out)
-    assert len(listed) == 8
+    assert len(listed) == 18
 
 
 def test_sitemap_entries_are_all_absolute_urls(built: tuple[Path, object]) -> None:
@@ -61,7 +61,7 @@ def test_json_ld_parses_and_has_the_expected_types(built: tuple[Path, object]) -
     types = [block["@type"] for block in episode]
     assert types == ["NewsArticle", "PodcastEpisode"]
     news = episode[0]
-    assert news["headline"] == "Council approves a test annexation and two ordinances"
+    assert news["headline"] == "Example City approves an annexation on a 6-1 vote"
     assert news["datePublished"] == "2026-10-21T09:00:00-06:00"
     assert news["url"] == f"{BASE_URL}/episodes/2026-10-20-example-council/"
     podcast = episode[1]

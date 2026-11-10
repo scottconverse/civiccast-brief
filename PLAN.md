@@ -24,7 +24,7 @@ Repo: github.com/scottconverse/civiccast-brief. License: Apache-2.0.
 - Written recap to a wire-service standard: attributed claims, votes, public comment, every sentence cited to a timestamp or page.
 - Two-host conversational podcast episode with an on-air disclaimer, chapters and a transcript.
 - Producer review screen: fix speakers, edit, approve or reject.
-- Static city site: front page, board pages, article pages with audio player, transcript pages linked to the source video, search, corrections page, "how this is made" page, sitemap, structured data, share images.
+- Static city site: front page, board pages, article pages with audio player, transcript pages linked to the source video, search, "how this is made" page, sitemap, structured data, share images. (Corrections page removed 2026-11-08, Scott.)
 - Podcast feed with full tags; one-time submission to Apple and Spotify.
 - Email sign-up with double opt-in; new-article emails.
 - Weekly roundup episodes.
@@ -79,7 +79,7 @@ or use a smaller writer model. Decide in Phase 2.
 | Voice adapter + free open-source engines | — | new |
 | Loudness, MP3, chapters, VTT | civiccast-native `podcast/service.py`; Describer-Workbench mixer | exists, port |
 | Producer screen | TownReporter desk as the model | new, small |
-| Site templates, corrections page, RSS, manifest | CivicNewspaper `compiler.rs` + `templates/` | exists, port to Jinja |
+| Site templates, RSS, manifest (corrections page later removed) | CivicNewspaper `compiler.rs` + `templates/` | exists, port to Jinja |
 | Audio player with speed and resume; page look | Craft kit `src/client/meeting.js`, styles | exists, take |
 | Sitemap, JSON-LD, transcript pages, search | — | new, small |
 | Podcast feed tags | civiccast-native `podcast/rss.py` + Craft `feeds.mjs` | extend |
@@ -126,7 +126,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 
 ### Phase 6 — Static site and feed (L)
 - Port CivicNewspaper templates to Jinja; add Craft's player and page look.
-- Add sitemap, JSON-LD (NewsArticle, PodcastEpisode, PodcastSeries), share images, transcript pages linked to video timestamps, search, corrections, "how this is made".
+- Add sitemap, JSON-LD (NewsArticle, PodcastEpisode, PodcastSeries), share images, transcript pages linked to video timestamps, search, "how this is made". (Corrections removed 2026-11-08.)
 - Full podcast feed tags: duration, art, chapters, transcript, article text.
 - Done when: a site built from 30 days of Longmont passes a link-by-link click-through and the feed validates in a feed validator.
 

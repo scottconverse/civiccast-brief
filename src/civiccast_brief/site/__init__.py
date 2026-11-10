@@ -10,11 +10,11 @@ NOTICE: where each part came from. Licences were checked before any copying.
   notice are reproduced in the comment at the top of templates/base.html, as the licence requires
   for substantial portions. The CivicNewspaper header (nav, masthead, CSP meta) is adapted; the CSP
   is changed to allow the two scripts this site ships.
-- static/site.css: palette tokens, masthead, card, player and page styles taken from the Craft
-  kit's app/src/styles/base.css, article.css and front.css (Scott Converse's project). That tree has
-  no LICENSE file or license field, so the values were re-typed for this site, not copied as a file.
-  Confirm the licence with Scott before any reuse outside this project. print.css is adapted from
-  CivicNewspaper's print.css.
+- static/site.css: new code for the 2026-11-08 look (colour tokens, layout and player styles from
+  the CivicCast Brief mockup). print.css is adapted from CivicNewspaper's print.css.
+- static/fonts/: Bricolage Grotesque, Public Sans, Source Serif 4 and IBM Plex Mono, latin subsets,
+  self-hosted. All four are under the SIL Open Font License 1.1; each licence is in static/fonts/.
+- templates/_logo.html, static/favicon.svg: logo A (the cast mark), new for this project.
 - static/player.js: behaviour (speed steps 1 to 2x, resume within the browser tab, chapter seek)
   follows the Craft kit's app/src/client/meeting.js. It is rewritten here, not copied. Resume uses
   sessionStorage: it stays in the browser and is never sent anywhere.
@@ -23,10 +23,12 @@ NOTICE: where each part came from. Licences were checked before any copying.
   civiccast/podcast/rss.py (Apache-2.0, SPDX header in that file). Channel layout, itunes:duration
   in seconds and the podcast:guid rule from the Craft kit's app/src/lib/feeds.mjs (Scott's project).
   content:encoded, podcast:chapters and podcast:transcript are added here.
-- corrections page and the RSS date format: CivicNewspaper src-tauri/src/core/compiler.rs (MIT).
-  The correction notice layout (date, note, link to the article) is adapted.
-- images.py: the share and artwork images are generated with the standard library. No image is
-  copied from any source.
+- the RSS date format: CivicNewspaper src-tauri/src/core/compiler.rs (MIT).
+- images.py: the share image, podcast artwork and favicon PNG draw logo A with the standard
+  library. No image is copied from any source.
+- Analytics: every page loads the Cloudflare Web Analytics beacon
+  (static.cloudflareinsights.com). It sets no cookies. The CSP allows only that script and its
+  endpoint. Emails carry no analytics.
 
 Limits: share and artwork images carry no text (no font rendering without a dependency).
 """

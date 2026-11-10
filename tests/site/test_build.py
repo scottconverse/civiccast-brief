@@ -21,7 +21,14 @@ def test_build_writes_every_expected_file(built: tuple[Path, object]) -> None:
         "episodes/2026-10-20-example-council/transcript/index.html",
         "episodes/2026-10-06-example-sample/index.html",
         "search/index.html",
-        "corrections/index.html",
+        "boards/index.html",
+        "boards/city-council/index.html",
+        "boards/planning-commission/index.html",
+        "topics/index.html",
+        "topics/land-use/index.html",
+        "archive/index.html",
+        "archive/2026-10/index.html",
+        "podcast/index.html",
         "how-this-is-made/index.html",
         "about/index.html",
         "search-index.json",
@@ -33,6 +40,10 @@ def test_build_writes_every_expected_file(built: tuple[Path, object]) -> None:
         "assets/print.css",
         "assets/player.js",
         "assets/search.js",
+        "assets/favicon.svg",
+        "assets/favicon.png",
+        "assets/fonts/public-sans-latin-400-normal.woff2",
+        "assets/fonts/LICENSE-public-sans.txt",
         "assets/share-example.png",
         "assets/podcast-art-example.png",
         MARKER,
@@ -42,6 +53,7 @@ def test_build_writes_every_expected_file(built: tuple[Path, object]) -> None:
     assert report.episodes == 2
     assert report.excluded == (("2026-09-15-example-unapproved", "not approved"),)
     assert not (out / "episodes/2026-09-15-example-unapproved").exists()
+    assert not (out / "corrections").exists()
 
 
 def test_rebuild_replaces_a_previous_build_in_place(tmp_path: Path) -> None:
