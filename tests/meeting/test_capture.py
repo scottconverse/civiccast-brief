@@ -124,3 +124,33 @@ def test_youtube_captions_only_make_one_request(tmp_path):
     runner = FakeRunner(work)
     C.capture_captions("abc123XYZ_-", work, python="python-test.exe", runner=runner)
     assert len(runner.calls) == 1
+
+
+class PathsRunner:
+    """Writes the caption where yt-dlp does: a relative ``-o`` name is joined onto ``--paths``."""
+
+    def __call__(self, argv, *, timeout_s, env, cwd=None):
+        from pathlib import Path
+
+        out = Path(argv[argv.index("-o") + 1])
+        if not out.is_absolute():
+            out = Path(argv[argv.index("--paths") + 1]) / out
+        folder = out.parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "abc123XYZ_-.en-orig.srv3").write_bytes(SRV3)
+        info = {"id": "abc123XYZ_-", "title": "City Council Regular Session"}
+        (folder / "abc123XYZ_-.info.json").write_text(json.dumps(info), encoding="utf-8")
+        return proc.ProcessResult(argv=tuple(argv), returncode=0, stdout=b"", stderr="")
+
+
+def test_a_relative_work_folder_finds_the_captions_yt_dlp_wrote(tmp_path, monkeypatch):
+    # The weekly run passes folders like runs/weekly/<meeting>/raw. yt-dlp put the files in
+    # raw/runs/weekly/<meeting>/raw and the capture said there were no captions.
+    from pathlib import Path
+
+    monkeypatch.chdir(tmp_path)
+    result = C.capture_captions(
+        "abc123XYZ_-", Path("runs/m/raw"), python="py", runner=PathsRunner()
+    )
+    assert result.caption_file == tmp_path / "runs" / "m" / "raw" / "abc123XYZ_-.en-orig.srv3"
+    assert result.segments == [{"start_ms": 0, "end_ms": 1000, "text": ">> hello"}]

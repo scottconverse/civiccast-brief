@@ -25,7 +25,6 @@ from civiccast_brief.meeting import capture as capture_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
-from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.script import llm
 
 
@@ -40,12 +39,25 @@ def _city_defaults(args: argparse.Namespace) -> None:
         args.view_id = args.view_id if args.view_id is not None else city.granicus_view_id
 
 
+def _roster_body(path: Path | None) -> str:
+    """The body the roster is for. Only that field is read here: the pipeline checks the
+    members, and an empty roster is reported there."""
+    if path is None:
+        return ""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    body = data.get("body") if isinstance(data, dict) else None
+    return body if isinstance(body, str) else ""
+
+
 def _writers(args: argparse.Namespace) -> tuple[str, Complete | None, Complete | None]:
     """The recap and judge writers. ``--model`` is an Ollama model for both; without it a
     ``--city`` run takes the city's picks (models.json) for the roster's body."""
     if args.model or not args.city:
         return args.model or llm.DEFAULT_MODEL, None, None
-    body = load_roster(args.roster).body
+    body = _roster_body(args.roster)
     settings = models.load_settings(args.city)
     picks = f"recap={settings.pick('recap', body)} judge={settings.pick('judge', body)}"
     return (
