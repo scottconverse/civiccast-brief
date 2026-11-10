@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--city", required=True, help="city slug, e.g. longmont")
     a.add_argument("--published", required=True, help="publish time, ISO 8601 with offset")
     a.add_argument("--out", type=Path, required=True, help="episode JSON file to write")
+    a.add_argument("--article", type=Path, help="exported, published article item folder")
     return parser
 
 
@@ -45,6 +46,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             media_base_url=args.media_base_url,
             city_slug=args.city,
             published=args.published,
+            article_dir=args.article,
         )
     except (EpisodeError, ReviewError, OSError, KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)

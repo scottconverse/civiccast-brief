@@ -158,12 +158,36 @@ For a weekly roundup, combine the week's recaps first, then write from the combi
 python -m civiccast_brief.script roundup --recap runs/a/recap.json --recap runs/b/recap.json --out runs/week/recap.json
 ```
 
+Give the roundup a written title. `title` saves `title.json` next to the recap when a title passes
+the same check; with no passing title it exits 1 and the episode keeps its dated title:
+
+```
+python -m civiccast_brief.article title --recap runs/week/recap.json --city cities/yourcity
+```
+
+### Write the news story
+
+```
+python -m civiccast_brief.article write --recap runs/2026-11-03/recap.json --city cities/yourcity --out runs/2026-11-03/article
+```
+
+The story has a headline, dek, sections, votes and quotes. Every paragraph, vote and quote cites
+recap claims, so each links to its moment in the video. The writer also sees the captions said
+around each claim, so the story can name the item and who spoke. The check refuses any number or
+name that is not in the cited claims, those captions or the meeting header. A failing draft is
+written once more with the report; a part that still fails is dropped. Exit 1 means the saved story
+still fails (for example its headline). It saves `article.json` and `article.md` to read.
+
 ## 5. Review and publish on the editor desk
 
 ```
 python -m civiccast_brief.episode stage --db review.db --meeting runs/2026-11-03 --script runs/2026-11-03/script.json
+python -m civiccast_brief.article stage --db review.db --recap runs/2026-11-03/recap.json --article runs/2026-11-03/article.json --city cities/yourcity
 python -m civiccast_brief.review serve --db review.db --city cities/yourcity
 ```
+
+`article stage` checks the story again and adds it as an article item with the result, so a story
+that fails is never auto-published.
 
 The editor desk runs at `http://127.0.0.1:8765` (`--port` picks another). `--city` turns on the
 Sources and Models and auto-publish pages; without it the desk only reviews items.
@@ -238,7 +262,9 @@ python -m civiccast_brief.episode assemble --item exported/<item> --meeting runs
 python -m civiccast_brief.site build --episodes cities/yourcity --out site --base-url https://yourcity.example.org
 ```
 
-`assemble` refuses an item whose recap or script changed after publishing. The site build reads
+Add `--article exported/<article item>` to put the published story on the episode page.
+`assemble` refuses an item whose recap or script changed after publishing, and a story that is
+not published, is for another meeting, or fails the check after desk edits. The site build reads
 `city.json` and every episode JSON in the folder (not `roster.json`) and publishes only approved
 episodes. Upload `site/` to the static host and the MP3s to the media address.
 
