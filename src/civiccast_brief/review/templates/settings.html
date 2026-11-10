@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set nav = "settings" %}
+{% block content %}
+<h2>Models and auto-publish</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to change these settings.</p>
+{% else %}
+<p class="muted">City folder: <code>{{ city_dir }}</code></p>
+
+{% if picks %}
+<form method="post" action="/settings/models">
+  <input type="hidden" name="token" value="{{ token }}">
+  <h3>Which model writes each task</h3>
+  <p class="muted">Each task has a default model. A body can use a different one; leave it on
+    “Task default” to use the default. Claude runs as <code>claude -p</code> on your Claude
+    subscription. DeepSeek runs through Ollama. Saved to <code>models.json</code>.</p>
+  <table>
+    <thead>
+      <tr><th>Body</th>{% for task in tasks %}<th>{{ task|capitalize }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">Default</th>
+        {% for task in tasks %}
+        <td><select name="{{ task }}::" aria-label="Default model for {{ task }}">
+          {% for choice in choices %}
+          <option value="{{ choice }}" {% if picks[task][""] == choice %}selected{% endif %}>{{ choice }}</option>
+          {% endfor %}
+        </select></td>
+        {% endfor %}
+      </tr>
+      {% for body in bodies %}{% set n = loop.index0 %}
+      <tr>
+        <th scope="row">{{ body }}</th>
+        {% for task in tasks %}
+        <td><select name="{{ task }}::{{ n }}" aria-label="Model for {{ task }}, {{ body }}">
+          <option value="" {% if body not in picks[task] %}selected{% endif %}>Task default</option>
+          {% for choice in choices %}
+          <option value="{{ choice }}" {% if picks[task].get(body) == choice %}selected{% endif %}>{{ choice }}</option>
+          {% endfor %}
+        </select></td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><button type="submit" class="primary" data-busy="Saving model picks…">Save model picks</button></p>
+</form>
+{% endif %}
+
+<form method="post" action="/settings/auto-publish">
+  <input type="hidden" name="token" value="{{ token }}">
+  <h3>Auto-publish</h3>
+  <p class="muted">When it is on for a body, an item for that body that passed its checks is
+    published as soon as the weekly run stages it, with no press. Items that failed their
+    checks still wait for you. Saved to <code>desk.json</code>.</p>
+  {% for body in bodies %}
+  <p><label><input type="checkbox" name="auto::{{ loop.index0 }}" {% if auto.get(body) %}checked{% endif %}>
+    {{ body }}</label></p>
+  {% endfor %}
+  <p><button type="submit" data-busy="Saving auto-publish…">Save auto-publish</button></p>
+</form>
+<p class="muted">Bodies come from your sources, your items and these settings. Add a source for a
+  body on the <a href="/sources">Sources</a> page to see it here.</p>
+{% endif %}
+{% endblock %}

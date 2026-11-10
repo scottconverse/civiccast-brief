@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from civiccast_brief.episode import build as B
-from civiccast_brief.review.export import export_approved
+from civiccast_brief.review.export import export_published
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.site.build import build_site
 
@@ -95,7 +95,7 @@ def _approved_export(tmp_path, meeting_dir):
     item_id = B.stage(db, meeting_dir, meeting_dir / "script.json")
     with ReviewStore(db) as store:
         item = store.get_item(item_id)
-        assert item.status == "draft"
+        assert item.status == "review"
         assert item.speakers == {"voice 01": "unknown", "voice 02": "unknown"}
         store.update_content(
             item_id,
@@ -103,9 +103,9 @@ def _approved_export(tmp_path, meeting_dir):
             recap=item.recap,
             script=item.script,
         )
-        store.approve(item_id)
+        store.publish(item_id)
     out = tmp_path / "export"
-    result = export_approved(db, out)
+    result = export_published(db, out)
     assert len(result.exported) == 1
     return result.exported[0]
 
@@ -164,7 +164,7 @@ def test_assemble_refuses_an_unapproved_folder(tmp_path, meeting):
     item = tmp_path / "item"
     item.mkdir()
     (item / "item.json").write_text(json.dumps({"status": "draft"}))
-    with pytest.raises(B.EpisodeError, match="not an approved export"):
+    with pytest.raises(B.EpisodeError, match="not a published export"):
         _assemble(item, meeting_dir, audio)
 
 
@@ -182,8 +182,8 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
     item_id = B.stage(db, meeting_dir, meeting_dir / "script.json")
     with ReviewStore(db) as store:
         assert store.get_item(item_id).meeting_id == "roundup October 6, 2026 and October 20, 2026"
-        store.approve(item_id)
-    item_dir = export_approved(db, tmp_path / "export").exported[0]
+        store.publish(item_id)
+    item_dir = export_published(db, tmp_path / "export").exported[0]
     episode = _assemble(item_dir, meeting_dir, audio)
 
     assert episode["id"] == "2026-10-20-example-weekly-roundup"

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set nav = "sources" %}
+{% macro field_error(name) %}{% if error_field == name %}<p class="field-error" id="{{ name }}-error">{{ error }}</p>{% endif %}{% endmacro %}
+{% macro invalid(name) %}{% if error_field == name %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{% endmacro %}
+{% block content %}
+<h2>Sources</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to add sources.</p>
+{% else %}
+<p class="muted">Where the city's meetings come from. Saved to <code>{{ path }}</code>.</p>
+
+{% if sources %}
+<table>
+  <thead><tr><th>Kind</th><th>Address</th><th>Bodies</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sources %}
+    <tr>
+      <td>{{ kind_labels[s.kind] }}</td>
+      <td>{{ s.address }}</td>
+      <td>{{ s.bodies|join(", ") }}</td>
+      <td>
+        <a href="/sources?edit={{ s.id|urlencode }}">Edit</a>
+        <form method="post" action="/sources/remove">
+          <input type="hidden" name="token" value="{{ token }}">
+          <input type="hidden" name="source_id" value="{{ s.id }}">
+          <button type="submit" data-busy="Removing…">Remove</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No sources yet. Add the first one below.</p>
+{% endif %}
+
+<form method="post" action="/sources/{{ "edit" if editing else "add" }}" novalidate>
+  <input type="hidden" name="token" value="{{ token }}">
+  {% if editing %}<input type="hidden" name="source_id" value="{{ editing }}">{% endif %}
+  <fieldset>
+    <legend>{{ "Edit source" if editing else "Add a source" }}</legend>
+    <p><label for="kind">Kind</label><br>
+      <select id="kind" name="kind" {{ invalid("kind") }}>
+        {% for k in kinds %}
+        <option value="{{ k }}" {% if form.get("kind", "primegov") == k %}selected{% endif %}>{{ kind_labels[k] }}</option>
+        {% endfor %}
+      </select></p>
+    {{ field_error("kind") }}
+    <div data-kind="primegov">
+      <p><label for="url">PrimeGov portal address</label><br>
+        <input class="wide" id="url" type="text" name="url" value="{{ form.get("url", "") }}"
+               placeholder="https://yourcity.primegov.com" {{ invalid("url") }}></p>
+      {{ field_error("url") }}
+    </div>
+    <div data-kind="youtube">
+      <p><label for="channel_id">YouTube channel id (starts with UC, 24 characters) or channel address</label><br>
+        <input class="wide" id="channel_id" type="text" name="channel_id" value="{{ form.get("channel_id", "") }}"
+               placeholder="UCxxxxxxxxxxxxxxxxxxxxxx" {{ invalid("channel_id") }}></p>
+      {{ field_error("channel_id") }}
+    </div>
+    <div data-kind="granicus">
+      <p><label for="host">Granicus host</label><br>
+        <input class="wide" id="host" type="text" name="host" value="{{ form.get("host", "") }}"
+               placeholder="yourcity.granicus.com" {{ invalid("host") }}></p>
+      {{ field_error("host") }}
+      <p><label for="view_id">View id (the number after view_id=)</label><br>
+        <input id="view_id" type="text" name="view_id" value="{{ form.get("view_id", "") }}"
+               placeholder="2" inputmode="numeric" {{ invalid("view_id") }}></p>
+      {{ field_error("view_id") }}
+    </div>
+    <p><label for="bodies">Bodies it covers (one per line, or commas between)</label><br>
+      <textarea id="bodies" name="bodies" placeholder="City Council" {{ invalid("bodies") }}>{{ form.get("bodies", "") }}</textarea></p>
+    {{ field_error("bodies") }}
+    <button type="submit" class="primary" data-busy="Checking and saving…">{{ "Save changes" if editing else "Add source" }}</button>
+    {% if editing %}<a href="/sources">Cancel</a>{% endif %}
+  </fieldset>
+</form>
+{% endif %}
+{% endblock %}

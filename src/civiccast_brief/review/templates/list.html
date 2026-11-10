@@ -1,26 +1,35 @@
 {% extends "base.html" %}
+{% set nav = "items" %}
 {% block content %}
-<h2>Meetings</h2>
-<p class="muted">Only approved items that are unchanged since approval are exported. Export from
-the command line: <code>python -m civiccast_brief.review export --db PATH --out DIR</code></p>
+<h2>Items</h2>
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+<p class="tabs">
+  <a href="/" {% if not current %}aria-current="page"{% endif %}>All</a>
+  {% for s in statuses %}
+  <a href="/?status={{ s }}" {% if current == s %}aria-current="page"{% endif %}>{{ s|capitalize }} ({{ counts.get(s, 0) }})</a>
+  {% endfor %}
+</p>
+<p class="muted">The export writes published items whose text is unchanged since publishing, and nothing else:
+<code>python -m civiccast_brief.review export --db PATH --out DIR</code></p>
 {% if items %}
 <table>
   <thead>
-    <tr><th>Meeting</th><th>Date</th><th>Status</th><th>Approved</th><th></th></tr>
+    <tr><th>Item</th><th>Body</th><th>Date</th><th>State</th><th>Checks</th><th></th></tr>
   </thead>
   <tbody>
   {% for item in items %}
     <tr>
-      <td>{{ item.title }}<br><span class="muted">{{ item.meeting_id }}</span></td>
+      <td>{{ item.headline or item.title }}<br><span class="muted">{{ item.kind }} &middot; {{ item.meeting_id }}</span></td>
+      <td>{{ item.body or "—" }}</td>
       <td>{{ item.meeting_date }}</td>
-      <td><span class="status">{{ item.status }}</span></td>
-      <td>{{ item.approved_at|localtime }}</td>
+      <td><span class="status {{ item.status }}">{{ item.status }}</span>{% if item.published_at %}<br><span class="muted">{{ item.published_at|localtime }}</span>{% endif %}</td>
+      <td>{% if item.checks_passed is none %}<span class="muted">not run</span>{% elif item.checks_passed %}passed{% else %}failed{% endif %}</td>
       <td><a href="/items/{{ item.id }}">Open</a></td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p>No items yet.</p>
+<p>No items{% if current %} in {{ current }}{% endif %}.</p>
 {% endif %}
 {% endblock %}

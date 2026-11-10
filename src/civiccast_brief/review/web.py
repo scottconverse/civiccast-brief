@@ -1,32 +1,45 @@
-"""Local producer screen: a WSGI app served on 127.0.0.1 only.
+"""The editor desk: a FastAPI app served on 127.0.0.1 only.
 
-Pages: the item list, and one edit page per item with speaker names, the recap and the script,
-plus Save, Approve, Reject and Regenerate audio. Plain HTML forms, no JavaScript. Jinja2
-autoescaping is on, so producer text is shown as text.
+Pages:
+  - ``/``: the items, by state (review, held, published, killed);
+  - ``/items/<id>``: one episode or article, with Save, Publish, Hold, Kill, Redraft and, for an
+    episode, Regenerate audio;
+  - ``/settings``: which model writes each task, per body, and auto-publish per body;
+  - ``/sources``: the city's meeting sources (add, edit, remove).
 
-Two guards keep other pages open in the same browser from using the screen:
-  - every POST must carry the form token that the screen prints in its forms. The token is
-    random and is made when the app starts. A page on another site cannot read it;
+Jinja2 autoescaping is on, so editor text is shown as text. A small script (``/static/desk.js``)
+shows "Working..." on the pressed button; every action also ends on a page that says what
+happened, so the desk works without the script.
+
+Two guards keep other pages open in the same browser from using the desk:
+  - every POST must carry the form token that the desk prints in its forms. The token is random
+    and is made when the app starts. A page on another site cannot read it;
   - the Host header must name 127.0.0.1 or localhost, which stops DNS-rebinding pages.
-The screen also refuses to be framed, so a page cannot place its buttons over this one.
+The desk also refuses to be framed, so a page cannot place its buttons over this one.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hmac
+import json
 import logging
 import re
 import secrets
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Final
-from urllib.parse import parse_qs
-from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+from typing import Any, Final
+from urllib.parse import urlencode
 
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader
 
-from civiccast_brief.review.store import ReviewError, ReviewItem, ReviewStore
+from civiccast_brief import models as model_settings
+from civiccast_brief import sources as city_sources
+from civiccast_brief.review import desk
+from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 
 logger = logging.getLogger(__name__)
 
@@ -34,21 +47,31 @@ BIND_HOST: Final = "127.0.0.1"
 DEFAULT_PORT: Final = 8765
 ALLOWED_HOSTNAMES: Final = frozenset({"127.0.0.1", "localhost"})
 MAX_FORM_BYTES: Final = 2 * 1024 * 1024
-TEMPLATE_DIR: Final = Path(__file__).parent / "templates"
+HERE: Final = Path(__file__).parent
+TEMPLATE_DIR: Final = HERE / "templates"
+STATIC_DIR: Final = HERE / "static"
 
-RegenerateCallback = Callable[[ReviewItem], None]
+RegenerateCallback = Callable[[DeskItem], None]
 
-_ACTIONS: Final = frozenset({"save", "approve", "reject", "regenerate"})
-_ITEM_PATH: Final = re.compile(r"^/items/(\d+)(?:/([a-z]+))?$")
+_SOURCE_ID: Final = re.compile(r"^(primegov|youtube|granicus):[A-Za-z0-9._/-]{1,200}$")
+_ITEM_ACTIONS: Final = ("save", "publish", "hold", "kill", "redraft", "regenerate")
 _CSP: Final = (
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'"
 )
-_SECURITY_HEADERS: Final = (
-    ("Content-Security-Policy", _CSP),
-    ("X-Frame-Options", "DENY"),
-    ("X-Content-Type-Options", "nosniff"),
-    ("Cache-Control", "no-store"),
-)
+SECURITY_HEADERS: Final = {
+    "Content-Security-Policy": _CSP,
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+}
+STATE_HELP: Final = {
+    "review": "Waiting for the editor.",
+    "held": "Set aside. Not published until you publish it.",
+    "killed": "Will not run. Edit or redraft it to bring it back to review.",
+    "published": "Published. The export writes it.",
+}
 
 
 def local_time(value: str | None) -> str:
@@ -58,16 +81,20 @@ def local_time(value: str | None) -> str:
     return datetime.fromisoformat(value).astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
 
-def _notice_text(code: str, item: ReviewItem) -> tuple[str, bool] | None:
+def item_notice(code: str, item: DeskItem) -> tuple[str, bool] | None:
     """Map a notice code from the query string to (text, is_error). Unknown codes give None."""
-    when = local_time(item.approved_at)
+    when = local_time(item.published_at)
     texts = {
-        "saved_unchanged": f"Saved. Nothing changed. Status: {item.status}.",
-        "saved_draft": "Saved. Status is draft. Approve the item before it can be exported.",
-        "saved_reset": "Saved. Status reset to draft. Approve the item again before export.",
-        "approved": f"Approved at {when}. The export will include this item.",
-        "already_approved": f"Already approved at {when}. Nothing changed.",
-        "rejected": "Rejected. The export will skip this item.",
+        "saved_unchanged": f"Saved. Nothing changed. State: {item.status}.",
+        "saved_review": "Saved. The item is in review. Publish it when it is ready.",
+        "saved_reset": "Saved. The item went back to review; publish it again before export.",
+        "published": f"Published at {when}. The export will write this item.",
+        "already_published": f"Already published at {when}. Nothing changed.",
+        "held": "Held. The export skips this item until you publish it.",
+        "already_held": "Already held. Nothing changed.",
+        "killed": "Killed. The export skips this item. Edit or redraft it to bring it back.",
+        "already_killed": "Already killed. Nothing changed.",
+        "redrafted": "Redrafted with your note. The new draft is below, in review.",
         "regenerate_requested": "Audio regeneration requested. The request is listed below.",
     }
     if code in texts:
@@ -77,130 +104,123 @@ def _notice_text(code: str, item: ReviewItem) -> tuple[str, bool] | None:
     return None
 
 
-def _host_allowed(environ: dict) -> bool:
-    host = environ.get("HTTP_HOST", "")
-    return host.split(":", 1)[0].lower() in ALLOWED_HOSTNAMES
+def _host_allowed(request: Request) -> bool:
+    host = request.headers.get("host", "")
+    return host.rsplit(":", 1)[0].lower() in ALLOWED_HOSTNAMES if host else False
 
 
-def _read_form(environ: dict) -> dict[str, list[str]] | None:
-    try:
-        length = int(environ.get("CONTENT_LENGTH") or 0)
-    except ValueError:
-        length = 0
-    if length > MAX_FORM_BYTES:
-        return None
-    body = environ["wsgi.input"].read(length) if length > 0 else b""
-    return parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+def article_from_form(article: Mapping[str, Any], form: Mapping[str, str]) -> dict[str, Any]:
+    """The article with the editor's headline, dek, headings and paragraph text from the form."""
+    new = json.loads(json.dumps(article))
+    new["headline"] = form.get("headline", new.get("headline", ""))
+    new["dek"] = form.get("dek", new.get("dek", ""))
+    for s_no, section in enumerate(new.get("sections") or []):
+        if f"s{s_no}_heading" in form:
+            section["heading"] = form[f"s{s_no}_heading"]
+        for p_no, paragraph in enumerate(section.get("paragraphs") or []):
+            key = f"s{s_no}_p{p_no}"
+            if key in form:
+                paragraph["text"] = form[key]
+    return new
 
 
-def _response(
-    status: str,
-    body: str,
-    content_type: str = "text/html; charset=utf-8",
-    extra: Iterable[tuple[str, str]] = (),
-) -> tuple[str, list[tuple[str, str]], bytes]:
-    headers = [("Content-Type", content_type), *_SECURITY_HEADERS, *extra]
-    return status, headers, body.encode("utf-8")
+class DeskApp:
+    """State shared by the routes: the store, the city folder, the token and the callbacks."""
 
-
-def _plain(status: str, message: str, extra: Iterable[tuple[str, str]] = ()) -> tuple:
-    return _response(status, message + "\n", "text/plain; charset=utf-8", extra)
-
-
-def _redirect(location: str) -> tuple:
-    return _response("303 See Other", "", extra=[("Location", location)])
-
-
-class ReviewApp:
-    """The producer screen as a WSGI application."""
-
-    def __init__(self, store: ReviewStore, *, regenerate: RegenerateCallback | None = None):
+    def __init__(
+        self,
+        store: ReviewStore,
+        *,
+        city_dir: str | Path | None = None,
+        writer: desk.Writer | None = None,
+        regenerate: RegenerateCallback | None = None,
+    ) -> None:
         self.store = store
+        self.city_dir = Path(city_dir) if city_dir is not None else None
+        self.writer = writer
         self.token = secrets.token_urlsafe(24)
-        self._regenerate = regenerate or self._record_audio_request
-        self._templates = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
-        self._templates.filters["localtime"] = local_time
+        self._regenerate = regenerate or (lambda item: store.record_audio_request(item.id))
+        self.templates = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
+        self.templates.filters["localtime"] = local_time
+        self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
-    def __call__(self, environ: dict, start_response: Callable) -> list[bytes]:
-        status, headers, body = self._respond(environ)
-        start_response(status, headers)
-        return [body]
-
-    def _respond(self, environ: dict) -> tuple:
-        if not _host_allowed(environ):
-            return _plain("400 Bad Request", "This screen answers only to 127.0.0.1 or localhost.")
-        method = environ.get("REQUEST_METHOD", "GET").upper()
-        if method not in ("GET", "POST"):
-            return _plain("405 Method Not Allowed", "Use GET or POST.", [("Allow", "GET, POST")])
-        path = environ.get("PATH_INFO") or "/"
-        if path == "/":
-            if method != "GET":
-                return _plain("405 Method Not Allowed", "Use GET.", [("Allow", "GET")])
-            return self._list_page()
-        match = _ITEM_PATH.match(path)
-        if match is None:
-            return _plain("404 Not Found", "Not found.")
-        item_id = int(match.group(1))
-        action = match.group(2)
-        if action is None:
-            if method != "GET":
-                return _plain("405 Method Not Allowed", "Use GET.", [("Allow", "GET")])
-            return self._item_page(item_id, environ)
-        if action not in _ACTIONS:
-            return _plain("404 Not Found", "Not found.")
-        if method != "POST":
-            return _plain("405 Method Not Allowed", "Use POST.", [("Allow", "POST")])
-        return self._action(item_id, action, environ)
-
-    def _list_page(self) -> tuple:
-        html = self._templates.get_template("list.html").render(
-            title="Meetings", items=self.store.list_items()
+    def page(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
+        html = self.templates.get_template(name).render(
+            token=self.token, city_dir=self.city_dir, **context
         )
-        return _response("200 OK", html)
+        return HTMLResponse(html, status_code=status)
 
-    def _item_page(self, item_id: int, environ: dict) -> tuple:
-        item = self.store.get_item(item_id)
-        if item is None:
-            return _plain("404 Not Found", f"No item with id {item_id}.")
-        code = parse_qs(environ.get("QUERY_STRING", "")).get("notice", [""])[0]
-        notice = _notice_text(code, item)
-        html = self._templates.get_template("item.html").render(
-            title=item.meeting_id,
-            item=item,
-            token=self.token,
-            requests=self.store.list_audio_requests(item_id),
+    def token_ok(self, form: Mapping[str, str]) -> bool:
+        given = str(form.get("token", ""))
+        return hmac.compare_digest(given.encode("utf-8"), self.token.encode("utf-8"))
+
+    # ----- items ----------------------------------------------------------------------------
+
+    def item_page(
+        self,
+        item: DeskItem,
+        *,
+        notice: tuple[str, bool] | None = None,
+        status: int = 200,
+        shown: DeskItem | None = None,
+    ) -> HTMLResponse:
+        return self.page(
+            "item.html",
+            status=status,
+            title=item.headline or item.meeting_id,
+            item=shown or item,
+            saved=item,
+            state_help=STATE_HELP,
+            history=self.store.history(item.id),
+            requests=self.store.list_audio_requests(item.id) if item.kind == "episode" else [],
             notice=notice[0] if notice else None,
             notice_error=bool(notice and notice[1]),
+            has_writer=self.writer is not None,
         )
-        return _response("200 OK", html)
 
-    def _action(self, item_id: int, action: str, environ: dict) -> tuple:
-        form = _read_form(environ)
-        if form is None:
-            return _plain("413 Request Entity Too Large", "The form is too large.")
-        given = form.get("token", [""])[0]
-        if not hmac.compare_digest(given.encode("utf-8"), self.token.encode("utf-8")):
-            return _plain(
-                "403 Forbidden",
-                "The form token is missing or wrong. Reload the screen and try again.",
-            )
-        item = self.store.get_item(item_id)
-        if item is None:
-            return _plain("404 Not Found", f"No item with id {item_id}.")
-        try:
-            code = self._run_action(action, item, form)
-        except ReviewError as exc:
-            return _plain("400 Bad Request", str(exc))
-        return _redirect(f"/items/{item_id}?notice={code}")
-
-    def _run_action(self, action: str, item: ReviewItem, form: dict[str, list[str]]) -> str:
+    def run_action(self, action: str, item: DeskItem, form: Mapping[str, str]) -> str:
+        note = str(form.get("note", "")).strip()
         if action == "save":
-            return self._save(item, form)
-        if action == "approve":
-            return "approved" if self.store.approve(item.id) else "already_approved"
-        if action == "reject":
-            self.store.reject(item.id)
-            return "rejected"
+            if item.kind == "article":
+                update = self.store.update_content(
+                    item.id, article=article_from_form(item.article or {}, form)
+                )
+            else:
+                speakers = {
+                    label: form.get(f"speaker:{label}", name)
+                    for label, name in item.speakers.items()
+                }
+                update = self.store.update_content(
+                    item.id,
+                    speakers=speakers,
+                    recap=form.get("recap", item.recap),
+                    script=form.get("script", item.script),
+                )
+            if not update.changed:
+                return "saved_unchanged"
+            return "saved_review" if update.previous_status == "review" else "saved_reset"
+        if action == "publish":
+            return "published" if self.store.publish(item.id) else "already_published"
+        if action == "hold":
+            return "held" if self.store.hold(item.id, note) else "already_held"
+        if action == "kill":
+            return "killed" if self.store.kill(item.id, note) else "already_killed"
+        if action == "redraft":
+            if self.writer is None:
+                raise ReviewError(
+                    "no writer is connected to this desk yet, so it cannot redraft; edit the "
+                    "text by hand, or run the desk from the weekly run, which connects the writers"
+                )
+            try:
+                desk.redraft(self.store, item.id, note, self.writer)
+            except ReviewError:
+                raise
+            except Exception as exc:
+                logger.exception("redraft failed for item %d", item.id)
+                raise ReviewError(f"the writer failed: {exc}") from exc
+            return "redrafted"
+        if item.kind != "episode":
+            raise ReviewError("only an episode has audio")
         try:
             self._regenerate(item)
         except Exception:
@@ -208,37 +228,356 @@ class ReviewApp:
             return "regenerate_failed"
         return "regenerate_requested"
 
-    def _save(self, item: ReviewItem, form: dict[str, list[str]]) -> str:
-        speakers = {
-            label: form.get(f"speaker:{label}", [name])[0] for label, name in item.speakers.items()
-        }
-        update = self.store.update_content(
-            item.id,
-            speakers=speakers,
-            recap=form.get("recap", [item.recap])[0],
-            script=form.get("script", [item.script])[0],
+    def shown_after_error(self, action: str, item: DeskItem, form: Mapping[str, str]) -> DeskItem:
+        """What a failed save shows: the editor's text, so nothing typed is lost."""
+        if action != "save":
+            return item
+        if item.kind == "article":
+            return dataclasses.replace(item, article=article_from_form(item.article or {}, form))
+        return dataclasses.replace(
+            item,
+            speakers={k: form.get(f"speaker:{k}", v) for k, v in item.speakers.items()},
+            recap=form.get("recap", item.recap),
+            script=form.get("script", item.script),
         )
-        if not update.changed:
-            return "saved_unchanged"
-        if update.previous_status == "draft":
-            return "saved_draft"
-        return "saved_reset"
 
-    def _record_audio_request(self, item: ReviewItem) -> None:
-        self.store.record_audio_request(item.id)
+    # ----- settings -------------------------------------------------------------------------
+
+    def known_bodies(self) -> list[str]:
+        names: set[str] = {"City Council"}
+        names |= {i.body for i in self.store.list_items() if i.body}
+        if self.city_dir is not None:
+            try:
+                for source in city_sources.load_sources(self.city_dir):
+                    names |= set(source.bodies)
+            except city_sources.SourceError:
+                pass
+            try:
+                names |= set(desk.load_auto_publish(self.city_dir))
+            except ReviewError:
+                pass
+            try:
+                for picks in model_settings.load_settings(self.city_dir).tasks.values():
+                    names |= set(picks.bodies)
+            except model_settings.ModelSettingsError:
+                pass
+        return sorted(names, key=lambda n: (n != "City Council", n.casefold()))
+
+    def settings_page(
+        self, *, notice: str = "", error: str = "", status: int = 200
+    ) -> HTMLResponse:
+        settings = None
+        auto: dict[str, bool] = {}
+        load_error = ""
+        if self.city_dir is not None:
+            try:
+                settings = model_settings.load_settings(self.city_dir)
+            except model_settings.ModelSettingsError as exc:
+                load_error = str(exc)
+            try:
+                auto = desk.load_auto_publish(self.city_dir)
+            except ReviewError as exc:
+                load_error = f"{load_error} {exc}".strip()
+        bodies = self.known_bodies()
+        picks: dict[str, dict[str, str]] = {}
+        choices = list(model_settings.CHOICES)
+        if settings is not None:
+            for task in model_settings.TASKS:
+                task_picks = settings.tasks.get(task) or model_settings.default_picks()
+                picks[task] = {"": task_picks.default, **task_picks.bodies}
+                choices += [p for p in picks[task].values() if p not in choices]
+        return self.page(
+            "settings.html",
+            status=status,
+            title="Settings",
+            tasks=model_settings.TASKS,
+            bodies=bodies,
+            picks=picks,
+            choices=choices,
+            auto=auto,
+            notice=notice,
+            error=error or load_error,
+        )
+
+    def save_models(self, form: Mapping[str, str]) -> str:
+        assert self.city_dir is not None
+        current = model_settings.load_settings(self.city_dir)
+        bodies = self.known_bodies()
+        for task in model_settings.TASKS:
+            default = str(form.get(f"{task}::", "")).strip()
+            if not default:
+                raise model_settings.ModelSettingsError(f"pick a default model for {task}")
+            model_settings.split_pick(default)
+            overrides: dict[str, str] = {}
+            for number, body in enumerate(bodies):
+                pick = str(form.get(f"{task}::{number}", "")).strip()
+                if pick:
+                    model_settings.split_pick(pick)
+                    overrides[body] = pick
+            current.tasks[task] = model_settings.TaskPicks(default=default, bodies=overrides)
+        path = model_settings.save_settings(self.city_dir, current)
+        return f"Saved the model picks to {path}."
+
+    def save_auto(self, form: Mapping[str, str]) -> str:
+        assert self.city_dir is not None
+        chosen = {
+            body: form.get(f"auto::{number}") == "on"
+            for number, body in enumerate(self.known_bodies())
+        }
+        path = desk.save_auto_publish(self.city_dir, chosen)
+        on = [b for b, v in chosen.items() if v]
+        which = ", ".join(on) if on else "no body"
+        return f"Saved to {path}. Auto-publish is on for {which}."
+
+    # ----- sources --------------------------------------------------------------------------
+
+    def sources_page(
+        self,
+        *,
+        notice: str = "",
+        error: str = "",
+        error_field: str = "",
+        form: Mapping[str, str] | None = None,
+        editing: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        rows: list[city_sources.Source] = []
+        load_error = ""
+        if self.city_dir is not None:
+            try:
+                rows = city_sources.load_sources(self.city_dir)
+            except city_sources.SourceError as exc:
+                load_error = str(exc)
+        return self.page(
+            "sources.html",
+            status=status,
+            title="Sources",
+            sources=rows,
+            kinds=city_sources.KINDS,
+            kind_labels=city_sources.KIND_LABELS,
+            notice=notice,
+            error=error or load_error,
+            error_field=error_field,
+            form=dict(form or {}),
+            editing=editing,
+            path=(self.city_dir / city_sources.SETTINGS_NAME) if self.city_dir else None,
+        )
 
 
-class _QuietHandler(WSGIRequestHandler):
-    def log_message(self, format: str, *args: object) -> None:
-        logger.debug("%s - %s", self.address_string(), format % args)
+def _redirect(location: str) -> RedirectResponse:
+    return RedirectResponse(location, status_code=303)
 
 
-def make_review_server(
+def make_desk_app(
     store: ReviewStore,
-    port: int = DEFAULT_PORT,
     *,
+    city_dir: str | Path | None = None,
+    writer: desk.Writer | None = None,
     regenerate: RegenerateCallback | None = None,
-) -> WSGIServer:
-    """A server bound to 127.0.0.1. Use port 0 to let the system pick a free port."""
-    app = ReviewApp(store, regenerate=regenerate)
-    return make_server(BIND_HOST, port, app, handler_class=_QuietHandler)
+) -> FastAPI:
+    """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio."""
+    state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate)
+    app = FastAPI(
+        title="CivicCast Brief editor desk", docs_url=None, redoc_url=None, openapi_url=None
+    )
+    app.state.desk = state
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not _host_allowed(request):
+            response: Response = PlainTextResponse(
+                "This desk answers only to 127.0.0.1 or localhost.\n", status_code=400
+            )
+        elif request.method not in ("GET", "POST", "HEAD"):
+            response = PlainTextResponse(
+                "Use GET or POST.\n", status_code=405, headers={"Allow": "GET, POST"}
+            )
+        elif int(request.headers.get("content-length") or 0) > MAX_FORM_BYTES:
+            response = PlainTextResponse("The form is too large.\n", status_code=413)
+        else:
+            response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+        return response
+
+    async def read_form(request: Request) -> dict[str, str] | None:
+        form = {k: str(v) for k, v in (await request.form()).items()}
+        return form if state.token_ok(form) else None
+
+    def bad_token() -> PlainTextResponse:
+        return PlainTextResponse(
+            "The form token is missing or wrong. Reload the desk and try again.\n",
+            status_code=403,
+        )
+
+    @app.get("/static/desk.js")
+    def script() -> Response:
+        return Response(
+            (STATIC_DIR / "desk.js").read_text(encoding="utf-8"), media_type="text/javascript"
+        )
+
+    @app.get("/", response_class=HTMLResponse)
+    def items(status: str = "") -> HTMLResponse:
+        if status and status not in STATUSES:
+            return state.page(
+                "list.html",
+                status=400,
+                title="Items",
+                items=[],
+                counts={},
+                statuses=STATUSES,
+                current="",
+                error=f"No state {status!r}. States: {', '.join(STATUSES)}.",
+            )
+        everything = store.list_items()
+        counts = {s: sum(1 for i in everything if i.status == s) for s in STATUSES}
+        shown = [i for i in everything if not status or i.status == status]
+        return state.page(
+            "list.html",
+            title="Items",
+            items=shown,
+            counts=counts,
+            statuses=STATUSES,
+            current=status,
+            error="",
+        )
+
+    @app.get("/items/{item_id}", response_class=HTMLResponse)
+    def item_page(item_id: int, notice: str = "") -> Response:
+        item = store.get_item(item_id)
+        if item is None:
+            return PlainTextResponse(f"No item with id {item_id}.\n", status_code=404)
+        return state.item_page(item, notice=item_notice(notice, item))
+
+    @app.post("/items/{item_id}/{action}")
+    async def item_action(item_id: int, action: str, request: Request) -> Response:
+        if action not in _ITEM_ACTIONS:
+            return PlainTextResponse("Not found.\n", status_code=404)
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        item = store.get_item(item_id)
+        if item is None:
+            return PlainTextResponse(f"No item with id {item_id}.\n", status_code=404)
+        try:
+            code = state.run_action(action, item, form)
+        except ReviewError as exc:
+            fresh = store.get_item(item_id) or item
+            return state.item_page(
+                fresh,
+                notice=(f"Not done: {exc}", True),
+                status=400,
+                shown=state.shown_after_error(action, fresh, form),
+            )
+        return _redirect(f"/items/{item_id}?notice={code}")
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings(notice: str = "") -> HTMLResponse:
+        message = ""
+        if state.city_dir is not None:
+            if notice == "models":
+                where = state.city_dir / model_settings.SETTINGS_NAME
+                message = f"Saved the model picks to {where}."
+            elif notice == "auto":
+                on = [b for b, v in desk.load_auto_publish(state.city_dir).items() if v]
+                where = state.city_dir / desk.SETTINGS_NAME
+                status = f"It is on for {', '.join(on)}." if on else "It is off for every body."
+                message = f"Saved auto-publish to {where}. {status}"
+        return state.settings_page(notice=message)
+
+    @app.post("/settings/{which}")
+    async def save_settings(which: str, request: Request) -> Response:
+        if which not in ("models", "auto-publish"):
+            return PlainTextResponse("Not found.\n", status_code=404)
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.settings_page(
+                error="Start the desk with --city to save settings.", status=400
+            )
+        try:
+            if which == "models":
+                state.save_models(form)
+            else:
+                state.save_auto(form)
+        except (model_settings.ModelSettingsError, ReviewError, OSError) as exc:
+            return state.settings_page(error=f"Not saved: {exc}", status=400)
+        return _redirect("/settings?notice=" + ("models" if which == "models" else "auto"))
+
+    @app.get("/sources", response_class=HTMLResponse)
+    def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:
+        form: dict[str, str] = {}
+        rows: list[city_sources.Source] = []
+        if state.city_dir is not None:
+            try:
+                rows = city_sources.load_sources(state.city_dir)
+            except city_sources.SourceError:
+                rows = []
+        if edit:
+            found = [s for s in rows if s.id == edit]
+            if not found:
+                return state.sources_page(
+                    error=f"No source {edit}; it may have been removed.", status=404
+                )
+            form = {
+                k: (", ".join(v) if k == "bodies" else str(v))
+                for k, v in found[0].to_json().items()
+                if k != "id"
+            }
+        return state.sources_page(form=form, editing=edit, notice=source_notice(done, id, rows))
+
+    def source_notice(done: str, source_id: str, rows: list[city_sources.Source]) -> str:
+        where = state.city_dir / city_sources.SETTINGS_NAME if state.city_dir else ""
+        match = next((s for s in rows if s.id == source_id), None)
+        if done in ("added", "saved") and match is not None:
+            verb = "Added" if done == "added" else "Saved"
+            return f"{verb} {match.address} for {', '.join(match.bodies)}. Saved to {where}."
+        if done == "removed" and match is None and _SOURCE_ID.match(source_id):
+            return f"Removed {source_id}. Saved to {where}."
+        return ""
+
+    @app.post("/sources/{action}")
+    async def source_action(action: str, request: Request) -> Response:
+        if action not in ("add", "edit", "remove"):
+            return PlainTextResponse("Not found.\n", status_code=404)
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.sources_page(
+                error="Start the desk with --city to save sources.", status=400
+            )
+        source_id = form.get("source_id", "")
+        try:
+            if action == "remove":
+                city_sources.remove_source(state.city_dir, source_id)
+                done, new_id = "removed", source_id
+            else:
+                source = city_sources.make_source(form.get("kind", ""), form)
+                if action == "add":
+                    city_sources.add_source(state.city_dir, source)
+                    done = "added"
+                else:
+                    city_sources.replace_source(state.city_dir, source_id, source)
+                    done = "saved"
+                new_id = source.id
+        except city_sources.SourceError as exc:
+            return state.sources_page(
+                error=f"Not saved: {exc}",
+                error_field=exc.field,
+                form=form,
+                editing=source_id if action == "edit" else "",
+                status=400,
+            )
+        except OSError as exc:
+            return state.sources_page(error=f"Not saved: {exc}", form=form, status=400)
+        return _redirect("/sources?" + urlencode({"done": done, "id": new_id}))
+
+    return app
+
+
+def serve(app: FastAPI, port: int = DEFAULT_PORT) -> None:
+    """Run the desk on 127.0.0.1 until Ctrl+C."""
+    import uvicorn
+
+    uvicorn.run(app, host=BIND_HOST, port=port, log_level="warning")
