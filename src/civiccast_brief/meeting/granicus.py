@@ -17,9 +17,12 @@ import re
 import subprocess
 import urllib.request
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+from civiccast_brief import townlight_imports
 
 USER_AGENT = "CivicCastBrief/0.1 (+https://civiccastbrief.org)"
 FETCH_TIMEOUT_S = 60
@@ -113,7 +116,42 @@ def parse_publisher(page: str, host: str) -> list[Clip]:
 
 
 def list_clips(host: str, view_id: int) -> list[Clip]:
-    return parse_publisher(_fetch(f"https://{host}/ViewPublisher.php?view_id={view_id}"), host)
+    url = f"https://{host}/ViewPublisher.php?view_id={view_id}"
+    page = _fetch(url)
+    python = townlight_imports.configured_python()
+    if not python:
+        return parse_publisher(page, host)
+    try:
+        response = townlight_imports.normalize(
+            python, "granicus", url, page.encode("utf-8"), input_format="viewpublisher-html"
+        )
+        clips = []
+        for meeting in response["meetings"]:
+            recording = meeting["recordings"][0]
+            player = urlsplit(recording["url"])
+            imported_view = int(parse_qs(player.query)["view_id"][0])
+            meeting_date = date.fromisoformat(meeting["meeting_date"])
+            clips.append(
+                Clip(
+                    host=host,
+                    view_id=imported_view,
+                    clip_id=int(meeting["external_id"]),
+                    name=meeting["title"],
+                    date=f"{meeting_date:%B} {meeting_date.day}, {meeting_date:%Y}",
+                    mp3_url=recording.get("audio_url"),
+                )
+            )
+        return clips
+    except (
+        townlight_imports.TownlightImportError,
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise GranicusError(
+            f"Townlight could not read the Granicus meeting list: {error}"
+        ) from error
 
 
 def find_clip(host: str, view_id: int, clip_id: int) -> Clip:
