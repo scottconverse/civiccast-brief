@@ -158,3 +158,36 @@ def test_granicus_recap_points_the_outro_to_the_city_website(tmp_path, monkeypat
 
     assert outro("Watch the full meeting on the city's website.") == []
     assert outro("Watch it on the city's YouTube channel.") != []
+
+
+def test_pipeline_judges_with_the_judge_writer_when_one_is_given(tmp_path, monkeypatch):
+    clip = G.Clip(
+        host="oakland.granicus.com", view_id=2, clip_id=7806, name="Council", date="October 6, 2026"
+    )
+    monkeypatch.setattr(G, "find_clip", lambda *a: clip)
+    monkeypatch.setattr(
+        G, "_fetch", lambda url: (FIX / "oakland-7806.vtt").read_text(encoding="utf-8")
+    )
+    used = []
+
+    def judged(claims, report, *, out, complete, log):
+        used.append(complete)
+        return claims
+
+    monkeypatch.setattr(pipeline, "_judged", judged)
+
+    def writer(prompt):
+        return "[]", {}
+
+    def judge(prompt):
+        return "[]", {}
+
+    common = {
+        "granicus_host": "oakland.granicus.com",
+        "granicus_view_id": 2,
+        "roster_path": OAKLAND,
+        "log": lambda m: None,
+    }
+    pipeline.run("7806", tmp_path / "a", complete=writer, judge_complete=judge, **common)
+    pipeline.run("7806", tmp_path / "b", complete=writer, **common)
+    assert used == [judge, writer]

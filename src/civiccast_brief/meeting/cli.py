@@ -6,6 +6,8 @@
         [--agenda AGENDA.txt] [--roster ROSTER.json] [--ytdlp-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
+With --city and no --model, the recap and the judge use the city's model picks (models.json).
+
 Writes transcript.json, speakers.json and recap.json (plus draft.json, verify-report.json and
 summary.json) under DIR. Exit 0 when every stage finished; 1 when capture or the pipeline failed.
 """
@@ -17,11 +19,13 @@ import json
 import sys
 from pathlib import Path
 
+from civiccast_brief import models
 from civiccast_brief.city import CityError, load_city
 from civiccast_brief.meeting import capture as capture_mod
 from civiccast_brief.meeting import granicus as granicus_mod
-from civiccast_brief.meeting.pipeline import PipelineError, run
+from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
+from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.script import llm
 
 
@@ -36,9 +40,34 @@ def _city_defaults(args: argparse.Namespace) -> None:
         args.view_id = args.view_id if args.view_id is not None else city.granicus_view_id
 
 
+def _writers(args: argparse.Namespace) -> tuple[str, Complete | None, Complete | None]:
+    """The recap and judge writers. ``--model`` is an Ollama model for both; without it a
+    ``--city`` run takes the city's picks (models.json) for the roster's body."""
+    if args.model or not args.city:
+        return args.model or llm.DEFAULT_MODEL, None, None
+    body = load_roster(args.roster).body
+    settings = models.load_settings(args.city)
+    picks = f"recap={settings.pick('recap', body)} judge={settings.pick('judge', body)}"
+    return (
+        picks,
+        _logged(models.complete_for(args.city, "recap", body)),
+        _logged(models.complete_for(args.city, "judge", body)),
+    )
+
+
+def _logged(inner: Complete) -> Complete:
+    def complete(prompt: str) -> tuple[str, object]:
+        text, receipt = inner(prompt)
+        print(f"model: {receipt.line() if hasattr(receipt, 'line') else receipt}", file=sys.stderr)
+        return text, receipt
+
+    return complete
+
+
 def _run(args: argparse.Namespace) -> int:
     try:
         _city_defaults(args)
+        model, recap_writer, judge_writer = _writers(args)
         summary = run(
             args.video_id,
             args.out,
@@ -46,7 +75,9 @@ def _run(args: argparse.Namespace) -> int:
             roster_path=args.roster,
             agenda_path=args.agenda,
             window_s=args.window_minutes * 60.0,
-            model=args.model,
+            model=model,
+            complete=recap_writer,
+            judge_complete=judge_writer,
             reuse_draft=args.reuse_draft,
             diarize=args.diarize,
             granicus_host=args.granicus,
@@ -58,6 +89,8 @@ def _run(args: argparse.Namespace) -> int:
         CityError,
         PipelineError,
         llm.ModelError,
+        models.ModelCallError,
+        models.ModelSettingsError,
         OSError,
     ) as exc:
         print(f"run failed: {exc}", file=sys.stderr)
@@ -98,7 +131,11 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_WINDOW_S / 60,
         help="minutes of transcript per model call",
     )
-    run_cmd.add_argument("--model", default=llm.DEFAULT_MODEL)
+    run_cmd.add_argument(
+        "--model",
+        help="an Ollama model for the recap and the judge (default: the --city picks in "
+        f"models.json, or {llm.DEFAULT_MODEL})",
+    )
     run_cmd.add_argument(
         "--reuse-draft",
         action="store_true",
