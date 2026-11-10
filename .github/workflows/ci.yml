@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    # Only main: a push to a PR branch is already tested by the pull_request run.
+    branches: [main]
     # Docs-only changes start no CI run (docs get push, merge and publish only).
     paths-ignore:
       - '**.md'
