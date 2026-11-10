@@ -25,7 +25,10 @@ export interface Mailer {
 
 export interface AppEnv {
   DB: D1Database;
+  /** Cloudflare's send_email binding. Used when BREVO_API_KEY is not set. */
   EMAIL: Mailer;
+  /** Brevo API key (app.brevo.com/settings/keys/api). Secret. When set, mail goes through Brevo. */
+  BREVO_API_KEY?: string;
   /** HMAC key for links, ids and rate-limit keys. Secret. */
   TOKEN_KEY: string;
   /** 32 random bytes, base64, for sealing email addresses. Secret. */

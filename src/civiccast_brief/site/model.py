@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from civiccast_brief.site import directories
 from civiccast_brief.site.timecode import parse_seconds
 
 CITY_FILE = "city.json"
@@ -49,6 +50,8 @@ class PodcastInfo:
     category: str
     language: str
     explicit: bool
+    #: An Apple subcategory of ``category``, or "" for none.
+    subcategory: str = ""
 
 
 @dataclass(frozen=True)
@@ -353,9 +356,14 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         or "Government",
         language=podcast_check.text(podcast_raw, "language", required=False, limit=20) or "en-us",
         explicit=podcast_check.boolean(podcast_raw, "explicit", False),
+        subcategory=podcast_check.text(podcast_raw, "subcategory", required=False, limit=80),
     )
+    _check_podcast(podcast_check, podcast)
 
     artwork = _local_image(check, data, "artwork", directory)
+    if artwork is not None:
+        for problem in directories.artwork_problems(artwork.read_bytes(), artwork.suffix):
+            check.fail("artwork", problem)
     share = _local_image(check, data, "share_image", directory)
     about_raw = data.get("about", [])
     about: list[str] = []
@@ -381,6 +389,23 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         artwork_source=artwork,
         share_image_source=share,
     )
+
+
+def _check_podcast(check: _Checker, podcast: PodcastInfo) -> None:
+    """The podcast settings Apple Podcasts and Spotify check (see site/directories.py)."""
+    problem = directories.category_problem(podcast.category, podcast.subcategory)
+    if problem:
+        check.fail(*problem)
+    if not directories.LANGUAGE_RE.match(podcast.language):
+        check.fail("language", 'must be an ISO 639 language code, such as "en" or "en-us"')
+    if podcast.owner_email and not directories.EMAIL_RE.match(podcast.owner_email):
+        check.fail(
+            "owner_email",
+            "must be an email address; Spotify sends its ownership code to it",
+        )
+    size = len((podcast.description or "").encode("utf-8"))
+    if size > directories.SHOW_DESCRIPTION_MAX_BYTES:
+        check.fail("description", f"is {size} bytes; Apple allows 4000")
 
 
 def _local_image(check: _Checker, data: dict[str, Any], key: str, directory: Path) -> Path | None:
@@ -529,6 +554,8 @@ def _audio(check: _Checker, data: dict[str, Any]) -> Audio | None:
     duration = check.number(raw, "duration_s")
     size = check.number(raw, "bytes")
     kind = check.text(raw, "type", required=False, limit=40) or "audio/mpeg"
+    if kind not in directories.AUDIO_TYPES:
+        check.fail("audio.type", f"must be one of {', '.join(directories.AUDIO_TYPES)}")
     if url is None or duration is None or size is None:
         return None
     return Audio(url=url, duration_s=duration, bytes=int(size), type=kind)

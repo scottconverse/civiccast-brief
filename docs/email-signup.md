@@ -42,6 +42,33 @@ npx wrangler deploy
 
 `TOKEN_KEY` (random text) and `EMAIL_KEY` (32 random bytes, base64) are Worker secrets. Changing `EMAIL_KEY` makes stored addresses unreadable. Changing `TOKEN_KEY` breaks every link already sent and every stored subscription id.
 
+## Send through Brevo (free plan)
+
+When the Worker secret `BREVO_API_KEY` is set, all mail goes through Brevo's transactional API (`worker/signup/src/brevo.ts`). Without it, the Worker uses Cloudflare's `send_email` binding. Brevo's free plan sends 300 emails a day and adds a "Sent with Brevo" line to each one.
+
+Nobody has sent through a real Brevo account yet. The code was tested against a stand-in for Brevo's API (`worker/signup/test/brevo.test.ts`) that checks each request against Brevo's published format.
+
+What a person fills in:
+
+1. **Account.** Sign up for the free plan at brevo.com.
+2. **Sender.** In Brevo, go to Senders, Domains & Dedicated IPs. Either add `brief@civiccastbrief.org` as a sender and enter the 6-digit code Brevo emails to it, or authenticate the whole domain: Brevo shows DNS records (a Brevo code TXT record, DKIM and DMARC) to add in Cloudflare DNS for `civiccastbrief.org`. Domain authentication gives better delivery. The sender must match `FROM_EMAIL` in `wrangler.jsonc`.
+3. **API key.** Go to Settings, then SMTP & API, then API Keys (app.brevo.com/settings/keys/api), and create a key. Brevo shows it once.
+4. **Allow the Worker to call Brevo.** Cloudflare Workers do not send from fixed IP addresses. In Brevo, go to Settings, then Security, then Authorized IPs, and turn off IP blocking for the API. Brevo can turn this blocking on by itself, and then every send fails with a 401.
+5. **Give the key to the Worker.** From `worker/signup`:
+
+   ```bash
+   npx wrangler secret put BREVO_API_KEY
+   ```
+
+   Paste the key when asked. No deploy is needed for a secret change.
+
+To go back to Cloudflare's sender, delete the secret with `npx wrangler secret delete BREVO_API_KEY`.
+
+What changes with Brevo:
+- Brevo's `headers` field takes only non-standard headers, so the Worker leaves out `List-Unsubscribe`, `List-Unsubscribe-Post`, `List-Id` and `Auto-Submitted`. The unsubscribe link in every email body still works. Brevo may add its own unsubscribe header (not checked).
+- A failed send is stored in `deliveries.error` as Brevo's code and message, for example `not_enough_credits: Brevo 402: ...` or `unauthorized: Brevo 401: ...`.
+- More than 300 sends in a day: Brevo refuses the rest. Each refused episode email is stored as failed and tried again by later runs, up to 3 attempts in all. Runs are 15 minutes apart, so all 3 can fall on the same day and that email is then not sent. A refused confirmation email shows the "could not send" page.
+
 ## Sending limits on the free plan
 
-On the Workers Free plan, Cloudflare only delivers to addresses verified in the account's Email Routing destinations. Sending to the public needs Workers Paid. Until then, sign-ups from other addresses are refused with a "could not send" page.
+On the Workers Free plan, Cloudflare only delivers to addresses verified in the account's Email Routing destinations. Sending to the public needs Workers Paid, or Brevo (above). Until then, sign-ups from other addresses are refused with a "could not send" page.

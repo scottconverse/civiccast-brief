@@ -122,6 +122,7 @@ def city_settings(
             "owner_email": podcast_email,
             "description": f"Short, cited recaps of {name} public meetings, read by two AI hosts.",
             "category": "Government",
+            "subcategory": "",
             "language": "en-us",
             "explicit": False,
         },

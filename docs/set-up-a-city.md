@@ -31,6 +31,9 @@ Then run, for a YouTube city:
 python -m civiccast_brief setup cities/yourcity --slug yourcity --name "Your City" --state "Your State" --contact-email corrections@example.org --podcast-email podcast@example.org --roster-page https://yourcity.gov/council
 ```
 
+The `podcast` settings in `city.json` (category, language, the email Spotify writes to, show art) are
+explained in [List a city show on Apple Podcasts and Spotify](podcast-directories.md).
+
 For a Granicus city, add `--granicus yourcity.granicus.com --view-id 2`. Use `--body` when the
 meetings are not a "City Council" (for example `--body "Board of Supervisors"`).
 
