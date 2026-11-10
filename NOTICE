@@ -4,3 +4,7 @@ Copyright 2026 Scott Converse
 The email sign-up Worker (worker/signup) adapts the subscribe flow, signed links
 and rate limit from civiccast-native, Copyright (c) The CivicCast Authors,
 licensed under the Apache License, Version 2.0.
+
+The record package (src/civiccast_brief/record) is copied from TownRecord at commit feecd4d,
+and the speech package (src/civiccast_brief/speech) from textflowkit at commit 4c57e6e.
+Both are Copyright 2026 Scott Converse and licensed under the Apache License, Version 2.0.

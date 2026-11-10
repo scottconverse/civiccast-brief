@@ -1,26 +1,35 @@
-"""Caption capture, through TownRecord's caption command in TownRecord's own venv.
+"""Caption capture for one YouTube meeting video.
 
-TownRecord stays a separate install: its dependency tree is not taken into civiccast_brief. The
-bridge (townrecord_bridge.py) runs with ``-I`` in that venv and prints JSON, which is read here.
+This runs in-process with the caption code copied into CivicCast Brief from TownRecord
+(:mod:`civiccast_brief.record`): ``record.capture.command`` builds and runs the spec 8.3 command
+(auto-captions only, srv3 first, no media download) and ``record.captions.parse`` reads the file.
+Nothing outside CivicCast Brief needs to be installed.
+
+yt-dlp itself runs from the private runtime CivicCast Brief installs for it
+(``record.runtime``), under ``~/.civiccast-brief/record/runtimes/yt-dlp``. That keeps yt-dlp
+current without touching the Python CivicCast Brief runs in.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-BRIDGE = Path(__file__).with_name("townrecord_bridge.py")
-TOWNRECORD_PYTHON_ENV = "CIVICCAST_TOWNRECORD_PYTHON"
-DEFAULT_TOWNRECORD_PYTHON = r"C:\dev\civiccast-brief-scratch\townrecord-venv\Scripts\python.exe"
-BRIDGE_TIMEOUT_S = 1000
+from civiccast_brief.record import proc
+from civiccast_brief.record.captions.parse import parse_srv3, parse_vtt
+from civiccast_brief.record.capture import command, sidecar
+
+CAPTION_TIMEOUT_S = 900
+
+#: Runs one child: ``runner(argv, timeout_s=..., env=...)`` -> ``proc.ProcessResult``.
+Runner = Callable[..., proc.ProcessResult]
 
 
 class CaptureError(RuntimeError):
-    """The caption fetch failed, with the reason from TownRecord's command."""
+    """The caption fetch failed, with the reason from the caption command."""
 
 
 @dataclass
@@ -32,39 +41,119 @@ class Capture:
     segments: list[dict[str, Any]] = field(default_factory=list)
 
 
-def townrecord_python(explicit: str | None = None) -> str:
-    return explicit or os.environ.get(TOWNRECORD_PYTHON_ENV) or DEFAULT_TOWNRECORD_PYTHON
+@dataclass(frozen=True)
+class YtDlp:
+    """The Python that runs ``-m yt_dlp``, and the JavaScript runtime it is told to use."""
+
+    python: str
+    js_runtime: str | None = None
 
 
-def capture_captions(video_id: str, work_dir: Path, *, python: str | None = None) -> Capture:
+def ytdlp(explicit: str | None = None) -> YtDlp:
+    """The yt-dlp to run: ``explicit`` when given, else CivicCast Brief's private runtime.
+
+    A missing runtime is a plain error that says to run setup, never a quiet fallback to
+    whatever Python is on the machine.
+    """
+    if explicit:
+        return YtDlp(python=explicit)
+    from civiccast_brief.record.config import Settings
+    from civiccast_brief.record.runtime import RuntimeManager, RuntimeNotInstalled
+
+    manager = RuntimeManager(root=Settings.from_env().runtime_root)
+    try:
+        return YtDlp(python=manager.interpreter(), js_runtime=manager.javascript())
+    except RuntimeNotInstalled as exc:
+        raise CaptureError(f"yt-dlp is not set up yet: {exc}") from exc
+
+
+def _caption_file(work: Path, video_id: str) -> Path | None:
+    """The publisher's own track (``<id>.en.<ext>``) first, then any other, srv3 before vtt."""
+    for suffix in ("srv3", "vtt"):
+        uploaded = work / f"{video_id}.{sidecar.UPLOADED_TRACK}.{suffix}"
+        if uploaded.exists() and uploaded.stat().st_size > 0:
+            return uploaded
+    for suffix in ("srv3", "vtt"):
+        for candidate in sorted(work.glob(f"{video_id}*.{suffix}")):
+            if candidate.stat().st_size > 0:
+                return candidate
+    return None
+
+
+def _info(work: Path, video_id: str) -> dict[str, Any]:
+    info_file = work / f"{video_id}.info.json"
+    if not info_file.exists():
+        return {}
+    raw = json.loads(info_file.read_text(encoding="utf-8"))
+    keys = ("id", "title", "duration", "upload_date", "webpage_url", "channel")
+    return {key: raw.get(key) for key in keys}
+
+
+def _run(runner: Runner, argv: list[str], video_id: str) -> proc.ProcessResult:
+    try:
+        return command.run_capture(runner, argv, timeout_s=CAPTION_TIMEOUT_S)
+    except (proc.ProcessFailed, proc.ProcessTimedOut) as exc:
+        raise CaptureError(f"could not run the caption command for {video_id}: {exc}") from exc
+
+
+def capture_captions(
+    video_id: str,
+    work_dir: Path,
+    *,
+    python: str | None = None,
+    runner: Runner = proc.run,
+) -> Capture:
     """Fetch the auto-caption track for one YouTube video id into ``work_dir``.
 
-    Reuses a caption file already in ``work_dir`` (the bridge checks), so a second run does not
-    call YouTube again.
+    Reuses a caption file already in ``work_dir``, so a second run does not call YouTube again.
+    ``python`` names the interpreter that runs yt-dlp; by default it is the private runtime.
     """
     if not video_id.replace("-", "").replace("_", "").isalnum():
         raise CaptureError(f"not a YouTube video id: {video_id!r}")
     work_dir.mkdir(parents=True, exist_ok=True)
-    interpreter = townrecord_python(python)
-    try:
-        done = subprocess.run(
-            [interpreter, "-I", str(BRIDGE), video_id, str(work_dir)],
-            capture_output=True,
-            timeout=BRIDGE_TIMEOUT_S,
-            check=False,
+
+    caption = _caption_file(work_dir, video_id)
+    reused = caption is not None
+    if caption is None:
+        tool = ytdlp(python)
+        argv = command.capture_argv(
+            interpreter=tool.python,
+            work_dir=work_dir,
+            archive=work_dir / "download-archive.txt",
+            url=command.WATCH_URL.format(platform_video_id=video_id),
+            js_runtime=tool.js_runtime,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise CaptureError(f"could not run TownRecord's caption command: {exc}") from exc
-    stdout = done.stdout.decode("utf-8", errors="replace").strip().splitlines()
-    payload = json.loads(stdout[-1]) if stdout else {"error": "no output from the bridge"}
-    if done.returncode != 0 or "error" in payload:
-        raise CaptureError(f"caption fetch failed for {video_id}: {json.dumps(payload)}")
+        result = _run(runner, argv, video_id)
+        info_file = work_dir / f"{video_id}.info.json"
+        if (
+            result.ok
+            and info_file.exists()
+            and sidecar.has_uploaded_track(json.loads(info_file.read_text(encoding="utf-8")))
+        ):
+            # Spec 8.3's second request: the town uploaded its own captions.
+            result = _run(runner, command.uploaded_argv(argv), video_id)
+        if not result.ok:
+            detail = {
+                "returncode": result.returncode,
+                "stderr_tail": result.last_stderr_line(),
+                "bot_check": command.bot_check_marker(result.stderr),
+            }
+            raise CaptureError(f"caption fetch failed for {video_id}: yt-dlp failed {detail}")
+        caption = _caption_file(work_dir, video_id)
+        if caption is None:
+            raise CaptureError(
+                f"caption fetch failed for {video_id}: yt-dlp finished but wrote no caption file "
+                "(no English captions?)"
+            )
+
+    parser = parse_srv3 if caption.suffix == ".srv3" else parse_vtt
+    segments = parser(caption.read_bytes())
     return Capture(
         video_id=video_id,
-        caption_file=Path(payload["caption_file"]),
-        caption_reused=bool(payload["caption_reused"]),
-        info=dict(payload.get("info") or {}),
-        segments=list(payload["segments"]),
+        caption_file=caption,
+        caption_reused=reused,
+        info=_info(work_dir, video_id),
+        segments=[{"start_ms": s.start_ms, "end_ms": s.end_ms, "text": s.text} for s in segments],
     )
 
 

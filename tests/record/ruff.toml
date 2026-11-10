@@ -1,0 +1,11 @@
+# Lint settings of TownRecord, where this code was copied from.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# The renamed environment variables (CIVICCAST_RECORD_*) push a few strings past 100.
+ignore = ["E501"]
+
+[format]
+quote-style = "double"

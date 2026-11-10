@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 
 import pytest
 
@@ -54,22 +55,27 @@ def test_a_voice_never_becomes_a_name():
     report = speakers_report("v", segments, turns, {"calls": []}, {"status": "run"})
     assert report["turns"][0]["speaker"] == "unknown"
     assert report["turns"][0]["voice"] == "voice 01"
-    assert "textflowkit diarization" in report["method"]
+    assert "speech-program diarization" in report["method"]
 
 
-def test_bridge_error_is_raised_with_its_reason(tmp_path, monkeypatch):
+def test_the_diarizer_is_the_speech_program_and_its_error_is_raised(tmp_path, monkeypatch):
+    seen = {}
+
     def fake_run(argv, **kwargs):
+        seen["argv"] = argv
         return subprocess.CompletedProcess(argv, 1, stdout=b'{"error": "no model in cache"}\n')
 
     monkeypatch.setattr(D.subprocess, "run", fake_run)
     with pytest.raises(D.DiarizeError, match="no model in cache"):
-        D.run_diarization(tmp_path / "a.wav", tmp_path / "out.json", python="py")
+        D.run_diarization(tmp_path / "a.wav", tmp_path / "out.json")
+    assert seen["argv"][:4] == [sys.executable, "-m", "civiccast_brief.speech", "diarize"]
+    assert seen["argv"][4:] == [str(tmp_path / "a.wav"), str(tmp_path / "out.json")]
 
 
 def test_existing_diarization_file_is_reused(tmp_path, monkeypatch):
     out = tmp_path / "out.json"
     out.write_text(json.dumps({"turns": [{"start": 0, "end": 1, "speaker": "A"}]}))
-    monkeypatch.setattr(D.subprocess, "run", lambda *a, **k: pytest.fail("bridge was called"))
+    monkeypatch.setattr(D.subprocess, "run", lambda *a, **k: pytest.fail("diarizer was called"))
     assert D.spans_from(D.run_diarization(tmp_path / "a.wav", out)) == [D.Span(0, 1, "A")]
 
 
@@ -78,11 +84,11 @@ def test_pipeline_records_a_failed_diarization_and_goes_on(tmp_path, monkeypatch
         raise D.DiarizeError("audio fetch failed for v")
 
     segments = [seg(0, 1)]
-    status = pipeline._diarize("v", tmp_path, segments, True, boom, None, lambda m: None)
+    status = pipeline._diarize("v", tmp_path, segments, True, boom, lambda m: None)
     assert status == {"status": "failed", "reason": "audio fetch failed for v"}
     assert segments[0].voice is None
 
 
 def test_pipeline_not_requested():
-    status = pipeline._diarize("v", None, [], False, None, None, lambda m: None)
+    status = pipeline._diarize("v", None, [], False, None, lambda m: None)
     assert status["status"] == "not run"

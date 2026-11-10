@@ -11,8 +11,8 @@ writes. Run the commands from the repository folder with the project's Python
 | Python 3.12 and `uv` | everything | `uv sync` installs the project. |
 | `ffmpeg` on PATH | audio, Granicus audio | |
 | Ollama at `127.0.0.1:11434` with the writer model | recap, script | The default model is `deepseek-v4.1-flash:1017-cloud`. Pass `--model` to use another. |
-| TownRecord in its own venv | YouTube capture | Set `CIVICCAST_TOWNRECORD_PYTHON` to that venv's `python.exe`. Not needed for a Granicus city. |
-| textflowkit in its own venv | `--diarize` only | Set `CIVICCAST_TEXTFLOWKIT_PYTHON`. Without `--diarize`, names come from the roll call only. |
+| yt-dlp, installed by CivicCast Brief | YouTube capture | Run `python -m civiccast_brief tools --test-video <URL>` once, with any public YouTube meeting video that has captions. It installs yt-dlp into `~/.civiccast-brief/record/runtimes/yt-dlp` and makes it active only after it fetches that video's captions. Not needed for a Granicus city. |
+| The `diarize` extra and a Hugging Face token | `--diarize` only | `uv sync --extra diarize`, and set `HF_TOKEN` to a free Hugging Face token that has accepted the pyannote model terms. Without `--diarize`, names come from the roll call only. |
 | A voice engine | audio | Chatterbox or Dia2. The default voice is not picked yet, so the engine setup is not written up here. |
 
 ## 1. Start the city folder

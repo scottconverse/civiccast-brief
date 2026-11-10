@@ -231,7 +231,7 @@ def speakers_report(
         "method": (
             "names: roll call only; turns: caption turn marks; "
             + (
-                "voices: textflowkit diarization"
+                "voices: speech-program diarization"
                 if (diarization or {}).get("status") == "run"
                 else "voices: none"
             )

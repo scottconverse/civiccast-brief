@@ -1,0 +1,4 @@
+# Lint settings of textflowkit, where this code was copied from (ruff defaults,
+# line length 100). Kept as textflowkit had them so the copy stays a copy.
+line-length = 100
+target-version = "py312"
