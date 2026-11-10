@@ -109,8 +109,18 @@ page prints it, and set `retrieved` to today's date:
 {"name": "Jane Doe", "first": "Jane", "last": "Doe", "role": "Mayor"}
 ```
 
-The roster is the only source of speaker names. A caption name counts only when it matches a roster
-name exactly. Every other voice stays "unknown" for the producer to name. `src/civiccast_brief/meeting/rosters/`
+The roster is the only list of speaker names. A line gets a name in three ways:
+
+- the member answered the roll call;
+- the chair gave them the floor ("Council member Crist?"), matched to a roster name even when the
+  captions mishear it a little; a name that is only mentioned ("I agree with council member Crist")
+  names no one;
+- with `--diarize`, the line is in the same voice as that member's other named turns.
+
+Every other line stays "unknown" for the producer to name. On five Longmont council meetings in
+November 2026 this named 22 to 33 percent of caption lines (before, about one line a meeting). A
+hand-check of 50 lines found one or two likely wrong. That check read the captions; it was not
+checked against the audio. `src/civiccast_brief/meeting/rosters/`
 has two filled-in examples (Longmont and Oakland).
 
 ## 3. Run one meeting

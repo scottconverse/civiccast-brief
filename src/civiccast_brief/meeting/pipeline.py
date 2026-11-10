@@ -37,7 +37,9 @@ from civiccast_brief.meeting.recap import (
 from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.meeting.speakers import (
     apply_turns,
+    label_recognitions,
     label_roll_call,
+    label_voices,
     speakers_report,
     split_turns,
 )
@@ -146,9 +148,17 @@ def run(
     roster = load_roster(roster_path)
     turns = split_turns(segments)
     roll_call = label_roll_call(turns, roster)
+    recognitions = label_recognitions(segments, turns, roster)
     apply_turns(segments, turns)
     diarization = _diarize(video_id, out, segments, diarize, fetch_audio, log)
-    speakers = speakers_report(video_id, segments, turns, roll_call, diarization)
+    voices = (
+        label_voices(segments, turns, recognitions["recognitions"])
+        if diarization.get("status") == "run"
+        else None
+    )
+    speakers = speakers_report(
+        video_id, segments, turns, roll_call, diarization, recognitions, voices
+    )
     speakers["roster"] = {
         "file": str(roster_path),
         "city": roster.city,
