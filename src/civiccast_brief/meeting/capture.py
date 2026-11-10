@@ -20,7 +20,7 @@ from typing import Any
 
 from civiccast_brief.record import proc
 from civiccast_brief.record.captions.parse import parse_srv3, parse_vtt
-from civiccast_brief.record.capture import command
+from civiccast_brief.record.capture import command, sidecar
 
 CAPTION_TIMEOUT_S = 900
 
@@ -68,6 +68,11 @@ def ytdlp(explicit: str | None = None) -> YtDlp:
 
 
 def _caption_file(work: Path, video_id: str) -> Path | None:
+    """The publisher's own track (``<id>.en.<ext>``) first, then any other, srv3 before vtt."""
+    for suffix in ("srv3", "vtt"):
+        uploaded = work / f"{video_id}.{sidecar.UPLOADED_TRACK}.{suffix}"
+        if uploaded.exists() and uploaded.stat().st_size > 0:
+            return uploaded
     for suffix in ("srv3", "vtt"):
         for candidate in sorted(work.glob(f"{video_id}*.{suffix}")):
             if candidate.stat().st_size > 0:
@@ -82,6 +87,13 @@ def _info(work: Path, video_id: str) -> dict[str, Any]:
     raw = json.loads(info_file.read_text(encoding="utf-8"))
     keys = ("id", "title", "duration", "upload_date", "webpage_url", "channel")
     return {key: raw.get(key) for key in keys}
+
+
+def _run(runner: Runner, argv: list[str], video_id: str) -> proc.ProcessResult:
+    try:
+        return command.run_capture(runner, argv, timeout_s=CAPTION_TIMEOUT_S)
+    except (proc.ProcessFailed, proc.ProcessTimedOut) as exc:
+        raise CaptureError(f"could not run the caption command for {video_id}: {exc}") from exc
 
 
 def capture_captions(
@@ -111,10 +123,15 @@ def capture_captions(
             url=command.WATCH_URL.format(platform_video_id=video_id),
             js_runtime=tool.js_runtime,
         )
-        try:
-            result = command.run_capture(runner, argv, timeout_s=CAPTION_TIMEOUT_S)
-        except (proc.ProcessFailed, proc.ProcessTimedOut) as exc:
-            raise CaptureError(f"could not run the caption command for {video_id}: {exc}") from exc
+        result = _run(runner, argv, video_id)
+        info_file = work_dir / f"{video_id}.info.json"
+        if (
+            result.ok
+            and info_file.exists()
+            and sidecar.has_uploaded_track(json.loads(info_file.read_text(encoding="utf-8")))
+        ):
+            # Spec 8.3's second request: the town uploaded its own captions.
+            result = _run(runner, command.uploaded_argv(argv), video_id)
         if not result.ok:
             detail = {
                 "returncode": result.returncode,

@@ -91,3 +91,36 @@ def test_origin_reads_the_manual_subtitle_flag_from_the_info_file(tmp_path):
     (tmp_path / "abc.info.json").write_text(json.dumps({"subtitles": {"en": []}}), encoding="utf-8")
     assert C.caption_origin(tmp_path, "abc") == {"kind": "uploaded"}
     assert C.caption_origin(tmp_path, "missing")["kind"] == "unknown"
+
+
+class PublisherTrackRunner(FakeRunner):
+    """The first request writes YouTube's en-orig file and a sidecar that lists an uploaded "en"."""
+
+    def __call__(self, argv, *, timeout_s, env, cwd=None):
+        self.calls.append(list(argv))
+        track = argv[argv.index("--sub-langs") + 1]
+        (self.work / f"abc123XYZ_-.{track}.srv3").write_bytes(SRV3)
+        info = {"id": "abc123XYZ_-", "title": "t", "subtitles": {"en": [{"ext": "srv3"}]}}
+        (self.work / "abc123XYZ_-.info.json").write_text(json.dumps(info), encoding="utf-8")
+        return proc.ProcessResult(argv=tuple(argv), returncode=0, stdout=b"", stderr="")
+
+
+def test_a_publisher_track_is_fetched_by_a_second_request(tmp_path):
+    """Spec 8.3: en-orig first; the town's own "en" track by a second request, and it is used."""
+    work = tmp_path / "raw"
+    work.mkdir()
+    runner = PublisherTrackRunner(work)
+    result = C.capture_captions("abc123XYZ_-", work, python="python-test.exe", runner=runner)
+    first, second = runner.calls
+    assert first[first.index("--sub-langs") + 1] == "en-orig"
+    assert second[second.index("--sub-langs") + 1] == "en"
+    assert "--write-auto-subs" not in second
+    assert result.caption_file.name == "abc123XYZ_-.en.srv3"
+
+
+def test_youtube_captions_only_make_one_request(tmp_path):
+    work = tmp_path / "raw"
+    work.mkdir()
+    runner = FakeRunner(work)
+    C.capture_captions("abc123XYZ_-", work, python="python-test.exe", runner=runner)
+    assert len(runner.calls) == 1
