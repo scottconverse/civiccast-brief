@@ -34,7 +34,7 @@ SPEC_8_3 = [
     "--write-auto-subs",
     "--write-info-json",
     "--sub-langs",
-    "en",
+    "en-orig",
     "--sub-format",
     "srv3/vtt/best",
     "--js-runtimes",

@@ -139,7 +139,9 @@ def capture_argv(
         "--write-auto-subs",
         "--write-info-json",
         "--sub-langs",
-        "en",
+        # "en-orig" is YouTube's own English track. On some videos "en" is a translation of it,
+        # and YouTube refuses translations with HTTP 429 (Longmont qkZxO5zzi0A, Nov 9 2026).
+        "en-orig",
         "--sub-format",
         "srv3/vtt/best",
         "--js-runtimes",
