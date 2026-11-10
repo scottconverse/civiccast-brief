@@ -155,11 +155,22 @@ def verify(
         key = reason.split(":")[0]
         reason_counts[key] = reason_counts.get(key, 0) + 1
 
+    # The prompt shows "[Name] " before named lines. A quote that copies that tag is still
+    # verbatim once the tag is removed. Only speaker names are removed: captions also hold
+    # "[laughter]" and the like, which are real transcript text.
+    names = sorted({s.speaker for s in segments if s.speaker and s.speaker != "unknown"})
+    name_tag = (
+        re.compile(r"\[(?:" + "|".join(re.escape(n) for n in names) + r")\]\s*") if names else None
+    )
+
     for position, item in enumerate(draft):
         text = str(item.get("text", "")).strip()
         topic = str(item.get("topic", "")).strip() or "General"
         cited = str(item.get("timestamp", "")).strip()
-        quote = normalize_quote(str(item.get("quote", "")))
+        raw_quote = str(item.get("quote", ""))
+        if name_tag is not None:
+            raw_quote = name_tag.sub("", raw_quote)
+        quote = normalize_quote(raw_quote)
         if not text or not quote or not re.match(r"^\d{1,2}:\d{2}:\d{2}$", cited):
             drop(position, text, "missing text, quote or timestamp")
             continue

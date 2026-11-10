@@ -176,6 +176,7 @@ def test_speakers_report_counts_named_and_unknown_lines():
     ]
     turns = S.split_turns(segments)
     roll = S.label_roll_call(turns, ROSTER)
+    S.apply_turns(segments, turns)
     report = S.speakers_report("vid", segments, turns, roll)
     assert report["counts"]["segments"] == 4
     assert report["counts"]["named_segments"] == 1

@@ -30,22 +30,43 @@ def test_transcript_lines_show_turn_marks_and_timestamps():
     assert R.transcript_lines(segments, window) == "0:00:05  >> Okay\n0:01:05  next line"
 
 
-def test_speaker_key_lists_named_and_title_only_turns_inside_the_window():
-    named = Turn(index=1, first=0, last=0, start=5.0, end=6.0, speaker="Matthew Popkin")
-    title = Turn(index=2, first=1, last=1, start=20.0, end=21.0, title="council member")
-    later = Turn(index=3, first=5, last=5, start=900.0, end=901.0, speaker="Diane Crist")
-    segments = [seg(i * 10.0, f"line {i}") for i in range(6)]
+def test_transcript_lines_show_the_speaker_of_each_named_line():
+    segments = [
+        seg(5.0, "Thank you, Mayor.", turn=True, speaker="Diane Crist"),
+        seg(6.0, "staff answer", speaker="unknown"),
+    ]
     window = R.windows(segments, 1800)[0]
-    key = R.speaker_key([named, title, later], window)
-    assert "0:00:05: Matthew Popkin (roll call)" in key
-    assert "a council member, name not matched" in key
-    assert "Diane Crist" in key  # turn 3 starts at line 5, still in this window
+    assert R.transcript_lines(segments, window) == (
+        "0:00:05  >> [Diane Crist] Thank you, Mayor.\n0:00:06  staff answer"
+    )
+
+
+def test_speaker_key_names_each_line_run_and_how_it_was_named():
+    # Turn 1 was named by a recognition. Its last line is in another voice and stays unknown.
+    # Turn 2 was not named, but its voice was, so its lines carry the name with basis "voice".
+    named = Turn(index=1, first=0, last=2, start=0.0, end=21.0, speaker="Diane Crist")
+    named.basis = "recognition"
+    title = Turn(index=2, first=3, last=3, start=30.0, end=31.0, title="council member")
+    by_voice = Turn(index=3, first=4, last=5, start=40.0, end=51.0)
+    segments = [seg(i * 10.0, f"line {i}") for i in range(6)]
+    for i, name in enumerate(
+        ["Diane Crist", "Diane Crist", "unknown", "unknown", "Matthew Popkin", "Matthew Popkin"]
+    ):
+        segments[i].speaker = name
+    window = R.windows(segments, 1800)[0]
+    key = R.speaker_key(segments, [named, title, by_voice], window, ROSTER).splitlines()
+    assert key[0].startswith("- 0:00:00 to 0:00:11: Diane Crist")
+    assert key[0].endswith("(the chair gave them the floor)")
+    assert key[1] == "- 0:00:30: a council member, name not matched (roll call)"
+    assert key[2].startswith("- 0:00:40 to 0:00:51: Matthew Popkin")
+    assert key[2].endswith("(the same voice as their other named turns)")
+    assert len(key) == 3
 
 
 def test_empty_speaker_key_says_none():
     segments = [seg(0.0, "x")]
     window = R.windows(segments, 1800)[0]
-    assert R.speaker_key([], window) == "- none in this part"
+    assert R.speaker_key(segments, [], window) == "- none in this part"
 
 
 def test_prompt_carries_agenda_roster_speaker_key_and_lines():

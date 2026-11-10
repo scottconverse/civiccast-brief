@@ -217,26 +217,28 @@ def speakers_report(
     turns: list[Turn],
     roll_call: dict[str, Any],
     diarization: dict[str, Any] | None = None,
+    recognitions: dict[str, Any] | None = None,
+    voices: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    named_segments = sum(turn.last - turn.first + 1 for turn in turns if turn.speaker is not None)
+    """The speakers.json record. Counts are per caption line, from each line's speaker."""
+    named_segments = sum(1 for segment in segments if segment.speaker not in (None, "", UNKNOWN))
     title_only_segments = sum(
         turn.last - turn.first + 1
         for turn in turns
         if turn.speaker is None and turn.title is not None
     )
     total = len(segments)
+    diarized = (diarization or {}).get("status") == "run"
     return {
         "video_id": video_id,
         "diarization": diarization or DIARIZATION_NOT_REQUESTED,
         "method": (
-            "names: roll call only; turns: caption turn marks; "
-            + (
-                "voices: speech-program diarization"
-                if (diarization or {}).get("status") == "run"
-                else "voices: none"
-            )
+            "names: roll call and chair recognitions; turns: caption turn marks; "
+            + ("voices: speech-program diarization" if diarized else "voices: none")
         ),
         "roll_call": roll_call,
+        "recognitions": recognitions or {"method": "chair_recognition", "recognitions": []},
+        "voices": voices or {"method": "voice", "status": "not run (no diarization)"},
         "turns": [
             {
                 "turn": turn.index,
@@ -261,4 +263,311 @@ def speakers_report(
             "turns": len(turns),
             "named_turns": sum(1 for t in turns if t.speaker is not None),
         },
+    }
+
+
+# --- Chair recognitions and voices -------------------------------------------------------------
+#
+# The roll call names only the few lines that answer it. Most of a meeting is people the chair
+# hands the floor to ("Council member Marcen", "Mayor Pro Tem McCoy"), and the captioner spells
+# those names by ear. The chair-recognition reader copied from TownRecord
+# (civiccast_brief.record.records.speakers) reads each hand-off and matches the spoken name to the
+# roster by sound, with a cutoff and a margin over the runner-up calibrated on Longmont captions.
+# A recognition names the turn after it. When diarization ran, a voice whose named turns agree
+# names that voice's other turns too.
+
+#: A voice is named only when at least this many of its turns were named, and ...
+MIN_VOICE_TURNS = 2
+#: ... at least this share of its named turns name the same person.
+MIN_VOICE_SHARE = 0.8
+#: The chair's voice says at least this many recognitions, and this share of them.
+MIN_CHAIR_RECOGNITIONS = 5
+MIN_CHAIR_SHARE = 0.2
+#: A named turn whose own voice has no name of its own keeps its name only when that voice is on
+#: at least this share of the turn's voiced lines (the chair's not counted). A turn the captioner
+#: did not split, such as a question and a staff answer, is left unknown.
+MIN_OWN_SHARE = 0.8
+#: A voice with no name of its own lends a turn's name to its lines only when at least this share
+#: of all that voice's lines fall in turns named that person. A staff voice that presents at
+#: length elsewhere fails it, so a staff answer inside a member's turn stays unknown.
+MIN_HOME_SHARE = 0.5
+_GLUED_PRO_TEM = re.compile(r"^(?:prom|port|pro)(?=[a-z]{3,})", re.IGNORECASE)
+
+
+def _people(roster: Roster) -> tuple[list[Any], dict[str, Any]]:
+    from civiccast_brief.record.repo.rows import Person
+
+    people = [Person(id=i + 1, name=m.name, created_at="") for i, m in enumerate(roster.members)]
+    holders: dict[str, Any] = {}
+    for person, member in zip(people, roster.members, strict=True):
+        role = member.role.casefold()
+        if role in ("mayor", "mayor pro tem"):
+            holders[role] = person
+    return people, holders
+
+
+def name_recognition(title_kind: str, spoken: str, roster: Roster) -> tuple[str | None, Any]:
+    """The roster name one chair recognition gives, or None, with the match behind it.
+
+    A seat title ("Mayor") names its holder. "Mayor Pro Tem McCoy" names McCoy by sound when the
+    roster has no pro tem holder, because the name itself was said. The captioner sometimes glues
+    the pro tem word onto the name ("Mayor Promcoy"); that is read as a pro tem naming of "mcoy",
+    never as the mayor.
+    """
+    from civiccast_brief.record.records import speakers as rs
+
+    people, holders = _people(roster)
+    glued = _GLUED_PRO_TEM.match(spoken)
+    if title_kind == "mayor" and glued:
+        title_kind, spoken = "mayor_pro_tem", spoken[glued.end() :]
+    if title_kind == "mayor_pro_tem" and "mayor pro tem" not in holders:
+        rest = rs._without_the_title(spoken)
+        if not rest:
+            return None, None
+        match = rs.match_name(rest, people)
+    else:
+        match = rs.read_naming(title_kind, spoken, officials=people, holders=holders)
+    return (match.person.name if match.person else None), match
+
+
+#: Words that may follow the name in a hand-off ("Council member Popkin, go ahead, please.").
+_HAND_OFF_TAIL = frozenset(
+    [
+        "go",
+        "ahead",
+        "please",
+        "thank",
+        "thanks",
+        "you",
+        "quickly",
+        "real",
+        "quick",
+        "yes",
+        "okay",
+        "ok",
+        "um",
+        "uh",
+        "floor",
+        "the",
+        "have",
+    ]
+)
+#: A title right after one of these words is a mention ("seconded by Council Member Popkin",
+#: "carries six to one with Council Member Crist", "as Council Member Prieto said").
+_MENTION_BEFORE = frozenset(["with", "by", "from", "to", "as", "what", "and", "of", "about", "for"])
+_TITLE_WORDS = re.compile(r"\b(council\s*(?:member|man|woman)s?|mayor)\b", re.IGNORECASE)
+
+
+def is_hand_off(evidence: str, spoken: str) -> bool:
+    """True when the line hands the floor to the named person, not when it mentions them.
+
+    The name must end the line, be followed only by words such as "go ahead" or "thank you",
+    or open a question to them ("Council member Popkin, did you have another item?"). The
+    title must not follow a word such as "with", "by" or "as". Measured on five Longmont
+    meetings (October 2026): about one in eight recognitions read by the TownRecord code was a
+    mention, and naming the next turn from it named the wrong person.
+    """
+    first = spoken.split()[0].lower() if spoken.split() else ""
+    text = evidence.replace(">>", " ").strip()
+    at = text.lower().rfind(first) if first else -1
+    if at < 0:
+        return False
+    rest = text[at + len(first) :]
+    tail = re.sub(r"[^\w\s']", " ", rest).lower().split()
+    question = rest.lstrip().startswith(",") and text.endswith("?")
+    if not question and any(word not in _HAND_OFF_TAIL for word in tail):
+        return False
+    titles = list(_TITLE_WORDS.finditer(text[:at]))
+    if titles:
+        before = re.sub(r"[^\w\s']", " ", text[: titles[-1].start()]).lower().split()
+        if before and before[-1] in _MENTION_BEFORE:
+            return False
+    return True
+
+
+def label_recognitions(
+    segments: list[Segment], turns: list[Turn], roster: Roster
+) -> dict[str, Any]:
+    """Name each turn the chair hands the floor to. A turn the roll call named keeps its name."""
+    from civiccast_brief.record.records import speakers as rs
+    from civiccast_brief.record.repo.rows import Segment as RecordSegment
+
+    rows = [
+        RecordSegment(
+            id=position,
+            transcript_id=0,
+            start_ms=round(s.start * 1000),
+            end_ms=round(s.end * 1000),
+            text=(f"{rs.CHANGE_MARKER} " if s.turn_start and position else "") + s.text,
+            speaker_label=None,
+        )
+        for position, s in enumerate(segments)
+    ]
+    runs = rs.runs_of(rows)
+    assert [r.start_segment_id for r in runs] == [t.first for t in turns], "runs differ from turns"
+    found: list[dict[str, Any]] = []
+    for run in runs[:-1]:
+        recognition = rs.recognition_of(run)
+        if recognition is None:
+            continue
+        name, match = name_recognition(recognition.title_kind, recognition.spoken, roster)
+        target = turns[run.index + 1]
+        entry: dict[str, Any] = {
+            "turn": run.index,
+            "start": hms(turns[run.index].start),
+            "spoken": recognition.spoken,
+            "title": recognition.title_kind,
+            "matched": name,
+            "score": match.score if match else None,
+            "runner_up": match.runner_up if match else None,
+            "named_turn": target.index,
+            "evidence": recognition.evidence[:120],
+        }
+        if name is None:
+            entry["status"] = "no roster member matches by sound"
+        elif not is_hand_off(recognition.evidence, recognition.spoken):
+            entry["status"] = "a mention, not a hand-off"
+        elif target.speaker is not None:
+            entry["status"] = f"turn already named by {target.basis}"
+        else:
+            target.speaker, target.basis = name, "recognition"
+            entry["status"] = "named: next turn"
+        found.append(entry)
+    return {"method": "chair_recognition", "recognitions": found}
+
+
+def chair_voice(
+    segments: list[Segment], turns: list[Turn], recognitions: list[dict[str, Any]]
+) -> str | None:
+    """The voice that says the chair's hand-offs, or None.
+
+    Each recognition is said on one caption line; the voice on that line is counted. The voice
+    with the most is the chair's when it said at least MIN_CHAIR_RECOGNITIONS of them and
+    MIN_CHAIR_SHARE of all of them. The chair's own lines are never given the name of the person
+    the chair handed the floor to.
+    """
+    counts: dict[str, int] = {}
+    for found in recognitions:
+        turn = turns[found["turn"]]
+        word = (found["spoken"].split() or [""])[0].casefold()
+        said = next(
+            (
+                p
+                for p in range(turn.last, turn.first - 1, -1)
+                if word and word in segments[p].text.casefold()
+            ),
+            turn.last,
+        )
+        voice = segments[said].voice
+        if voice:
+            counts[voice] = counts.get(voice, 0) + 1
+    if not counts:
+        return None
+    top = max(sorted(counts), key=lambda v: counts[v])
+    total = sum(counts.values())
+    if counts[top] >= MIN_CHAIR_RECOGNITIONS and counts[top] / total >= MIN_CHAIR_SHARE:
+        return top
+    return None
+
+
+def _voice_counts(segments: list[Segment], turn: Turn, chair: str | None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for position in range(turn.first, turn.last + 1):
+        voice = segments[position].voice
+        if voice and voice != chair:
+            counts[voice] = counts.get(voice, 0) + 1
+    return counts
+
+
+def _own_voice(segments: list[Segment], turn: Turn, chair: str | None) -> str | None:
+    """The voice on most of a turn's lines, leaving out the chair's voice."""
+    counts = _voice_counts(segments, turn, chair)
+    return max(sorted(counts), key=lambda v: counts[v]) if counts else None
+
+
+def label_voices(
+    segments: list[Segment], turns: list[Turn], recognitions: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Name caption lines by voice, after diarization. Writes each line's speaker.
+
+    A turn named by the roll call or a recognition gives its name to its own voice (the voice on
+    most of its lines, not counting the chair's). A voice is named when at least MIN_VOICE_TURNS
+    of its turns were named and MIN_VOICE_SHARE of those name the same person. Then every line
+    is labelled:
+    - a line in the chair's voice stays unknown (the chair's words are not the member's);
+    - a line in a named voice gets that voice's name;
+    - a line of a named turn in the turn's own voice, or with no voice, keeps the turn's name,
+      when that voice is on MIN_OWN_SHARE of the turn's voiced lines and, if the voice has no
+      name, MIN_HOME_SHARE of the voice's lines are in turns named that person;
+    - any other line stays unknown.
+    """
+    chair = chair_voice(segments, turns, recognitions)
+    tally: dict[str, dict[str, int]] = {}
+    for turn in turns:
+        voice = _own_voice(segments, turn, chair)
+        if voice and turn.speaker is not None:
+            counts = tally.setdefault(voice, {})
+            counts[turn.speaker] = counts.get(turn.speaker, 0) + 1
+    voices: list[dict[str, Any]] = []
+    named: dict[str, str] = {}
+    for voice in sorted(tally):
+        counts = tally[voice]
+        total = sum(counts.values())
+        top = max(sorted(counts), key=lambda n: counts[n])
+        agree = total >= MIN_VOICE_TURNS and counts[top] / total >= MIN_VOICE_SHARE
+        if agree:
+            named[voice] = top
+        voices.append(
+            {
+                "voice": voice,
+                "named_turns": dict(sorted(counts.items())),
+                "name": top if agree else None,
+                "status": "named" if agree else "named turns too few or disagree",
+            }
+        )
+    voice_lines: dict[str, int] = {}
+    home_lines: dict[tuple[str, str], int] = {}
+    for turn in turns:
+        for position in range(turn.first, turn.last + 1):
+            voice = segments[position].voice
+            if voice is None:
+                continue
+            voice_lines[voice] = voice_lines.get(voice, 0) + 1
+            if turn.speaker is not None:
+                key = (voice, turn.speaker)
+                home_lines[key] = home_lines.get(key, 0) + 1
+    by_voice = 0
+    for turn in turns:
+        counts = _voice_counts(segments, turn, chair)
+        own = _own_voice(segments, turn, chair)
+        if own is not None and counts[own] / sum(counts.values()) < MIN_OWN_SHARE:
+            own = None
+        if (
+            own is not None
+            and own not in named
+            and turn.speaker is not None
+            and home_lines.get((own, turn.speaker), 0) / voice_lines[own] < MIN_HOME_SHARE
+        ):
+            own = None
+        for position in range(turn.first, turn.last + 1):
+            segment = segments[position]
+            voice = segment.voice
+            if voice is not None and voice == chair:
+                label = None
+            elif voice in named:
+                label = named[voice]
+                if label != turn.speaker:
+                    by_voice += 1
+            elif turn.speaker is not None and (voice is None or voice == own):
+                label = turn.speaker
+            else:
+                label = None
+            segment.speaker = label or UNKNOWN
+    return {
+        "method": "voice",
+        "chair_voice": chair,
+        "min_turns": MIN_VOICE_TURNS,
+        "min_share": MIN_VOICE_SHARE,
+        "voices": voices,
+        "lines_named_by_voice": by_voice,
     }

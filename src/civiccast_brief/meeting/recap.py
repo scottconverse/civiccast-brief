@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from civiccast_brief.meeting.roster import Roster
-from civiccast_brief.meeting.speakers import Turn
+from civiccast_brief.meeting.speakers import UNKNOWN, Turn
 from civiccast_brief.meeting.transcript import Segment, hms
 
 DEFAULT_WINDOW_S = 1800.0
@@ -49,23 +49,72 @@ def windows(segments: list[Segment], window_s: float = DEFAULT_WINDOW_S) -> list
     return result
 
 
+def _named(segment: Segment) -> bool:
+    return segment.speaker not in (None, "", UNKNOWN)
+
+
 def transcript_lines(segments: list[Segment], window: Window) -> str:
+    """One line per caption line: time, ">>" at a change of speaker, the name when known."""
     lines = []
     for segment in segments[window.first : window.last + 1]:
         mark = ">> " if segment.turn_start else ""
-        lines.append(f"{hms(segment.start)}  {mark}{segment.text}")
+        name = f"[{segment.speaker}] " if _named(segment) else ""
+        lines.append(f"{hms(segment.start)}  {mark}{name}{segment.text}")
     return "\n".join(lines)
 
 
-def speaker_key(turns: list[Turn], window: Window) -> str:
-    rows = []
+_BASIS = {
+    "roll_call": "answered the roll call",
+    "recognition": "the chair gave them the floor",
+    "voice": "the same voice as their other named turns",
+}
+
+
+def speaker_key(
+    segments: list[Segment],
+    turns: list[Turn],
+    window: Window,
+    roster: Roster | None = None,
+) -> str:
+    """Who speaks when in this window, from each line's speaker, and how each name was found."""
+    roles = {m.name: m.role for m in roster.members} if roster else {}
+    turn_of: dict[int, Turn] = {}
     for turn in turns:
-        if not (window.first <= turn.first <= window.last):
+        for position in range(turn.first, turn.last + 1):
+            turn_of[position] = turn
+    rows: list[str] = []
+    run: tuple[str, str, int, int] | None = None  # name, basis, first, last
+
+    def close() -> None:
+        if run is None:
+            return
+        name, basis, first, last = run
+        role = f", {roles[name].lower()}" if name in roles else ""
+        rows.append(
+            f"- {hms(segments[first].start)} to {hms(segments[last].end)}: "
+            f"{name}{role} ({_BASIS.get(basis, basis)})"
+        )
+
+    for position in range(window.first, window.last + 1):
+        segment = segments[position]
+        turn = turn_of.get(position)
+        if not _named(segment):
+            close()
+            run = None
+            if turn is not None and turn.first == position and turn.title and not turn.speaker:
+                rows.append(f"- {hms(turn.start)}: a {turn.title}, name not matched (roll call)")
             continue
-        if turn.speaker:
-            rows.append(f"- {hms(turn.start)}: {turn.speaker} (roll call)")
-        elif turn.title:
-            rows.append(f"- {hms(turn.start)}: a {turn.title}, name not matched (roll call)")
+        basis = (
+            turn.basis
+            if turn is not None and turn.speaker == segment.speaker and turn.basis
+            else "voice"
+        )
+        if run is not None and run[0] == segment.speaker and run[1] == basis:
+            run = (run[0], run[1], run[2], position)
+        else:
+            close()
+            run = (segment.speaker, basis, position, position)
+    close()
     return "\n".join(rows) or "- none in this part"
 
 
@@ -78,20 +127,20 @@ OFFICIAL AGENDA (use these spellings for boards, streets and items; the captions
 
 COUNCIL ROSTER (official names): {roster}
 
-SPEAKER KEY (the only speakers named in this part; anyone else is unknown):
+SPEAKER KEY (the only speakers named in this part; anyone else is unknown). Named lines also show the name in [brackets]:
 {speaker_key}
 
 RULES
 1. Output only a JSON array. Each item is an object with the keys "topic", "text", "timestamp" and "quote".
-2. "quote": copy words exactly from the transcript lines, with the same spelling, capitals and punctuation. Join consecutive lines with one space. Leave out ">>" and the timestamps. Keep it to one to three lines.
+2. "quote": copy words exactly from the transcript lines, with the same spelling, capitals and punctuation. Join consecutive lines with one space. Leave out ">>", the [Name] and the timestamps. Keep it to one to three lines.
 3. "timestamp": the time (H:MM:SS) of the transcript line where the quote starts.
 4. "text": one plain past-tense sentence stating one fact the quote supports. Add nothing the quote does not say.
 5. Cover decisions (approved, denied, continued, directed), votes with the count as stated, dollar amounts and budgets, dates and deadlines, and public comment (what a speaker asked for or opposed). Skip greetings, the pledge, the roll call and procedure that decides nothing.
-6. Names and roles: name a person only when the speaker key names that person for that time, or the quote itself contains the name. Use a role word ("city manager", "council member", "resident", "applicant", "presiding officer") only when the quote itself says that role, or the speaker key gives "council member" for that time. Otherwise write "an unidentified speaker". Never guess a name or a role from the transcript.
+6. Names and roles: name a person only when the speaker key names that person for that time, or the quote itself contains the name. Use a role word ("city manager", "council member", "resident", "applicant", "presiding officer") only when the quote itself says that role, or the speaker key gives that role for that time. Otherwise write "an unidentified speaker". Never guess a name or a role from the transcript.
 7. Spell boards, streets and items as the OFFICIAL AGENDA does. Do not copy a misheard term into "text".
 8. At most {max_items} items. If nothing in this part qualifies, output [].
 
-TRANSCRIPT ("H:MM:SS  text"; ">>" marks a change of speaker):
+TRANSCRIPT ("H:MM:SS  text"; ">>" marks a change of speaker; [Name] is the speaker when known):
 {lines}
 """
 
@@ -118,7 +167,7 @@ def build_prompt(
         end=hms(window.end),
         agenda=agenda_text or "(no agenda file was given: use the roster spellings only)",
         roster=roster_line,
-        speaker_key=speaker_key(turns, window),
+        speaker_key=speaker_key(segments, turns, window, roster),
         max_items=MAX_ITEMS_PER_WINDOW,
         lines=transcript_lines(segments, window),
     )

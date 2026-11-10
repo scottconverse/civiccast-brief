@@ -55,6 +55,22 @@ def test_speaker_turn_marks_are_not_part_of_a_quote():
     assert claims[0].quote == "here."
 
 
+def test_a_speaker_name_tag_copied_from_the_prompt_is_not_part_of_a_quote():
+    claims, _ = check(
+        [item("An answer was given.", "[Matthew Popkin] here. The public hearing", "0:00:14")]
+    )
+    assert len(claims) == 1
+    assert claims[0].quote == "here. The public hearing"
+
+
+def test_a_bracket_in_the_captions_that_is_not_a_speaker_name_stays_in_the_quote():
+    segments = [*SEGMENTS[:6], seg(90.0, "[laughter] That is all."), SEGMENTS[6]]
+    kept, _ = check([item("People laughed.", "[laughter] That is all.", "0:01:30")], segments)
+    assert len(kept) == 1
+    dropped, _ = check([item("That was all.", "[Diane Crist] That is all.", "0:01:30")], segments)
+    assert dropped == []
+
+
 def test_a_role_the_quote_and_speaker_key_do_not_give_is_dropped():
     # The line at 0:00:14 is named Matthew Popkin, not a council member title, and the quote does
     # not say "council member".
