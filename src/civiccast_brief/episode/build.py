@@ -7,6 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.article.title import check_title, load_title, render_issues
+from civiccast_brief.article.writer import (
+    ArticleFormatError,
+    caption_windows,
+    check_article,
+    load_article,
+    site_article,
+)
 from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.review.store import ReviewStore
@@ -87,6 +95,43 @@ def _iso_date(long_date: str) -> str:
     return datetime.strptime(last, "%B %d, %Y").date().isoformat()
 
 
+def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
+    """The written title from title.json when there is one and it passes, else the dated one."""
+    path = meeting_dir / "title.json"
+    if path.exists():
+        title = load_title(path)
+        issues = check_title(recap, title)
+        if issues:
+            raise EpisodeError(f"{path} fails the check: {render_issues(issues)}")
+        return title.text
+    if roundup:
+        return f"{recap.city} weekly roundup: {recap.meeting_date}"
+    return f"{recap.city} {recap.body}, {recap.meeting_date}"
+
+
+def _article(
+    article_dir: Path, recap: Recap, data: dict[str, Any], segments: list[Any]
+) -> dict[str, Any]:
+    """The published story for the episode, in the site's format, checked once more."""
+    meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
+    if meta.get("kind") != "article" or meta.get("status") != "published":
+        raise EpisodeError(f"{article_dir} is not a published article export")
+    if meta.get("meeting_id") != _meeting_id(recap, data):
+        raise EpisodeError(
+            f"{article_dir} is the story of meeting {meta.get('meeting_id')}, "
+            f"not {_meeting_id(recap, data)}"
+        )
+    try:
+        article = load_article(article_dir / "article.json")
+        windows = caption_windows(recap, segments) if segments else None
+        report = check_article(recap, article, windows)
+        if not report.passed:
+            raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
+        return site_article(recap, article)
+    except ArticleFormatError as exc:
+        raise EpisodeError(f"{article_dir}: {exc}") from exc
+
+
 def assemble(
     *,
     item_dir: Path,
@@ -96,6 +141,7 @@ def assemble(
     media_base_url: str,
     city_slug: str,
     published: str,
+    article_dir: Path | None = None,
 ) -> dict[str, Any]:
     """One site episode from an exported, approved item. Refuses if anything was changed."""
     meta = json.loads((item_dir / "item.json").read_text(encoding="utf-8"))
@@ -117,7 +163,7 @@ def assemble(
     base = media_base_url.rstrip("/")
     names = meta.get("speakers") or {}
     segments = [] if roundup else transcript_mod.from_json(data)
-    return {
+    episode: dict[str, Any] = {
         "id": slug,
         "city": city_slug,
         "approved": True,
@@ -126,11 +172,7 @@ def assemble(
         "meeting_title": "Weekly roundup" if roundup else str(data.get("title") or recap.body),
         "meeting_date": day,
         "published": published,
-        "headline": (
-            f"{recap.city} weekly roundup: {recap.meeting_date}"
-            if roundup
-            else f"{recap.city} {recap.body}, {recap.meeting_date}"
-        ),
+        "headline": _headline(recap, meeting_dir, roundup),
         "recap": {
             "claims": [
                 {
@@ -168,6 +210,9 @@ def assemble(
             if s.text
         ],
     }
+    if article_dir is not None:
+        episode["article"] = _article(article_dir, recap, data, segments)
+    return episode
 
 
 def _video_url(data: dict[str, Any]) -> str:

@@ -189,3 +189,135 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
     assert episode["id"] == "2026-10-20-example-weekly-roundup"
     assert episode["headline"] == "Longmont weekly roundup: October 6, 2026 and October 20, 2026"
     assert episode["video_url"] is None and episode["transcript"] is None
+
+
+def _roundup(tmp_path, meeting_dir):
+    recap = json.loads((meeting_dir / "recap.json").read_text())
+    recap["video_id"] = "roundup"
+    recap["meeting_date"] = "October 6, 2026 and October 20, 2026"
+    recap["claims"][0]["id"] = "m2-c01"
+    recap["claims"][0]["text"] = "[October 20, 2026 meeting] The consent agenda passed."
+    (meeting_dir / "recap.json").write_text(json.dumps(recap))
+    (meeting_dir / "transcript.json").unlink()
+    (meeting_dir / "speakers.json").unlink()
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, meeting_dir / "script.json")
+    with ReviewStore(db) as store:
+        store.publish(item_id)
+    return export_published(db, tmp_path / "export").exported[0]
+
+
+def test_roundup_uses_its_written_title_when_it_passes(tmp_path, meeting, monkeypatch):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 10.0)
+    item_dir = _roundup(tmp_path, meeting_dir)
+    (meeting_dir / "title.json").write_text(
+        json.dumps({"title": "Longmont council passes its consent agenda", "claim_ids": ["m2-c01"]})
+    )
+    assert _assemble(item_dir, meeting_dir, audio)["headline"] == (
+        "Longmont council passes its consent agenda"
+    )
+
+
+def test_roundup_refuses_a_written_title_with_a_fact_the_claims_lack(
+    tmp_path, meeting, monkeypatch
+):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 10.0)
+    item_dir = _roundup(tmp_path, meeting_dir)
+    (meeting_dir / "title.json").write_text(
+        json.dumps({"title": "Council passes consent agenda 7-0", "claim_ids": ["m2-c01"]})
+    )
+    with pytest.raises(B.EpisodeError, match="number 7 is not in the cited claims"):
+        _assemble(item_dir, meeting_dir, audio)
+
+
+def _story(passed_text="The consent agenda passed."):
+    return {
+        "headline": "Consent agenda passes",
+        "dek": "",
+        "sections": [{"heading": None, "paragraphs": [{"text": passed_text, "cites": ["c01"]}]}],
+        "votes": [
+            {"motion": "Consent agenda", "result": "passed", "tally": None, "claim_id": "c01"}
+        ],
+        "quotes": [{"claim_id": "c01", "speaker": "Mayor Peck"}],
+    }
+
+
+def _published_article(tmp_path, meeting_dir, story):
+    from civiccast_brief.article.__main__ import main as article_main
+
+    (meeting_dir / "article.json").write_text(json.dumps(story), encoding="utf-8")
+    db = tmp_path / "articles.db"
+    code = article_main(
+        [
+            "stage",
+            "--db",
+            str(db),
+            "--recap",
+            str(meeting_dir / "recap.json"),
+            "--article",
+            str(meeting_dir / "article.json"),
+        ]
+    )
+    assert code == 0
+    with ReviewStore(db) as store:
+        [item] = store.list_items()
+        assert item.kind == "article" and item.status == "review"
+        store.publish(item.id)
+    [folder] = export_published(db, tmp_path / "article-export").exported
+    return db, folder
+
+
+def test_a_published_article_is_added_to_the_episode_in_the_site_format(
+    tmp_path, meeting, monkeypatch
+):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 61.234)
+    item_dir = _approved_export(tmp_path, meeting_dir)
+    _, article_dir = _published_article(tmp_path, meeting_dir, _story())
+    episode = B.assemble(
+        item_dir=item_dir,
+        meeting_dir=meeting_dir,
+        script_json=meeting_dir / "script.json",
+        audio_dir=audio,
+        media_base_url="https://media.example.com/longmont/",
+        city_slug="example",
+        published="2026-10-21T09:00:00-06:00",
+        article_dir=article_dir,
+    )
+    article = episode["article"]
+    assert article["headline"] == "Consent agenda passes"
+    assert article["sections"][0]["paragraphs"][0]["cites"] == [{"claim": 0, "start_s": 1547}]
+    assert article["votes"] == [
+        {"motion": "Consent agenda", "result": "passed", "tally": None, "start_s": 1547}
+    ]
+    # The quote is the claim's verbatim words; "Mayor Peck" is named in the captions there.
+    assert article["quotes"] == [
+        {"text": "The consent agenda passes.", "speaker": "Mayor Peck", "start_s": 1547}
+    ]
+
+
+def test_assemble_refuses_an_article_edited_on_the_desk_to_add_a_number(
+    tmp_path, meeting, monkeypatch
+):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 61.234)
+    item_dir = _approved_export(tmp_path, meeting_dir)
+    db, _ = _published_article(tmp_path, meeting_dir, _story())
+    with ReviewStore(db) as store:
+        [item] = store.list_items()
+        store.update_content(item.id, article=_story("The consent agenda passed 7-0."))
+        store.publish(item.id)
+    [article_dir] = export_published(db, tmp_path / "article-export").exported
+    with pytest.raises(B.EpisodeError, match="number 7 is not in the cited claims"):
+        B.assemble(
+            item_dir=item_dir,
+            meeting_dir=meeting_dir,
+            script_json=meeting_dir / "script.json",
+            audio_dir=audio,
+            media_base_url="https://media.example.com/longmont/",
+            city_slug="example",
+            published="2026-10-21T09:00:00-06:00",
+            article_dir=article_dir,
+        )
