@@ -9,10 +9,15 @@
     python -m civiccast_brief evidence (--meeting ID | --video VIDEO_ID) [--db PATH]
         [--check DRAFT.txt] [--out FILE.json]
 
+    python -m civiccast_brief city find --name NAME --state STATE [--website URL]
+        [--also "BODY | URL"]... [--out FOLDER] [--dry-run]
+    python -m civiccast_brief city check --city FOLDER [--body NAME]... [--captions]
+
 ``setup`` starts a city folder (see civiccast_brief/city.py and docs/set-up-a-city.md).
 ``tools`` installs or updates yt-dlp in CivicCast Brief's own folder (see civiccast_brief/tools.py).
 ``evidence`` shows what the record holds for one meeting, or checks a draft against it
 (see civiccast_brief/record/lookup.py).
+``city`` finds a city's meeting sources with no model, and checks them (civiccast_brief/citybuild).
 """
 
 from __future__ import annotations
@@ -132,6 +137,10 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--check", type=Path, help="a draft to check, one sentence after another")
     cmd.add_argument("--out", type=Path, help="write the full result here as JSON")
     cmd.set_defaults(run=_evidence)
+
+    from civiccast_brief.citybuild.cli import add_commands
+
+    add_commands(commands)
     args = parser.parse_args(argv)
     return args.run(args)
 

@@ -84,3 +84,96 @@ def test_an_empty_form_names_the_address_first():
     with pytest.raises(S.SourceError) as info:
         S.make_source("primegov", {})
     assert info.value.field == "url"
+
+
+SVVSD_PAGE = "https://www.svvsd.org/about/board-of-education/board-meetings/2026-board-meetings/"
+TPCA_FOLDER = "15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2"
+
+
+def test_document_pages_and_drive_folders_are_checked_and_saved(tmp_path):
+    page = S.make_source(
+        "webpage",
+        {"page_url": SVVSD_PAGE + "#top", "follow": " /boardmeetings/ ", "bodies": "Board"},
+    )
+    assert (page.url, page.follow) == (SVVSD_PAGE, "/boardmeetings/")
+    bare = S.make_source("webpage", {"url": "www.svcmontessori.org/board-meetings", "bodies": "B"})
+    assert (bare.url, bare.follow) == ("https://www.svcmontessori.org/board-meetings", "")
+    by_link = S.make_source(
+        "gdrive",
+        {
+            "folder_id": f"https://drive.google.com/drive/folders/{TPCA_FOLDER}?usp=sharing",
+            "bodies": "TPCA Board",
+        },
+    )
+    by_view = S.make_source(
+        "gdrive",
+        {
+            "folder_id": f"https://drive.google.com/embeddedfolderview?id={TPCA_FOLDER}#list",
+            "bodies": "TPCA Board",
+        },
+    )
+    by_id = S.make_source("gdrive", {"folder_id": f" {TPCA_FOLDER} ", "bodies": "TPCA Board"})
+    assert by_link == by_view == by_id
+    assert by_id.id == f"gdrive:{TPCA_FOLDER}"
+    assert page.id == f"webpage:{SVVSD_PAGE}"
+    S.add_source(tmp_path, page)
+    S.add_source(tmp_path, by_id)
+    row = json.loads((tmp_path / "sources.json").read_text(encoding="utf-8"))["sources"][0]
+    assert (row["url"], row["follow"]) == (SVVSD_PAGE, "/boardmeetings/")
+    assert S.load_sources(tmp_path) == [page, by_id]
+
+
+@pytest.mark.parametrize(
+    "kind,fields,field,match",
+    [
+        ("webpage", {"page_url": ""}, "page_url", "address of the page"),
+        ("webpage", {"page_url": "ftp://x.org/a"}, "page_url", "https://"),
+        ("webpage", {"page_url": "https://me:pw@x.org/"}, "page_url", "no user name"),
+        ("webpage", {"page_url": "https://x.org/a b"}, "page_url", "spaces"),
+        ("webpage", {"page_url": "https://x.org/", "follow": "boardmeetings"}, "follow", "path"),
+        ("gdrive", {"folder_id": ""}, "folder_id", "folder's address"),
+        ("gdrive", {"folder_id": "short"}, "folder_id", "not a Google Drive folder"),
+        ("gdrive", {"folder_id": "https://drive.google.com/drive/folders/a b"}, "folder_id", "not"),
+    ],
+)
+def test_bad_page_and_folder_fields_name_the_field(kind, fields, field, match):
+    with pytest.raises(S.SourceError, match=match) as info:
+        S.make_source(kind, {"bodies": "Board", **fields})
+    assert info.value.field == field
+
+
+def test_merging_adds_new_sources_and_only_the_missing_bodies(tmp_path):
+    channel = S.make_source(
+        "youtube", {"channel_id": "UCH5_wkpLrKYb1JuUk6-UdNg", "bodies": "City Council"}
+    )
+    S.add_source(tmp_path, channel)
+    wider = S.make_source(
+        "youtube",
+        {"channel_id": "UCH5_wkpLrKYb1JuUk6-UdNg", "bodies": "city council, Water Board"},
+    )
+    folder = S.make_source("gdrive", {"folder_id": TPCA_FOLDER, "bodies": "TPCA Board"})
+    _, changes = S.merge_sources(tmp_path, [wider, folder])
+    assert changes == [
+        "https://www.youtube.com/channel/UCH5_wkpLrKYb1JuUk6-UdNg now also covers Water Board",
+        f"added {folder.address} for TPCA Board",
+    ]
+    saved = S.load_sources(tmp_path)
+    assert saved[0].bodies == ("City Council", "Water Board")
+    assert saved[1] == folder
+    assert S.merge_sources(tmp_path, [wider, folder])[1] == []
+
+
+@pytest.mark.parametrize(
+    "source_id,ok",
+    [
+        (f"gdrive:{TPCA_FOLDER}", True),
+        (f"webpage:{SVVSD_PAGE}", True),
+        ("webpage:https://x.org/index.jsp?uREC_ID=560576&type=d", True),
+        ("rss:https://x.org/", False),
+        ("webpage:https://x.org/<script>", False),
+    ],
+)
+def test_the_desk_knows_the_new_source_ids(source_id, ok):
+    from civiccast_brief.review.web import _SOURCE_ID
+
+    assert bool(_SOURCE_ID.match(source_id)) is ok
