@@ -11,6 +11,12 @@ Status: in development. The pipeline runs end to end on real meetings; the defau
 
 To set up your own city, follow [docs/set-up-a-city.md](docs/set-up-a-city.md).
 
+For shared Townlight discovery, set `TOWNLIGHT_IMPORT_PYTHON` to the Python
+executable containing `townlight_runtime.meeting_imports`. CivicCast Brief
+then uses that importer for PrimeGov meeting lists and Granicus ViewPublisher
+archives. Brief continues to process the source documents, recordings and
+captions through its existing paths.
+
 ## What it does
 
 1. Captures a city meeting video (YouTube, PrimeGov and Granicus first).

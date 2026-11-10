@@ -21,6 +21,8 @@ from typing import Any
 
 import httpx
 
+from civiccast_brief import townlight_imports
+
 from .. import __version__
 from .base import (
     HTML_LIMIT_BYTES,
@@ -318,23 +320,39 @@ class PrimeGovAdapter:
 
         found: dict[int, Meeting] = {}
         for year in range(first.year, last.year + 1):
-            for payload in self._get_meeting_list(self.archived_meetings_url(year), {"year": year}):
-                _remember(found, payload)
-        for payload in self._get_meeting_list(self.upcoming_meetings_url(), None):
-            _remember(found, payload)
+            for meeting in self._get_meeting_list(self.archived_meetings_url(year), {"year": year}):
+                found.setdefault(meeting.id, meeting)
+        for meeting in self._get_meeting_list(self.upcoming_meetings_url(), None):
+            found.setdefault(meeting.id, meeting)
 
         in_range = (m for m in found.values() if first <= m.start.date() <= last)
         return sorted(in_range, key=lambda meeting: meeting.start)
 
-    def _get_meeting_list(self, url: str, params: dict[str, Any] | None) -> list[Any]:
+    def _get_meeting_list(self, url: str, params: dict[str, Any] | None) -> list[Meeting]:
         response = self._get(url, params)
+        python = townlight_imports.configured_python()
+        if python:
+            try:
+                normalized = townlight_imports.normalize(
+                    python, "primegov", url, response.content, input_format="primegov-portal-json"
+                )
+                return [_shared_meeting(item) for item in normalized["meetings"]]
+            except (
+                townlight_imports.TownlightImportError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as error:
+                raise AdapterHttpError(
+                    f"Townlight could not read the PrimeGov meeting list: {error}"
+                ) from error
         try:
             payload = response.json()
         except ValueError as exc:
             raise AdapterHttpError(f"{url} did not answer with JSON.") from exc
         if not isinstance(payload, list):
             raise AdapterHttpError(f"{url} did not answer with a list of meetings.")
-        return payload
+        return [meeting for item in payload if (meeting := _meeting_from(item)) is not None]
 
     def _get(self, url: str, params: dict[str, Any] | None) -> httpx.Response:
         try:
@@ -570,10 +588,25 @@ def _as_date(value: date | datetime) -> date:
     return value.date() if isinstance(value, datetime) else value
 
 
-def _remember(found: dict[int, Meeting], payload: Any) -> None:
-    meeting = _meeting_from(payload)
-    if meeting is not None and meeting.id not in found:
-        found[meeting.id] = meeting
+def _shared_meeting(row: dict) -> Meeting:
+    meeting_id = int(row["external_id"])
+    return Meeting(
+        id=meeting_id,
+        title=row["title"],
+        start=datetime.fromisoformat(row["source_start"]),
+        video_url=next((item["url"] for item in row["recordings"]), None),
+        documents=tuple(
+            Document(
+                id=int(item["external_id"]),
+                template_id=item["source_metadata"]["template_id"],
+                compile_output_type=item["source_metadata"]["compile_output_type"],
+                template_name=item["title"],
+                publish_date=item["published_at"],
+                meeting_id=meeting_id,
+            )
+            for item in row["documents"]
+        ),
+    )
 
 
 def _meeting_from(payload: Any) -> Meeting | None:
