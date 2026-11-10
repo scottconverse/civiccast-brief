@@ -115,7 +115,15 @@ The roster is the only list of speaker names. A line gets a name in three ways:
 - the chair gave them the floor ("Council member Crist?"), matched to a roster name even when the
   captions mishear it a little; a name that is only mentioned ("I agree with council member Crist")
   names no one;
-- with `--diarize`, the line is in the same voice as that member's other named turns.
+- with `--diarize`, the line is in the same voice as that member's other named turns;
+- with `--diarize`, the line is in the chair's voice and the room answers to that voice as
+  "Mayor": at least 3 times another voice says "Mayor" (not "Mayor Pro Tem") and the chair's voice
+  speaks next, within 10 seconds, and at least 80 percent of those addresses are not to a pro tem.
+  The line then gets the roster's mayor. When the pro tem chairs, the chair's lines stay unknown.
+
+A self-introduction ("My name is ...") never names anyone. It is listed under `introductions` in
+`speakers.json` for the producer. A visitor's name can sound like a member's ("Morgan Lundy"
+matched Jake Marsing at 0.96), and names not on the roster are spelled by the captioner.
 
 Every other line stays "unknown" for the producer to name. On five Longmont council meetings in
 November 2026 this named 22 to 33 percent of caption lines (before, about one line a meeting). A

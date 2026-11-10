@@ -67,6 +67,7 @@ _BASIS = {
     "roll_call": "answered the roll call",
     "recognition": "the chair gave them the floor",
     "voice": "the same voice as their other named turns",
+    "chair": "the chair; members address the chair as Mayor",
 }
 
 
@@ -104,11 +105,12 @@ def speaker_key(
             if turn is not None and turn.first == position and turn.title and not turn.speaker:
                 rows.append(f"- {hms(turn.start)}: a {turn.title}, name not matched (roll call)")
             continue
-        basis = (
-            turn.basis
-            if turn is not None and turn.speaker == segment.speaker and turn.basis
-            else "voice"
-        )
+        if segment.basis:
+            basis = segment.basis
+        elif turn is not None and turn.speaker == segment.speaker and turn.basis:
+            basis = turn.basis
+        else:
+            basis = "voice"
         if run is not None and run[0] == segment.speaker and run[1] == basis:
             run = (run[0], run[1], run[2], position)
         else:

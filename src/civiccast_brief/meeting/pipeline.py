@@ -152,7 +152,7 @@ def run(
     apply_turns(segments, turns)
     diarization = _diarize(video_id, out, segments, diarize, fetch_audio, log)
     voices = (
-        label_voices(segments, turns, recognitions["recognitions"])
+        label_voices(segments, turns, recognitions["recognitions"], roster)
         if diarization.get("status") == "run"
         else None
     )
