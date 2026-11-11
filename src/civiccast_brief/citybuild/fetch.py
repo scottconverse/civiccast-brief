@@ -1,7 +1,7 @@
 """The one way the city search asks the web: a named, size-limited GET (or, for a meeting
 calendar that is only asked that way, a JSON POST).
 
-Every request says who is asking (the same User-Agent as the PrimeGov reader), follows at most four
+Every request follows at most four
 redirects and reads at most a few megabytes. Requests to YouTube take their turn in the process
 pace (:mod:`civiccast_brief.record.pacing`), and a 429 from YouTube holds every later YouTube
 request instead of asking again.
@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from civiccast_brief.record import pacing
-from civiccast_brief.record.adapters.primegov import MAX_REDIRECTS, decode_html, user_agent
+from civiccast_brief.record.adapters.primegov import MAX_REDIRECTS, decode_html
 
 TIMEOUT_S = 30.0
 MAX_BYTES = 8_000_000
@@ -60,7 +60,6 @@ class Fetcher:
                 timeout=TIMEOUT_S,
                 follow_redirects=True,
                 max_redirects=MAX_REDIRECTS,
-                headers={"User-Agent": user_agent()},
             )
 
     def get(self, url: str) -> Page:
@@ -84,9 +83,7 @@ class Fetcher:
         assert self.client is not None
         extra: dict[str, Any] = {} if data is None else {"json": data}
         try:
-            with self.client.stream(
-                method, url, headers={"User-Agent": user_agent()}, **extra
-            ) as response:
+            with self.client.stream(method, url, **extra) as response:
                 if youtube and response.status_code == pacing.RATE_LIMIT_STATUS:
                     pacing.pacer().rate_limited(what="the city search", marker="HTTP 429")
                     raise FetchError(f"{url}: YouTube answered 429; YouTube requests now wait")

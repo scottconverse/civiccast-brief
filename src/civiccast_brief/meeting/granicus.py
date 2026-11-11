@@ -24,7 +24,6 @@ from urllib.parse import parse_qs, urlsplit
 
 from civiccast_brief import townlight_imports
 
-USER_AGENT = "CivicCastBrief/0.1 (+https://civiccastbrief.org)"
 FETCH_TIMEOUT_S = 60
 AUDIO_TIMEOUT_S = 3600
 
@@ -53,7 +52,7 @@ class Clip:
 
 
 def _fetch(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url)
     try:
         with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as response:
             return response.read().decode("utf-8", errors="replace")
