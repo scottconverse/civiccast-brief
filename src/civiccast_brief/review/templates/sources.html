@@ -11,6 +11,7 @@
 <code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to add sources.</p>
 {% else %}
 <p class="muted">Where the city's meetings come from. Saved to <code>{{ path }}</code>.</p>
+<p><a href="/sources/find">Find a city's sources</a>: search the city's website and the meeting platforms, then pick what to add.</p>
 
 {% if sources %}
 <table>
@@ -70,6 +71,22 @@
         <input id="view_id" type="text" name="view_id" value="{{ form.get("view_id", "") }}"
                placeholder="2" inputmode="numeric" {{ invalid("view_id") }}></p>
       {{ field_error("view_id") }}
+    </div>
+    <div data-kind="webpage">
+      <p><label for="page_url">Address of the page that links the meeting documents</label><br>
+        <input class="wide" id="page_url" type="text" name="page_url" value="{{ form.get("page_url", "") }}"
+               placeholder="https://www.yourdistrict.org/board/meetings/" {{ invalid("page_url") }}></p>
+      {{ field_error("page_url") }}
+      <p><label for="follow">Meeting pages start with (optional, when the page links one page per meeting)</label><br>
+        <input id="follow" type="text" name="follow" value="{{ form.get("follow", "") }}"
+               placeholder="/boardmeetings/" {{ invalid("follow") }}></p>
+      {{ field_error("follow") }}
+    </div>
+    <div data-kind="gdrive">
+      <p><label for="folder_id">Google Drive folder address or id</label><br>
+        <input class="wide" id="folder_id" type="text" name="folder_id" value="{{ form.get("folder_id", "") }}"
+               placeholder="https://drive.google.com/drive/folders/..." {{ invalid("folder_id") }}></p>
+      {{ field_error("folder_id") }}
     </div>
     <p><label for="bodies">Bodies it covers (one per line, or commas between)</label><br>
       <textarea id="bodies" name="bodies" placeholder="City Council" {{ invalid("bodies") }}>{{ form.get("bodies", "") }}</textarea></p>

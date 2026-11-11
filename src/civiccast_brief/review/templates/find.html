@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set nav = "sources" %}
+{% block content %}
+<h2>Find a city's sources</h2>
+<p><a href="/sources">Back to Sources</a></p>
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to find and save sources.</p>
+{% else %}
+<p class="muted">This reads the city's website and asks the meeting platforms (PrimeGov, Legistar,
+Granicus, YouTube and others) what they list. No AI model is used. Nothing is saved until you pick
+sources below and press Add.</p>
+
+<form method="post" action="/sources/find" novalidate>
+  <input type="hidden" name="token" value="{{ token }}">
+  <fieldset>
+    <legend>The city</legend>
+    <p><label for="name">City name</label><br>
+      <input id="name" type="text" name="name" value="{{ form.get("name", "") }}" placeholder="Longmont"
+             {% if error_field == "name" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="state">State</label><br>
+      <input id="state" type="text" name="state" value="{{ form.get("state", "") }}" placeholder="CO"
+             {% if error_field == "state" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="website">City website (optional; guessed from the name when empty)</label><br>
+      <input class="wide" id="website" type="text" name="website" value="{{ form.get("website", "") }}"
+             placeholder="https://www.yourcity.gov/"></p>
+    <p><label for="also">Other bodies and their pages (optional, one per line: Body name | address)</label><br>
+      <textarea id="also" name="also" rows="5" class="wide"
+                placeholder="Board of Education | https://www.yourdistrict.org/board/meetings/">{{ form.get("also", "") }}</textarea></p>
+    <p class="muted">For a school board or a charter school: the page that links its agendas, or its Google Drive folder.</p>
+    <button type="submit" class="primary" data-busy="Searching the city's site… this can take a minute">Search</button>
+  </fieldset>
+</form>
+
+{% if found %}
+<h3>Found for {{ found.name }}, {{ found.state }}</h3>
+<p>Website: {{ found.website or "not found" }}. {{ found.asked|length }} web requests.</p>
+{% if found.candidates %}
+<form method="post" action="/sources/find/save">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="search" value="{{ search_id }}">
+  <fieldset>
+    <legend>Sources the program can read</legend>
+    {% for c in found.candidates %}
+    <p><label><input type="checkbox" name="chosen" value="{{ c.source.id }}" checked>
+      <strong>{{ kind_labels[c.source.kind] }}</strong> {{ c.source.address }}</label><br>
+      <span class="muted">Bodies: {{ c.source.bodies|join(", ") }}</span><br>
+      <span class="muted">How it was found: {{ c.how }}</span></p>
+    {% endfor %}
+    <p class="muted">Adding writes <code>sources.json</code>, and <code>city.json</code> and
+      <code>roster.json</code> stubs when the folder has none. A source already saved gains only the bodies it lacked.</p>
+    <button type="submit" class="primary" data-busy="Adding the sources…">Add the checked sources</button>
+  </fieldset>
+</form>
+{% else %}
+<p>No source the program can read was found.</p>
+{% endif %}
+{% if found.unread %}
+<h3>Found, but this program has no reader for it yet</h3>
+<ul>
+{% for u in found.unread %}<li>{{ u.platform }}: {{ u.url }}{% if u.note %} ({{ u.note }}){% endif %}</li>{% endfor %}
+</ul>
+{% endif %}
+{% if found.notes %}
+<h3>Notes</h3>
+<ul>{% for n in found.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}
