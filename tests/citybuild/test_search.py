@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from civiccast_brief.citybuild.build import REPORT_FILE, build_city
+from civiccast_brief.citybuild.build import PUBLISHER_EMAIL, REPORT_FILE, build_city
 from civiccast_brief.citybuild.search import PROBED, guesses, search_city
 from civiccast_brief.sources import load_sources, make_source
 
@@ -183,7 +183,8 @@ def test_build_writes_stubs_once_and_merges_sources(web, tmp_path):
     assert city["slug"] == "longmont"
     roster = json.loads((folder / "roster.json").read_text(encoding="utf-8"))
     assert "City Council" in json.dumps(roster)
-    assert any("contact_email" in line for line in built.to_fill)
+    assert city["podcast"]["owner_email"] == PUBLISHER_EMAIL
+    assert not any("email" in line for line in built.to_fill)
     saved = load_sources(folder)
     assert len(saved) == 6
     (channel,) = [s for s in saved if s.kind == "youtube"]
