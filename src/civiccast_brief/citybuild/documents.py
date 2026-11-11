@@ -14,7 +14,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild.fetch import Fetcher, FetchError
+from civiccast_brief.citybuild.fetch import DOCUMENT_BYTES, Fetcher, FetchError
 from civiccast_brief.citybuild.page import Link, find_dates, squash
 
 if TYPE_CHECKING:
@@ -78,7 +78,12 @@ def read_document(url: str, fetcher: Fetcher | Browser, title: str = "") -> Read
 
     ``fetcher`` is the plain client, or the browser for a site that opens only in one.
     """
-    page = fetcher.get(download_url(url))
+    where = download_url(url)
+    page = (
+        fetcher.get(where, max_bytes=DOCUMENT_BYTES)
+        if isinstance(fetcher, Fetcher)
+        else fetcher.get(where)
+    )
     content = page.content
     pages: int | None = None
     if content.startswith(b"%PDF"):

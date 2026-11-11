@@ -2,7 +2,8 @@
 calendar that is only asked that way, a JSON POST).
 
 Every request follows at most four
-redirects and reads at most a few megabytes. Requests to YouTube take their turn in the process
+redirects and reads at most a few megabytes; a meeting document may be larger
+(:data:`DOCUMENT_BYTES`). Requests to YouTube take their turn in the process
 pace (:mod:`civiccast_brief.record.pacing`), and a 429 from YouTube holds every later YouTube
 request instead of asking again.
 """
@@ -21,6 +22,9 @@ from civiccast_brief.record.adapters.primegov import MAX_REDIRECTS, decode_html
 
 TIMEOUT_S = 30.0
 MAX_BYTES = 8_000_000
+#: The largest meeting document read: packets with plans and photos run past 8 MB (Lafayette's
+#: Zoning Board of Adjustment packet for 9 October 2024 is 15.7 MB). The same as the browser's.
+DOCUMENT_BYTES = 150_000_000
 _YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com")
 
 
@@ -62,8 +66,9 @@ class Fetcher:
                 max_redirects=MAX_REDIRECTS,
             )
 
-    def get(self, url: str) -> Page:
-        """GET ``url``. Any answer but 200 is a :class:`FetchError`."""
+    def get(self, url: str, max_bytes: int | None = None) -> Page:
+        """GET ``url``, reading at most ``max_bytes`` (default :attr:`max_bytes`). Any answer but
+        200 is a :class:`FetchError`."""
         host = (urlsplit(url).hostname or "").lower()
         youtube = host in _YOUTUBE_HOSTS
         if youtube:
@@ -71,13 +76,22 @@ class Fetcher:
                 pacing.pacer().wait(what="the city search")
             except pacing.PaceHeld as exc:
                 raise FetchError(f"{url}: {exc}") from exc
-        return self._send("GET", url, youtube=youtube)
+        return self._send("GET", url, youtube=youtube, limit=max_bytes)
 
     def post_json(self, url: str, data: Any) -> Page:
         """POST ``data`` as JSON to ``url``, for a meeting calendar that is asked that way."""
         return self._send("POST", url, data=data)
 
-    def _send(self, method: str, url: str, *, youtube: bool = False, data: Any = None) -> Page:
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        youtube: bool = False,
+        data: Any = None,
+        limit: int | None = None,
+    ) -> Page:
+        limit = self.max_bytes if limit is None else limit
         self.asked.append(url)
         self.log(f"{method} {url}")
         assert self.client is not None
@@ -93,8 +107,8 @@ class Fetcher:
                 total = 0
                 for chunk in response.iter_bytes():
                     total += len(chunk)
-                    if total > self.max_bytes:
-                        raise FetchError(f"{url} is larger than {self.max_bytes} bytes")
+                    if total > limit:
+                        raise FetchError(f"{url} is larger than {limit} bytes")
                     chunks.append(chunk)
                 return Page(
                     url=str(response.url),
