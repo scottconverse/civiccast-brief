@@ -62,5 +62,32 @@ def test_atoms_drop_thousands_commas():
 
 
 def test_atoms_keep_decimals_and_dates():
-    assert number_atoms("four point five million dollars") == {"4.5"}
+    assert number_atoms("four point five million dollars") == {"4500000"}
+    assert number_atoms("$4.5 million") == {"4500000"}
     assert number_atoms("March 1, 2027") == {"1", "2027"}
+
+
+@pytest.mark.parametrize(
+    ("claim", "spoken"),
+    [
+        # From the October 27, 2026 study session: both lines were true and both were cut.
+        ("about $6 million", "about six million dollars"),
+        ("between $30 million and $50 million", "between thirty million and fifty million"),
+        ("$4.5 million", "four point five million dollars"),
+        ("$2 billion", "two billion dollars"),
+        ("$200,000", "two hundred thousand dollars"),
+    ],
+)
+def test_a_spoken_amount_matches_the_same_amount_in_digits(claim, spoken):
+    assert number_atoms(spoken) == number_atoms(claim)
+
+
+def test_two_amounts_joined_by_and_stay_two_amounts():
+    assert number_atoms("thirty million and fifty million") == {"30000000", "50000000"}
+    assert number_atoms("one hundred and five") == {"105"}  # one number, said with "and"
+
+
+def test_one_speaker_is_a_person_not_a_number():
+    # The script prompt tells the writer to say "one speaker" for "a speaker".
+    assert number_atoms("One speaker said the pool should stay open.") == frozenset()
+    assert number_atoms("one speaker asked") == frozenset()
