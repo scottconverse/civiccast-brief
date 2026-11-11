@@ -217,9 +217,13 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
     # The documents come first: the recap names a voice from a self-introduction only when
     # the packet, the minutes or the agenda print that name.
     if "documents" not in done and meeting.documents is not None:
-        data, lines = meeting.documents()
-        write_documents(folder, data)
-        entry["documents"] = lines
+        try:
+            data, lines = meeting.documents()
+        except Exception as exc:  # noqa: BLE001 - a portal or network failure must not stop the meeting
+            entry["documents"] = [f"documents not read: {exc}"]
+        else:
+            write_documents(folder, data)
+            entry["documents"] = lines
         done.append("documents")
     if "recap" not in done:
         roster = roster_for(settings.city, meeting.body)

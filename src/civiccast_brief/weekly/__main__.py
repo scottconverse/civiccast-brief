@@ -107,17 +107,23 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         return 1
     last = args.last or date.today()
     first = args.first or last - timedelta(days=args.days - 1)
-    if listers is None:
-        import httpx
+    settings = Settings(city=args.city, work=args.work, db=args.db, diarize=args.diarize, site=site)
+    if listers is not None:
+        return _week(city.name, sources, first, last, listers, settings)
+    import httpx
 
-        with httpx.Client(timeout=60, follow_redirects=True) as client:
-            meetings, problems = find_meetings(sources, first, last, real_listers(client))
-    else:
-        meetings, problems = find_meetings(sources, first, last, listers)
-    print(f"{city.name}: {len(meetings)} meeting(s) from {first} to {last}")
+    # One client for the whole run: the documents step fetches packets inside run_week.
+    with httpx.Client(timeout=60, follow_redirects=True) as client:
+        return _week(city.name, sources, first, last, real_listers(client), settings)
+
+
+def _week(
+    name: str, sources: Any, first: date, last: date, listers: Listers, settings: Settings
+) -> int:
+    meetings, problems = find_meetings(sources, first, last, listers)
+    print(f"{name}: {len(meetings)} meeting(s) from {first} to {last}")
     for problem in problems:
         print(f"source problem: {problem}", file=sys.stderr)
-    settings = Settings(city=args.city, work=args.work, db=args.db, diarize=args.diarize, site=site)
     report = run_week(settings, meetings, last)
     for line in report.lines:
         print(line)
