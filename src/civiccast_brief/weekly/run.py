@@ -32,6 +32,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
 
@@ -393,6 +394,12 @@ def publish(
         built[meeting_id] = name
         state.save()
         log.append((f"{meeting_id}: built episode {name}", False))
+    if not any(p.name not in (CITY_FILE, ROSTER_FILE) for p in site.episodes.glob("*.json")):
+        # Nothing approved yet is the desk doing its job, not a failed build.
+        log.append(
+            ("site: not built: no episode is published yet; approve items on the desk", False)
+        )
+        return log
     argv = ["build", "--episodes", str(site.episodes), "--out", str(site.out)]
     _call(steps.site, [*argv, "--base-url", site.base_url], "site build")
     log.append((f"site: built into {site.out}", False))
