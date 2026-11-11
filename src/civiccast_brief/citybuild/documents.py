@@ -1,19 +1,22 @@
 """Meeting documents on the open web: which links are documents, and reading one's text.
 
-A document is a PDF, a Google Doc or a Google Drive file. Reading one gives its first lines and the
+A document is a PDF, a Word file, a Google Doc, a Google Drive file or a OneDrive share link. Reading one gives its first lines and the
 first date written in it, which is what a person checks to see that the source is live.
 """
 
 from __future__ import annotations
 
+import html
 import io
 import logging
 import re
+import zipfile
 from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
+from civiccast_brief.citybuild import onedrive
 from civiccast_brief.citybuild.fetch import DOCUMENT_BYTES, Fetcher, FetchError
 from civiccast_brief.citybuild.page import Link, find_dates, squash
 
@@ -25,6 +28,10 @@ _DRIVE_FILE: Final = re.compile(r"^/file/(?:u/\d+/)?d/([A-Za-z0-9_-]{20,100})")
 _DOC_SUFFIXES: Final = (".pdf", ".docx", ".doc")
 #: How many pages of a PDF are read for the proof lines.
 PDF_PAGES: Final = 3
+#: The most text a Word file's body may unpack to; a larger one is not read.
+DOCX_BYTES: Final = 50_000_000
+_PARAGRAPH: Final = re.compile(r"<w:p[ >].*?</w:p>", re.DOTALL)
+_RUN_TEXT: Final = re.compile(r"<w:t(?: [^>]*)?>([^<]*)</w:t>")
 
 
 def is_document(url: str) -> bool:
@@ -35,6 +42,8 @@ def is_document(url: str) -> bool:
         return bool(_GDOC.match(path))
     if host == "drive.google.com":
         return bool(_DRIVE_FILE.match(path))
+    if onedrive.is_share(url):
+        return True
     return path.lower().endswith(_DOC_SUFFIXES)
 
 
@@ -88,6 +97,8 @@ def read_document(url: str, fetcher: Fetcher | Browser, title: str = "") -> Read
     pages: int | None = None
     if content.startswith(b"%PDF"):
         text, pages = _pdf_text(content, url)
+    elif content.startswith(b"PK"):
+        text = _docx_text(content, url)
     elif "pdf" in page.content_type.lower() or urlsplit(url).path.lower().endswith(".pdf"):
         raise FetchError(f"{url} was to be a PDF but is not one")
     elif "html" in page.content_type.lower():
@@ -124,6 +135,22 @@ def _pdf_text(content: bytes, url: str) -> tuple[str, int]:
     except (PdfReadError, ValueError, KeyError, TypeError) as exc:
         raise FetchError(f"{url} is a PDF that could not be read: {exc}") from exc
     return text, count
+
+
+def _docx_text(content: bytes, url: str) -> str:
+    """The paragraphs of a Word file, one to a line."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            info = archive.getinfo("word/document.xml")
+            if info.file_size > DOCX_BYTES:
+                raise FetchError(f"{url} is a Word file too large to read")
+            body = archive.read(info).decode("utf-8", errors="replace")
+    except (zipfile.BadZipFile, KeyError) as exc:
+        raise FetchError(f"{url} is not a Word file that could be read: {exc}") from exc
+    return "\n".join(
+        html.unescape("".join(_RUN_TEXT.findall(paragraph)))
+        for paragraph in _PARAGRAPH.findall(body)
+    )
 
 
 def document_links(links: list[Link]) -> list[Link]:

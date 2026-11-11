@@ -50,6 +50,9 @@ _DAY_FIRST: Final = re.compile(
 _ISO: Final = re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b")
 # "11/5/26", "11/05/2026", "11-05-2026", "11_03_2026", "11.11.26".
 _NUMERIC: Final = re.compile(r"(?<![\d/._-])(\d{1,2})([/._-])(\d{1,2})\2(\d{4}|\d{2})(?![\d/])")
+# "05 11 2026" and "2025 12 15", spaced: two-digit month and day and a four-digit year only.
+_SPACED: Final = re.compile(r"(?<![\d/._-])(\d{2}) (\d{2}) (\d{4})(?![\d/._-])")
+_SPACED_ISO: Final = re.compile(r"(?<![\d/._-])(\d{4}) (\d{2}) (\d{2})(?![\d/._-])")
 
 #: How much text after a link still belongs to it, when the next link does not come first.
 AFTER_CHARS: Final = 160
@@ -84,6 +87,14 @@ def find_dates(text: str) -> list[date]:
             found.append((match.start(), made))
     for match in _NUMERIC.finditer(text):
         made = _make(int(match[4]), int(match[1]), int(match[3]))
+        if made:
+            found.append((match.start(), made))
+    for match in _SPACED.finditer(text):
+        made = _make(int(match[3]), int(match[1]), int(match[2]))
+        if made:
+            found.append((match.start(), made))
+    for match in _SPACED_ISO.finditer(text):
+        made = _make(int(match[1]), int(match[2]), int(match[3]))
         if made:
             found.append((match.start(), made))
     found.sort(key=lambda pair: pair[0])
