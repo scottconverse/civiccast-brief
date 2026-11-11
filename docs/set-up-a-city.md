@@ -274,9 +274,13 @@ The buttons on an item page:
 - **Publish** locks the item to its exact saved text. Any later change sends it back to review, and
   it must be published again. A killed item cannot be published until it is edited or redrafted.
 - **Hold** and **Kill** take an item out of the export.
-- **Redraft** sends your note to the writer and puts the new draft in review. The desk needs a
-  writer connected for this; until the real writers are wired in, it says that no writer is
-  connected.
+- **Redraft** sends your note and the current draft to the writer (the city's model pick for that
+  body) and puts the new draft in review. It runs the same checks as the weekly run: one rewrite
+  with the check report, then anything still unsupported is cut. The writer works from the
+  meeting's folder in the weekly run, so start the desk with that folder:
+  `python -m civiccast_brief.review serve --db desk.db --city cities/yourcity --work runs/weekly`.
+  Without `--work` the button says that no writer is connected. A model call takes a few minutes;
+  the button shows that it is working. After an episode redraft, press **Regenerate audio**.
 - **Regenerate audio** (episodes only) records a request for new audio for the current text.
 
 Each button shows what it is doing while it works, and each page says what happened. The item's

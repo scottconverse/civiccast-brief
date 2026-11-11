@@ -285,11 +285,21 @@ def pick_pages(
     return [page for *_, page in sorted(scored, key=lambda row: row[:3])[:limit]]
 
 
+#: A redraft from the desk: the editor's note and the draft it is about.
+EDITOR_PROMPT = (
+    "The editor read the draft below and asks for this change: {note}\n"
+    "Make that change. Every rule above still holds: use only the claims (and pages) given "
+    "here, and output the whole story again in the same format.\n"
+    "The draft:\n{draft}"
+)
+
+
 def build_prompt(
     recap: Recap,
     feedback: str = "",
     windows: dict[str, str] | None = None,
     pages: list[DocPage] | None = None,
+    editor: tuple[str, str] | None = None,
 ) -> str:
     # No topics: the recap model writes them and nothing verifies them, so a name taken from a
     # topic would be a name the evidence does not back. The captions said around each claim are
@@ -305,6 +315,8 @@ def build_prompt(
         *([DOCUMENTS_PROMPT] if pages else []),
         f"Meeting (from the recap header): {recap.body} of {recap.city}, {recap.meeting_date}.",
     ]
+    if editor is not None:
+        parts.append(EDITOR_PROMPT.format(note=editor[0].strip(), draft=editor[1].strip()))
     if feedback.strip():
         parts.append(
             "A previous draft failed the no-new-claims check. Fix every problem below and output "
@@ -432,9 +444,11 @@ def write_article(
     feedback: str = "",
     windows: dict[str, str] | None = None,
     pages: dict[str, DocPage] | None = None,
+    editor: tuple[str, str] | None = None,
 ) -> Article:
+    """``editor`` is (the editor's note, the draft it is about), for a redraft from the desk."""
     shown = pick_pages(recap, pages, windows) if pages else None
-    return parse_article(complete(build_prompt(recap, feedback, windows, shown)))
+    return parse_article(complete(build_prompt(recap, feedback, windows, shown, editor)))
 
 
 @dataclass(frozen=True)
