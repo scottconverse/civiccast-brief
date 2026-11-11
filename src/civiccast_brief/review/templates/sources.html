@@ -88,6 +88,24 @@
                placeholder="https://drive.google.com/drive/folders/..." {{ invalid("folder_id") }}></p>
       {{ field_error("folder_id") }}
     </div>
+    <div data-kind="civicclerk">
+      <p><label for="clerk_tenant">CivicClerk portal address or tenant</label><br>
+        <input class="wide" id="clerk_tenant" type="text" name="clerk_tenant" value="{{ form.get("clerk_tenant", "") }}"
+               placeholder="https://yourtown.portal.civicclerk.com" {{ invalid("clerk_tenant") }}></p>
+      {{ field_error("clerk_tenant") }}
+    </div>
+    <div data-kind="escribe">
+      <p><label for="escribe_tenant">eScribe meetings address or tenant</label><br>
+        <input class="wide" id="escribe_tenant" type="text" name="escribe_tenant" value="{{ form.get("escribe_tenant", "") }}"
+               placeholder="https://pub-yourcounty.escribemeetings.com" {{ invalid("escribe_tenant") }}></p>
+      {{ field_error("escribe_tenant") }}
+    </div>
+    <div data-kind="civicplus">
+      <p><label for="site">Town site address (the one with the Agenda Center or Archive Center)</label><br>
+        <input class="wide" id="site" type="text" name="site" value="{{ form.get("site", "") }}"
+               placeholder="https://www.yourtown.gov" {{ invalid("site") }}></p>
+      {{ field_error("site") }}
+    </div>
     <p><label for="bodies">Bodies it covers (one per line, or commas between)</label><br>
       <textarea id="bodies" name="bodies" placeholder="City Council" {{ invalid("bodies") }}>{{ form.get("bodies", "") }}</textarea></p>
     {{ field_error("bodies") }}

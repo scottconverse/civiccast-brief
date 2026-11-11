@@ -222,7 +222,7 @@ def find_meetings(
     by_key: dict[str, Found] = {}
     problems: list[str] = []
     for source in sources:
-        if getattr(listers, source.kind) is None:
+        if getattr(listers, source.kind, None) is None:
             problems.append(f"{source.id}: no reader for {source.kind} sources")
             continue
         try:

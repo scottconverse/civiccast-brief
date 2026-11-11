@@ -13,8 +13,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild import drive
+from civiccast_brief.citybuild import drive, platforms
 from civiccast_brief.citybuild.documents import (
     Read,
     document_links,
@@ -107,6 +108,9 @@ def read_latest(
         "granicus": _granicus,
         "webpage": _webpage,
         "gdrive": _gdrive,
+        "civicclerk": _civicclerk,
+        "escribe": _escribe,
+        "civicplus": _civicplus,
     }
     try:
         if source.kind == "youtube":
@@ -480,3 +484,116 @@ def _gdrive(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None
         proof.lines = [f"Drive says modified {entry.modified}"] + _read_lines(read)
         return
     proof.problem = "; ".join(errors + notes)
+
+
+# ----- CivicClerk, eScribe and CivicPlus --------------------------------------------------------
+
+_NOTICE: Final = re.compile(r"\bnotice\b", re.IGNORECASE)
+
+
+def _read_docs(proof: Proof, docs: list[platforms.Doc], fetcher: Fetcher) -> None:
+    """Read the first of ``docs`` that opens; they come newest and most useful first."""
+    errors: list[str] = []
+    for doc in docs[:TRIES]:
+        try:
+            read = read_document(doc.url, fetcher, f"{doc.title} {doc.what}")
+        except FetchError as exc:
+            errors.append(f"{doc.day}: {exc}")
+            continue
+        proof.ok = True
+        proof.meeting_date = doc.day
+        proof.title = doc.title
+        proof.document = doc.url
+        proof.what = doc.what
+        proof.lines = _read_lines(read)
+        proof.problem = ""
+        return
+    proof.problem = "; ".join(errors) or "no document could be read"
+
+
+def _civicclerk(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    docs = [
+        d
+        for d in platforms.clerk_docs(source.tenant, fetcher, today)
+        if body_matches(proof.body, d.body)
+    ]
+    if not docs:
+        proof.problem = (
+            f"none of the portal's newest {platforms.CLERK_EVENTS} meetings on or before {today} "
+            f"is a {proof.body!r} meeting with an agenda posted"
+        )
+        return
+    _read_docs(proof, docs, fetcher)
+
+
+def _escribe(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    meetings = [
+        m
+        for m in platforms.escribe_meetings(source.tenant, fetcher, today)
+        if body_matches(proof.body, f"{m.get('MeetingName')} {m.get('MeetingType')}")
+        and "cancel" not in str(m.get("MeetingName") or "").casefold()
+    ]
+    if not meetings:
+        proof.problem = (
+            f"no {proof.body!r} meeting in the calendar's last {platforms.ESCRIBE_DAYS} days"
+        )
+        return
+    base = platforms.escribe_base(source.tenant)
+    tried: list[str] = []
+    for meeting in meetings[:TRIES]:
+        day = meeting["day"]
+        links = platforms.escribe_html_links(meeting)
+        if not links:
+            tried.append(f"{day}: no agenda or minutes page posted")
+            continue
+        for what, path in links:
+            url = base + path if path.startswith("/") else path
+            try:
+                page = fetcher.get(url)
+            except FetchError as exc:
+                tried.append(f"{day}: {exc}")
+                continue
+            title, items = platforms.escribe_items(page.text)
+            if not items:
+                tried.append(f"{day}: the {what} page {url} has no numbered items")
+                continue
+            proof.ok = True
+            proof.meeting_date = day
+            proof.title = title or squash(str(meeting.get("MeetingName") or ""))
+            proof.document = url
+            proof.what = what
+            proof.lines = [f"{len(items)} {what} items"] + [item[:160] for item in items[:3]]
+            return
+    proof.problem = "; ".join(tried)
+
+
+def _civicplus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    """The Agenda Center first; the Archive Center when the Agenda Center has nothing for the body.
+
+    A notice ("Public Hearing Notice - BOT May Attend ...") is read only when no meeting's agenda
+    or minutes can be.
+    """
+    looked: list[str] = []
+    docs: list[platforms.Doc] = []
+    for path, parse_page in (
+        ("/AgendaCenter", platforms.agenda_center),
+        ("/Archive.aspx", platforms.archive_center),
+    ):
+        page = fetcher.try_get(f"https://{source.site}{path}")
+        if page is None:
+            looked.append(f"{path} did not answer")
+            continue
+        host = (urlsplit(page.url).hostname or source.site).lower()
+        listed = parse_page(host, page.text)
+        docs = [d for d in listed if body_matches(proof.body, d.body) and d.day <= today]
+        docs = [d for d in docs if "cancel" not in d.title.casefold()]
+        if docs:
+            break
+        looked.append(f"{path} lists {len(listed)} dated documents, none for {proof.body!r}")
+    if not docs:
+        proof.problem = "; ".join(looked)
+        return
+    docs.sort(
+        key=lambda d: (_NOTICE.search(d.title) is None, d.day, d.what == "agenda"), reverse=True
+    )
+    _read_docs(proof, docs, fetcher)

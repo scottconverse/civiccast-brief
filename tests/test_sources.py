@@ -169,6 +169,9 @@ def test_merging_adds_new_sources_and_only_the_missing_bodies(tmp_path):
         (f"gdrive:{TPCA_FOLDER}", True),
         (f"webpage:{SVVSD_PAGE}", True),
         ("webpage:https://x.org/index.jsp?uREC_ID=560576&type=d", True),
+        ("civicclerk:erieco", True),
+        ("escribe:bouldercounty", True),
+        ("civicplus:www.townoflyons.com", True),
         ("rss:https://x.org/", False),
         ("webpage:https://x.org/<script>", False),
     ],
@@ -177,3 +180,56 @@ def test_the_desk_knows_the_new_source_ids(source_id, ok):
     from civiccast_brief.review.web import _SOURCE_ID
 
     assert bool(_SOURCE_ID.match(source_id)) is ok
+
+
+@pytest.mark.parametrize(
+    "kind,fields,source_id,address",
+    [
+        (
+            "civicclerk",
+            {"clerk_tenant": "https://ErieCO.portal.civicclerk.com/#/home"},
+            "civicclerk:erieco",
+            "https://erieco.portal.civicclerk.com",
+        ),
+        ("civicclerk", {"tenant": " erieco "}, "civicclerk:erieco", None),
+        (
+            "escribe",
+            {"escribe_tenant": "pub-bouldercounty.escribemeetings.com/?Year=2026"},
+            "escribe:bouldercounty",
+            "https://pub-bouldercounty.escribemeetings.com",
+        ),
+        (
+            "civicplus",
+            {"site": "https://www.townoflyons.com/AgendaCenter"},
+            "civicplus:www.townoflyons.com",
+            "https://www.townoflyons.com",
+        ),
+        ("civicplus", {"site": "www.lafayetteco.gov"}, "civicplus:www.lafayetteco.gov", None),
+    ],
+)
+def test_meeting_platform_sources_take_an_address_or_a_tenant(
+    tmp_path, kind, fields, source_id, address
+):
+    source = S.make_source(kind, {"bodies": "Town Council", **fields})
+    assert source.id == source_id
+    if address:
+        assert source.address == address
+    S.add_source(tmp_path, source)
+    assert S.load_sources(tmp_path) == [source]
+
+
+@pytest.mark.parametrize(
+    "kind,fields,field,match",
+    [
+        ("civicclerk", {}, "clerk_tenant", "enter the tenant"),
+        ("civicclerk", {"clerk_tenant": "https://erie.primegov.com"}, "clerk_tenant", "not that"),
+        ("civicclerk", {"clerk_tenant": "erie co"}, "clerk_tenant", "not a tenant name"),
+        ("escribe", {"escribe_tenant": "bouldercounty.escribe.com"}, "escribe_tenant", "not that"),
+        ("civicplus", {"site": ""}, "site", "enter the town site"),
+        ("civicplus", {"site": "https://lyons"}, "site", "not a site address"),
+    ],
+)
+def test_bad_meeting_platform_fields_name_the_field(kind, fields, field, match):
+    with pytest.raises(S.SourceError, match=match) as info:
+        S.make_source(kind, {"bodies": "Board", **fields})
+    assert info.value.field == field

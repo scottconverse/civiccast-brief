@@ -172,3 +172,12 @@ def test_the_portals_documents_go_with_the_meeting_and_survive_the_merge():
     assert asked == []  # nothing is fetched until the run gets to the meeting
     assert found[0].documents() == ({"format": 1, "documents": []}, ["packet: 12 pages"])
     assert asked == [("https://longmont.primegov.com", council, COUNCIL)]
+
+
+def test_a_source_kind_with_no_lister_is_named_not_a_crash():
+    from civiccast_brief.sources import make_source
+
+    clerk = make_source("civicclerk", {"tenant": "erieco", "bodies": "Town Council"})
+    found, problems = find_meetings([clerk], FIRST, LAST, Listers())
+    assert found == []
+    assert problems == ["civicclerk:erieco: no reader for civicclerk sources"]

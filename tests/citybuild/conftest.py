@@ -197,3 +197,35 @@ def data_api(*videos: tuple[str, str, str]):
         return httpx.Response(200, json={"items": []})
 
     return handle
+
+
+ERIE = "erieco"
+BOULDER_COUNTY = "bouldercounty"
+LYONS = "www.townoflyons.com"
+LAFAYETTE = "www.lafayetteco.gov"
+BOCC_1105 = "3f619bbf-b4ac-4155-b8d1-635fd475d832"
+
+
+def add_erie(web: Web, today) -> None:
+    """Erie's CivicClerk portal: its bodies and its newest 15 meetings as of 2026-11-10."""
+    from civiccast_brief.citybuild import platforms
+
+    api = platforms.clerk_api(ERIE)
+    web.fixture(api + "/EventCategories", "civicclerk-erie-categories.json", "application/json")
+    web.fixture(
+        platforms.clerk_events_url(ERIE, today), "civicclerk-erie-events.json", "application/json"
+    )
+
+
+def add_boulder_county(web: Web) -> None:
+    """Boulder County's eScribe calendar (six meetings) and the 5 November BOCC agenda page."""
+    from civiccast_brief.citybuild import platforms
+
+    base = platforms.escribe_base(BOULDER_COUNTY)
+    web.fixture(
+        base + platforms.ESCRIBE_CALENDAR, "escribe-bouldercounty-calendar.json", "application/json"
+    )
+    web.fixture(
+        f"{base}/Meeting.aspx?Id={BOCC_1105}&Agenda=Agenda&lang=English",
+        "escribe-bocc-agenda-2026-11-05.html",
+    )

@@ -5,21 +5,25 @@ from __future__ import annotations
 import json
 from datetime import date
 
-import pytest
-
 from civiccast_brief.citybuild.build import REPORT_FILE, build_city
-from civiccast_brief.citybuild.search import guesses, search_city
+from civiccast_brief.citybuild.search import PROBED, guesses, search_city
 from civiccast_brief.sources import load_sources, make_source
 
 from .conftest import (
+    BOULDER_COUNTY,
     CHANNEL,
+    ERIE,
     FLAGSTAFF,
+    LAFAYETTE,
     LONGMONT_HOME,
+    LYONS,
     PRIMEGOV,
     SVCM,
     SVVSD,
     TPCA,
     TPCA_ROOT,
+    add_boulder_county,
+    add_erie,
     add_primegov,
     add_tpca_drive,
     data_api,
@@ -114,7 +118,10 @@ def test_a_city_with_no_platform_link_is_probed_by_name(web):
     (portal,) = [c for c in found.candidates if c.source.kind == "primegov"]
     assert "check that it is this city's portal" in portal.how
     assert [(u.platform, u.note) for u in found.unread] == [
-        ("Legistar", "2 bodies: City Council, Zoning Board")
+        (
+            "Legistar",
+            f"{PROBED}; 2 bodies: City Council, Zoning Board",
+        )
     ]
 
 
@@ -146,24 +153,17 @@ def test_a_given_page_with_nothing_to_read_is_named(web):
     assert any("has no dated documents, Drive folders or meeting pages" in n for n in found.notes)
 
 
-@pytest.mark.parametrize(
-    "url,platform",
-    [
-        ("https://go.boarddocs.com/co/bvsd/Board.nsf/Public", "BoardDocs"),
-        ("https://erieco.portal.civicclerk.com/", "CivicClerk"),
-    ],
-)
-def test_a_given_platform_with_no_reader_is_listed_not_saved(web, url, platform):
+def test_a_given_platform_with_no_reader_is_listed_not_saved(web):
     found = search_city(
         "Nowhere",
         "CO",
         website="https://none.test/",
-        extra=[("Board", url)],
+        extra=[("Board", "https://go.boarddocs.com/co/bvsd/Board.nsf/Public")],
         fetcher=web.fetcher(),
         today=TODAY,
     )
     assert found.candidates == []
-    assert [(u.platform, u.note) for u in found.unread] == [(platform, "for Board")]
+    assert [(u.platform, u.note) for u in found.unread] == [("BoardDocs", "for Board")]
 
 
 def test_build_writes_stubs_once_and_merges_sources(web, tmp_path):
@@ -229,3 +229,66 @@ def test_a_channel_whose_feed_answers_404_is_found_through_the_data_api(web, mon
     assert channel.channel_id == CHANNEL
     assert channel.bodies == ("City Council", "Planning and Zoning Commission")
     assert not [u for u in found.unread if u.platform == "YouTube"]
+
+
+# ----- CivicClerk, eScribe and CivicPlus ---------------------------------------------------------
+
+
+def test_a_linked_civicclerk_portal_is_saved_with_every_body(web):
+    web.add(
+        "https://www.erieco.test/",
+        '<html><a href="https://erieco.portal.civicclerk.com/">Agendas and minutes</a></html>',
+    )
+    add_erie(web, TODAY)
+    found = search_city(
+        "Erie", "CO", website="https://www.erieco.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    (portal,) = [c for c in found.candidates if c.source.kind == "civicclerk"]
+    assert portal.source.id == f"civicclerk:{ERIE}"
+    assert len(portal.source.bodies) == 10
+    assert portal.source.bodies[0] == "Town Council"
+    assert "General" not in portal.source.bodies
+    assert portal.how == "linked from the city site; the portal lists 10 bodies"
+    assert not found.unread
+
+
+def test_given_escribe_and_civicplus_pages_are_saved_for_the_given_body(web):
+    add_boulder_county(web)
+    web.fixture(f"https://{LYONS}/AgendaCenter", "civicplus-lyons-agendacenter.html")
+    web.fixture(f"https://{LAFAYETTE}/Archive.aspx", "civicplus-lafayette-archive.html")
+    found = search_city(
+        "Nowhere",
+        "CO",
+        website="https://none.test/",
+        extra=[
+            ("Board of County Commissioners", "https://pub-bouldercounty.escribemeetings.com/"),
+            ("Board of Trustees", f"https://{LYONS}/AgendaCenter"),
+            ("City Council", f"https://{LAFAYETTE}/Archive.aspx"),
+        ],
+        fetcher=web.fetcher(),
+        today=TODAY,
+    )
+    got = {c.source.id: (c.source.bodies, c.how) for c in found.candidates}
+    assert got == {
+        f"escribe:{BOULDER_COUNTY}": (
+            ("Board of County Commissioners",),
+            "given; its calendar's last 120 days show 3 bodies",
+        ),
+        f"civicplus:{LYONS}": (("Board of Trustees",), "given; the Agenda Center list 2 bodies"),
+        f"civicplus:{LAFAYETTE}": (("City Council",), "given; the Archive Center list 2 bodies"),
+    }
+
+
+def test_a_portal_whose_body_list_does_not_answer_is_named(web):
+    found = search_city(
+        "Nowhere",
+        "CO",
+        website="https://none.test/",
+        extra=[("Board", "https://erieco.portal.civicclerk.com/")],
+        fetcher=web.fetcher(),
+        today=TODAY,
+    )
+    assert found.candidates == []
+    ((platform, note),) = [(u.platform, u.note) for u in found.unread]
+    assert platform == "CivicClerk"
+    assert note.startswith("its body list did not answer: ")

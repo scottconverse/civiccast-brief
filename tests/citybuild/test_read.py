@@ -8,8 +8,13 @@ from civiccast_brief.citybuild.read import body_matches, committee_for, read_lat
 from civiccast_brief.sources import make_source
 
 from .conftest import (
+    BOCC_1105,
+    BOULDER_COUNTY,
     CHANNEL,
+    ERIE,
     FLAGSTAFF,
+    LAFAYETTE,
+    LYONS,
     PRIMEGOV,
     SVCM,
     SVCM_NEWEST,
@@ -17,6 +22,8 @@ from .conftest import (
     SVVSD_180,
     SVVSD_PACKET,
     TPCA_ROOT,
+    add_boulder_county,
+    add_erie,
     add_primegov,
     add_tpca_drive,
     feed,
@@ -315,3 +322,131 @@ def test_a_followed_list_reads_a_meeting_before_a_notice_and_skips_cancelled_one
     assert proof.title == "Board of Education Regular Meeting"
     assert events not in web.asked
     assert not any("study-session-119" in url for url in web.asked)  # cancelled on the list
+
+
+# ----- CivicClerk, eScribe and CivicPlus (fixtures trimmed from the live sites, 2026-11-10) ------
+
+
+def _clerk_file(file_id: int) -> str:
+    from civiccast_brief.citybuild import platforms
+
+    return platforms.clerk_file_url(ERIE, file_id)
+
+
+def test_civicclerk_reads_the_newest_agenda_of_the_body(web):
+    add_erie(web, TODAY)
+    web.add(
+        _clerk_file(2197), text_pdf("Town Council Meeting", "November 10, 2026"), "application/pdf"
+    )
+    source = make_source("civicclerk", {"tenant": ERIE, "bodies": ["Town Council"]})
+    proof = read_latest(source, "Town Council", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    assert (proof.meeting_date, proof.what) == (date(2026, 11, 10), "agenda")
+    assert proof.document == _clerk_file(2197)
+    assert proof.title == "Town Council Meeting (Town Council)"
+
+
+def test_civicclerk_skips_cancelled_and_future_meetings(web):
+    # Asked on 9 November, a portal that still lists the 10 November meeting has it skipped; the
+    # 3 November study session has no files, so 27 October is the newest Town Council agenda.
+    today = date(2026, 11, 9)
+    add_erie(web, today)
+    web.add(
+        _clerk_file(2179), text_pdf("Town Council Meeting", "October 27, 2026"), "application/pdf"
+    )
+    web.add(
+        _clerk_file(2162), text_pdf("Joint Study Session", "October 21, 2026"), "application/pdf"
+    )
+    council = make_source("civicclerk", {"tenant": ERIE, "bodies": ["Town Council"]})
+    proof = read_latest(council, "Town Council", web.fetcher(), today=today)
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 27)
+    # The 4 November Planning Commission meeting was CANCELED and has no agenda.
+    planning = make_source("civicclerk", {"tenant": ERIE, "bodies": ["Planning Commission"]})
+    proof = read_latest(planning, "Planning Commission", web.fetcher(), today=today)
+    assert proof.ok, proof.problem
+    assert (proof.meeting_date, proof.document) == (date(2026, 10, 21), _clerk_file(2162))
+
+
+def test_escribe_reads_the_newest_past_html_agenda(web):
+    add_boulder_county(web)
+    today = date(2026, 11, 6)
+    source = make_source(
+        "escribe", {"tenant": BOULDER_COUNTY, "bodies": ["Board of County Commissioners"]}
+    )
+    proof = read_latest(source, "Board of County Commissioners", web.fetcher(), today=today)
+    assert proof.ok, proof.problem
+    # The 10 November meeting is after "today" and is skipped.
+    assert (proof.meeting_date, proof.what) == (date(2026, 11, 5), "agenda")
+    assert proof.title == "Board of County Commissioners - Regular Meeting - November 05, 2026"
+    assert proof.lines == [
+        "13 agenda items",
+        "1. Call to Order",
+        "2. 9:00 a.m. Morning Session",
+        "3. Business Meeting",
+    ]
+
+
+def test_escribe_skips_a_cancelled_meeting(web):
+    import json
+
+    from civiccast_brief.citybuild import platforms
+
+    from .conftest import HERE
+
+    add_boulder_county(web)
+    calendar = json.loads((HERE / "escribe-bouldercounty-calendar.json").read_text("utf-8"))
+    for row in calendar["d"]:
+        if row["StartDate"].startswith("2026/11/05"):
+            row["MeetingName"] = "CANCELLED - " + row["MeetingName"]
+    web.add(
+        platforms.escribe_base(BOULDER_COUNTY) + platforms.ESCRIBE_CALENDAR,
+        json.dumps(calendar),
+        "application/json",
+    )
+    source = make_source("escribe", {"tenant": BOULDER_COUNTY, "bodies": ["BOCC"]})
+    proof = read_latest(
+        source, "Board of County Commissioners", web.fetcher(), today=date(2026, 11, 6)
+    )
+    # The 27 October pages are not saved, so nothing reads, and 5 November was never asked for.
+    assert not proof.ok
+    assert proof.problem.startswith("2026-10-27: ")
+    assert not any(BOCC_1105 in url for url in web.asked)
+
+
+def test_civicplus_reads_a_meeting_agenda_before_a_newer_notice(web):
+    web.fixture(f"https://{LYONS}/AgendaCenter", "civicplus-lyons-agendacenter.html")
+    workshop = f"https://{LYONS}/AgendaCenter/ViewFile/Agenda/_11032026-2871"
+    web.add(workshop, text_pdf("Special Budget Workshop", "November 3, 2026"), "application/pdf")
+    source = make_source("civicplus", {"site": LYONS, "bodies": ["Board of Trustees"]})
+    proof = read_latest(source, "Board of Trustees", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    # The 10 November "Public Hearing Notice" is newer, and the 16 November notice is in the
+    # future; the 3 November workshop agenda is read.
+    assert (proof.meeting_date, proof.document) == (date(2026, 11, 3), workshop)
+    assert proof.title == "November 3, 2026 Special Board of Trustees Budget Workshop Agenda"
+    assert not any("_11102026" in url or "_11162026" in url for url in web.asked)
+
+
+def test_civicplus_falls_back_to_the_archive_center(web):
+    # Lafayette has no Agenda Center (404); its Archive Center lists the council's packets. The
+    # 2 November packet does not open, so the 27 October workshop is read.
+    web.fixture(f"https://{LAFAYETTE}/Archive.aspx", "civicplus-lafayette-archive.html")
+    workshop = f"https://{LAFAYETTE}/ArchiveCenter/ViewFile/Item/8168"
+    web.add(workshop, text_pdf("City Council Workshop", "October 27, 2026"), "application/pdf")
+    source = make_source("civicplus", {"site": LAFAYETTE, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    assert (proof.meeting_date, proof.document) == (date(2026, 10, 27), workshop)
+    assert f"https://{LAFAYETTE}/ArchiveCenter/ViewFile/Item/8182" in web.asked
+    # The Spanish copy ("Nobiembre 02 del 2026", item 8185) has no English date and is not read.
+    assert not any(url.endswith("/8185") for url in web.asked)
+
+
+def test_civicplus_names_where_it_looked_when_nothing_matches(web):
+    web.fixture(f"https://{LAFAYETTE}/Archive.aspx", "civicplus-lafayette-archive.html")
+    source = make_source("civicplus", {"site": LAFAYETTE, "bodies": ["Library Board"]})
+    proof = read_latest(source, "Library Board", web.fetcher(), today=TODAY)
+    assert not proof.ok
+    assert proof.problem.startswith("/AgendaCenter did not answer; /Archive.aspx lists ")
+    assert proof.problem.endswith("none for 'Library Board'")

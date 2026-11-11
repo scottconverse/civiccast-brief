@@ -13,7 +13,16 @@ from typing import Final
 from urllib.parse import parse_qs, unquote, urlsplit
 
 #: Platforms this program can also read meetings from. The rest are found and reported only.
-READABLE: Final = ("primegov", "youtube", "granicus", "webpage", "gdrive")
+READABLE: Final = (
+    "primegov",
+    "youtube",
+    "granicus",
+    "webpage",
+    "gdrive",
+    "civicclerk",
+    "escribe",
+    "civicplus",
+)
 
 LABELS: Final = {
     "primegov": "PrimeGov",
