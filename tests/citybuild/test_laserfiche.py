@@ -3,6 +3,9 @@
 The listings are Louisville's, saved from Chrome on 2026-11-11: the Planning Commission folder
 (8986), its 2026 folder (1058850) and its 2025 folder (1010632); and the viewer's answers for a
 scanned Building Code Board of Appeals agenda (1066144): its page count and its first page's text.
+
+Boulder's Planning Board listings (47549 and the folders under it) were saved the same day: Boulder
+files a year by month and each month by meeting.
 """
 
 from __future__ import annotations
@@ -33,6 +36,18 @@ def doc_url(docid: int) -> str:
 
 def view_url(docid: int) -> str:
     return f"{HOST}/WebLink/DocView.aspx?id={docid}&dbid=0&repo=Louisville"
+
+
+BOULDER = "https://documents.bouldercolorado.gov"
+
+
+def boulder_file(docid: int) -> str:
+    return f"{BOULDER}/WebLink/ElectronicFile.aspx?docid={docid}&dbid=0&repo=LF8PROD2"
+
+
+def boulder_planning():
+    url = f"{BOULDER}/WebLink/Browse.aspx?id=47549&dbid=0&repo=LF8PROD2"
+    return make_source("laserfiche", {"url": url, "bodies": "Planning Board"})
 
 
 def saved(name: str) -> Any:
@@ -207,6 +222,54 @@ def test_a_site_that_stops_the_browser_is_reported_not_read(fake, web):
     assert not proof.ok
     assert "stopped Chrome with a challenge page" in proof.problem
     assert fake.got == []
+
+
+def test_a_year_filed_by_month_and_meeting_is_read_down_to_the_meetings(fake, web):
+    fake.files[boulder_file(206382)] = text_pdf("Planning Board", "Agenda", "October 27, 2026")
+    proof = read_latest(
+        boulder_planning(), "Planning Board", web.fetcher(), today=date(2026, 11, 11)
+    )
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 27)
+    assert proof.title == "10.27.26 PB Agenda"
+    assert proof.document == boulder_file(206382)
+    # The body, its two newest years, then the months newest first: November has no meetings yet.
+    opened = [laserfiche.parse_url(u)[2] for u in fake.opened]
+    assert opened[:6] == [47549, 198583, 189891, 198594, 198593, 206380]
+    # Three months with meetings are read (October, September, August), not the whole year.
+    assert 198591 in opened and 198590 not in opened
+    assert fake.got == [boulder_file(206382)]
+
+
+def test_a_meeting_folder_dated_after_today_is_not_opened(fake, web):
+    fake.files[boulder_file(206375)] = text_pdf("Planning Board", "Agenda", "October 6, 2026")
+    proof = read_latest(
+        boulder_planning(), "Planning Board", web.fetcher(), today=date(2026, 10, 20)
+    )
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 6)
+    opened = [laserfiche.parse_url(u)[2] for u in fake.opened]
+    assert 198594 not in opened  # November
+    assert 206380 in opened and 206381 not in opened  # 10.06.26 is opened, 10.27.26 is not
+
+
+def test_on_one_day_the_agenda_is_read_before_a_recording_listed_ahead_of_it(fake, web):
+    meeting = fake.listings[206381]["data"]
+    fake.listings[206381] = {"data": {**meeting, "results": meeting["results"][::-1]}}
+    fake.files[boulder_file(206382)] = text_pdf("Planning Board", "Agenda", "October 27, 2026")
+    proof = read_latest(
+        boulder_planning(), "Planning Board", web.fetcher(), today=date(2026, 11, 11)
+    )
+    assert proof.ok, proof.problem
+    assert fake.got == [boulder_file(206382)]
+
+
+@pytest.mark.parametrize(
+    "name,month",
+    [("10 OCT", 10), ("09 SEPT", 9), ("2026", None), ("13 XYZ", None), ("10.06.26", None)],
+)
+def test_a_month_folder_is_known_by_its_name(name, month):
+    assert laserfiche.month_of(name) == month
 
 
 @pytest.mark.parametrize(

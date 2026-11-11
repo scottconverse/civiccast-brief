@@ -12,6 +12,10 @@ WebLink 11 (checked live on 2026-11-11 against Louisville, Colorado) shows a fol
 A body's folder holds one folder per year ("2026 Planning Commission Agendas Packets Minutes")
 and older folders for spans of years ("2000-2019 Planning Commission"). Its documents are named
 with the meeting day ("Planning Commission Agenda and Packet 2026 10 08").
+
+Some cities file a year by month and then by meeting (Boulder, checked live on 2026-11-11):
+"2026" holds "01 JAN" ... "12 DEC", each month holds a folder per meeting ("10.06.26"), and that
+holds the meeting's documents ("10.06.26 PB Agenda", "10.06.26 PB Audio").
 """
 
 from __future__ import annotations
@@ -42,7 +46,16 @@ DOCUMENT: Final = -2
 #: not.
 _YEAR: Final = re.compile(r"^\s*(\d{4})\b(?!\s*(?:-|–|&|and\b|to\b))", re.IGNORECASE)
 _TAG: Final = re.compile(r"<[^>]{0,2000}>")
+#: How many months with meetings in them are read, newest first, where a year is filed by month.
+MONTHS: Final = 3
+#: Month folders listed at most, newest first, empty ones included.
+MONTHS_LISTED: Final = 6
+#: "10 OCT" or "10 October" is a month's folder.
+_MONTH: Final = re.compile(r"^\s*(\d{1,2})\s+[a-z]{3}", re.IGNORECASE)
 _NAME_DAY: Final = re.compile(r"(?<!\d)(\d{4})[ ._-](\d{1,2})[ ._-](\d{1,2})(?!\d)")
+
+
+_RANK: Final = {"agenda": 3, "packet": 3, "minutes": 2}
 
 
 class LaserficheError(ValueError):
@@ -111,6 +124,13 @@ def year_of(name: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def month_of(name: str) -> int | None:
+    """The month of a month's folder ("10 OCT"), or None."""
+    match = _MONTH.match(name)
+    month = int(match.group(1)) if match else 0
+    return month if 1 <= month <= 12 else None
+
+
 def day_of(name: str) -> date | None:
     """The meeting day in a document's name: "2026 10 08", or a written date."""
     match = _NAME_DAY.search(name)
@@ -143,12 +163,37 @@ def docs(browser: Browser, url: str, body: str, today: date) -> tuple[list[Doc],
         reverse=True,
     )
     notes = [f"the folder has {len(top)} entries, {len(years)} of them year folders"]
-    for _year, row in years[:YEARS]:
-        found += [
-            r
-            for r in entries(browser, host, base, int(row["entryId"]), repo)
-            if r.get("type") == DOCUMENT
-        ]
+    months: list[tuple[tuple[int, int], dict[str, Any]]] = []
+    for year, row in years[:YEARS]:
+        for r in entries(browser, host, base, int(row["entryId"]), repo):
+            if r.get("type") == DOCUMENT:
+                found.append(r)
+            elif (
+                r.get("type") == FOLDER
+                and (month := month_of(str(r.get("name") or "")))
+                and (year, month) <= (today.year, today.month)
+            ):
+                months.append(((year, month), r))
+    months.sort(key=lambda pair: pair[0], reverse=True)
+    with_meetings = 0
+    for _when, row in months[:MONTHS_LISTED]:
+        if with_meetings >= MONTHS:
+            break
+        before = len(found)
+        for meeting in entries(browser, host, base, int(row["entryId"]), repo):
+            if meeting.get("type") == DOCUMENT:
+                found.append(meeting)
+            elif meeting.get("type") == FOLDER:
+                day = day_of(squash(str(meeting.get("name") or "")))
+                if day is not None and day <= today:
+                    found += [
+                        r
+                        for r in entries(browser, host, base, int(meeting["entryId"]), repo)
+                        if r.get("type") == DOCUMENT
+                    ]
+        with_meetings += len(found) > before
+    if months:
+        notes.append(f"{len(months)} month folders, the newest {with_meetings} with meetings read")
     listed: list[Doc] = []
     for row in found:
         name = squash(str(row.get("name") or ""))
@@ -160,7 +205,9 @@ def docs(browser: Browser, url: str, body: str, today: date) -> tuple[list[Doc],
         url_of = (file_url if row.get("isEdoc") else view_url)(host, base, doc, repo)
         listed.append(Doc(body, day, name, url_of, "agenda" if what == "document" else what))
     notes.append(f"{len(found)} documents read from it, {len(listed)} dated on or before {today}")
-    listed.sort(key=lambda d: (d.day, d.what != "minutes"), reverse=True)
+    # An agenda or packet first, then the minutes, then a document the name does not say is one
+    # (a recording, a staff memo).
+    listed.sort(key=lambda d: (d.day, _RANK.get(kind_of(d.title), 0)), reverse=True)
     return listed, notes
 
 
