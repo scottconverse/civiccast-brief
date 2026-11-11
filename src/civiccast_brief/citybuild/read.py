@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild import browser, drive, laserfiche, platforms
+from civiccast_brief.citybuild import browser, drive, laserfiche, onedrive, platforms
 from civiccast_brief.citybuild.documents import (
     Read,
     document_links,
@@ -448,8 +448,10 @@ def _follow(proof: Proof, source: Source, links: list, fetcher: Fetcher, today: 
 def _read_first(proof: Proof, candidates: list, fetcher: Fetcher, title: str) -> None:
     errors: list[str] = []
     for day, link in candidates[:TRIES]:
+        # A OneDrive share opens only in a browser.
+        reader = onedrive.Reader(browser.shared()) if onedrive.is_share(link.url) else fetcher
         try:
-            read = read_document(link.url, fetcher, link.text + " " + link.file_name)
+            read = read_document(link.url, reader, link.text + " " + link.file_name)
         except FetchError as exc:
             errors.append(str(exc))
             continue
