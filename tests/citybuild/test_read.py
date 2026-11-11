@@ -265,7 +265,8 @@ def test_youtube_without_captions_names_the_newest_matching_video(web):
     proof = read_latest(source, "City Council", web.fetcher(), today=TODAY)
     assert proof.ok
     assert proof.document == "https://www.youtube.com/watch?v=bbbbbbbbbbb"
-    assert proof.meeting_date == date(2026, 10, 29)
+    # The meeting day is the one in the title, not the day the video went up.
+    assert proof.meeting_date == date(2026, 10, 28)
     assert proof.what.startswith("video (captions not fetched")
     missing = read_latest(source, "Water Board", web.fetcher(), today=TODAY)
     assert not missing.ok and "names 'Water Board'" in missing.problem
@@ -472,3 +473,30 @@ def test_granicus_reads_the_newest_past_clip_of_the_body(web, monkeypatch):
     # newest past clip is still the October one.
     assert proof.meeting_date == date(2026, 10, 6)
     assert proof.document == granicus.video_url(host, 13, 950)
+
+
+def test_a_livestream_set_up_weeks_ahead_is_dated_by_its_title(web):
+    # BVSD sets up its board livestreams weeks ahead: the December meeting's video went up in
+    # late October, after the October meeting: its publish date says nothing about when it meets.
+    web.add(
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL}",
+        feed(
+            (
+                "ddddddddddd",
+                "December 8, 2026 Board of Education Meeting",
+                "2026-10-30T18:00:00+00:00",
+            ),
+            (
+                "eeeeeeeeeee",
+                "October 27, 2026 Board of Education Meeting",
+                "2026-10-28T03:00:00+00:00",
+            ),
+            ("fffffffffff", "Board of Education Study Session", "2026-10-01T03:00:00+00:00"),
+        ),
+        "application/atom+xml",
+    )
+    source = make_source("youtube", {"channel_id": CHANNEL, "bodies": ["Board of Education"]})
+    proof = read_latest(source, "Board of Education", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    assert proof.document == "https://www.youtube.com/watch?v=eeeeeeeeeee"
+    assert proof.meeting_date == date(2026, 10, 27)

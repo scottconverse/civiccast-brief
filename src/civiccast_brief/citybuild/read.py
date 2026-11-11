@@ -23,7 +23,7 @@ from civiccast_brief.citybuild.documents import (
     read_document,
 )
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError
-from civiccast_brief.citybuild.page import link_date, parse, squash
+from civiccast_brief.citybuild.page import first_date, link_date, parse, squash
 from civiccast_brief.record import credentials
 from civiccast_brief.record.video.youtube.data_api import DataApiClient
 from civiccast_brief.record.video.youtube.listing import VideoError
@@ -314,6 +314,9 @@ def _youtube(
     work_dir: Path | None = None,
 ) -> None:
     videos = [v for v in feed_entries(source.channel_id, fetcher) if body_matches(proof.body, v[1])]
+    # A livestream can be set up weeks before the meeting, so a date in the title wins over the
+    # day the video went up.
+    videos = [(v[0], v[1], first_date(v[1]) or v[2]) for v in videos]
     videos = [v for v in videos if v[2] <= today]
     if not videos:
         proof.problem = f"none of the channel's newest videos names {proof.body!r} in its title"
