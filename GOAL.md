@@ -17,37 +17,37 @@ Scott's decisions, 2026-11-09:
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | **A** | **TownRecord Milestone 1** | | |
-| 1 | Captions for Sustainability Board Oct 21 (other apps stay off YouTube) | open (partly) | yt-dlp fetch of the en-orig track for qkZxO5zzi0A worked: 2,123 segments. The program's own capture has not run on it yet |
-| 2 | Show M1 passes: per-meeting result and the reason each non-aligned meeting did not align | open | |
+| 1 | Captions for Sustainability Board Oct 21 (other apps stay off YouTube) | open (partly) | TownRecord #35 (Data API key, merge d0fb0bd) and #36 (single-meeting match, merge 9d37c0f). Captions come through the Data API ladder; 0 429s, 6 quota units. youtubetotranscript.com answers 403 (Cloudflare); not worked around. The AI-tool refusal check on PrimeGov was not run |
+| 2 | Show M1 passes: per-meeting result and the reason each non-aligned meeting did not align | open | Live M1 run: all 8 meetings with video captured and aligned (items aligned 3/14, 4/26, 41/48, 3/20, 6/17, 9/19, 25/34, 4/15); duplicate copy of video 72 caught. Not yet shown: why the unaligned items did not align (not reviewed); the two data-center checks cannot run from home. Report: scratch research/live-m1h/M1-REPORT.md |
 | 3 | PR #30 description lists all 8 fixes | done | scottconverse/townrecord#30 body, 2026-11-09 |
 | 4 | Merge PR #30 | done | merge commit a574028, 2026-11-09 |
 | 5 | P&Z title rule (city name ignored; missing last word OK when one board fits; else skip and report) | done | scottconverse/townrecord#31, merge feecd4d. 5 tests, the main one fails on the old code. Live Longmont copy: P&Z titles find the Planning and Zoning Commission |
 | **B** | **Phase One: the Longmont news site** | | |
-| 6 | Evidence lookup (now inside CivicCast Brief, not a TownRecord server) | open | |
-| 7 | Speaker names: fix "unidentified speaker" (textflowkit code copied in) | open | |
-| 8 | Article per Council meeting, every paragraph cited to the video and checked for new claims | open | |
-| 9 | Automatic weekly run over all meetings and their documents | open | |
-| 10 | Model picker per task (Claude `claude -p` for Council, DeepSeek for boards) | open | |
-| 11 | Editor desk: review, edit, redraft, hold, kill, publish; auto-publish allowed | open | |
-| 12 | Add-source screen (part of the in-program city setup) | open | |
-| 13 | Site pages; Corrections page and link removed | open | |
-| 14 | Written roundup titles | open | |
-| 15 | civiccastbrief.org home page listing live cities | open | |
-| 16 | Logo A and the new look everywhere, self-hosted fonts | open | |
-| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | open | |
+| 6 | Evidence lookup (now inside CivicCast Brief, not a TownRecord server) | done | #5, merge a28d228. `python -m civiccast_brief evidence`; 77 tests. Real Oct 20 council record: 8,827 spans; a 4-sentence draft: 2 pass, the wrong tally and the uncited sentence fail |
+| 7 | Speaker names: fix "unidentified speaker" (textflowkit code copied in) | open (improved) | #3, #8, #14 (merge 0d877be). Unidentified claims 107/159 (67%) to 93/169 (55%) on 5 meetings; 21 voices named. 12 spot checks against captions correct; not checked against audio. Naming more (captioner spellings, names not printed in the documents) needs Scott's OK |
+| 8 | Article per Council meeting, every paragraph cited to the video and checked for new claims | done | #7, merge 26e58d3; #11 adds packet and minutes pages. 5 Longmont Council stories pass the no-new-claims check (claude -p); one walked through the desk and built as an episode page; video links open at the cited second |
+| 9 | Automatic weekly run over all meetings and their documents | open | #9, #11, #13 merged. Live run 3 crashed on a closed portal client; fix in #15. Not yet shown: a full live run with documents, stories and auto-publish |
+| 10 | Model picker per task (Claude `claude -p` for Council, DeepSeek for boards) | merged, not shown live for boards | #4 and #9. models.json: Claude for City Council, DeepSeek for other bodies. Council runs used claude -p live; no live board run yet |
+| 11 | Editor desk: review, edit, redraft, hold, kill, publish; auto-publish allowed | merged, partly shown | #4. One story walked staged to Publish in the desk UI (#7). Hold, kill, redraft and auto-publish tested with stand-ins only |
+| 12 | Add-source screen (part of the in-program city setup) | merged, not walked | #4 (Sources page) and #10 (Find a city's sources). Tests only; the screen has not been walked |
+| 13 | Site pages; Corrections page and link removed | merged, not live | #6, merge ddec5ca. Waits on item 18 |
+| 14 | Written roundup titles | done | #7. Real roundup title passed the check on the first try: "Longmont council weighs Ordinance 2026-63 and residential metropolitan districts" |
+| 15 | civiccastbrief.org home page listing live cities | merged, not live | #6. Waits on item 18 |
+| 16 | Logo A and the new look everywhere, self-hosted fonts | merged, not live | #6. Waits on item 18 |
+| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | merged, not live | #6. Waits on item 18 |
 | 18 | Deploy and walk the live site at desktop and phone widths | open | |
 | **C** | **Phase Two** | | |
-| 19 | All Longmont boards and commissions | open | |
-| 20 | School district board(s) | open | |
-| 21 | Charter school boards, if any | open | |
-| 22 | In-program search-and-build step for a new city, no AI needed | open | |
+| 19 | All Longmont boards and commissions | done | #10, merge 4863890. Live `city check` 2026-11-10: 25 of 29 PrimeGov committees read; the 4 not read have held no meeting in 2025-2026 |
+| 20 | School district board(s) | done | #10. SVVSD 10/28/26 study session agenda read live |
+| 21 | Charter school boards, if any | done | #10. Flagstaff Academy, SVCM and TPCA read live (TPCA through its Drive folder; its page answers 403) |
+| 22 | In-program search-and-build step for a new city, no AI needed | done (Longmont) | #10. `city find` / `city check` use plain web requests, no model; Longmont 34 of 38 body sources read. Other towns are item 23 |
 | **D** | **Phase Three** | | |
 | 23 | All 10 Boulder County towns and cities plus the County Commissioners, each with council, boards and schools, set up with step 22 | open | |
 | **E** | **Older open items** | | |
 | 24 | Apple Podcasts and Spotify: feed meets both formats, settings documented, tested with stand-ins | done | scottconverse/civiccast-brief#2, merge 2891490. Live feed rebuilt and deployed 2026-11-10: no `<h2>`; Apple and Spotify stand-ins report no problems on the live feed. Branch podcast-and-brevo-formats: build checks in site/directories.py; tests/site/test_directories.py (24 pass locally). Live Longmont feed through the stand-ins: Spotify no problems; Apple flagged only the `<h2>` in episode notes, which this change removes (live site needs a rebuild). docs/podcast-directories.md. Not submitted to either service. Three live chapter titles are 59 to 62 characters; Apple's guide asks for 45 or fewer (not in Apple's submission checks) |
 | 25 | Email through Brevo's API format, settings documented, tested with a stand-in; clear the `nobody@example.com` row | done | scottconverse/civiccast-brief#2, merge 2891490. Row sub-f5391f814da11cfbb8154536 deleted from live D1 2026-11-10 (1 change; Scott's confirmed row kept). worker/signup/src/brevo.ts, used when the BREVO_API_KEY secret is set; test/brevo.test.ts (13 pass locally, and fail when the api-key header or the header filter is broken). Setup steps in docs/email-signup.md. No real Brevo account used |
 | **F** | **Issues** | | |
-| 26 | YouTube shared limit: other apps paused for now; CivicCast Brief reads captions with the copied TownRecord code | open | Scott OK'd 2026-11-09 |
+| 26 | YouTube shared limit: other apps paused for now; CivicCast Brief reads captions with the copied TownRecord code | open (partly) | Captions use the copied TownRecord ladder with Scott's Data API key (Credential Manager, not in the repo). 0 429s so far |
 | 27 | Running on other machines: no separate installs; release work after A to E | open | |
 | 28 | Someone other than me sets up a city with the in-program setup | open | |
 
