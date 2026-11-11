@@ -24,7 +24,7 @@ from datetime import date
 from typing import Any, Final
 from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild import detect, drive
+from civiccast_brief.citybuild import detect, drive, platforms
 from civiccast_brief.citybuild.documents import document_links
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError, Page
 from civiccast_brief.citybuild.page import Link, link_date, page_text, parse, squash
@@ -267,7 +267,9 @@ def search_city(
     for item in youtube:
         _youtube(result, item, fetcher, None)
     for item in platforms:
-        if item.platform not in ("primegov", "legistar", "granicus", "youtube", "gdrive"):
+        if item.platform in _LISTED:
+            _LISTED[item.platform](result, item, fetcher, today, None)
+        elif item.platform not in ("primegov", "legistar", "granicus", "youtube", "gdrive"):
             result.unread.append(Unread(item.label, item.url))
     for body, url in extra:
         _extra_page(result, squash(body), url.strip(), fetcher, today)
@@ -376,6 +378,10 @@ def _probe(result: Search, fetcher: Fetcher) -> None:
     _legistar(result, detect.Found("legistar", f"https://{slug}.legistar.com", slug), fetcher, True)
 
 
+#: Said of a platform the city's site does not link, found by trying the city's name as a tenant.
+PROBED: Final = "not linked from the city site; a place of the same name elsewhere may own it"
+
+
 def _legistar(result: Search, item: detect.Found, fetcher: Fetcher, probing: bool = False) -> None:
     if not item.key:
         result.unread.append(Unread("Legistar", item.url))
@@ -395,7 +401,8 @@ def _legistar(result: Search, item: detect.Found, fetcher: Fetcher, probing: boo
         squash(str(r.get("BodyName"))) for r in rows if isinstance(r, dict) and r.get("BodyName")
     ]
     shown = ", ".join(names[:8]) + (", ..." if len(names) > 8 else "")
-    result.unread.append(Unread("Legistar", item.url, f"{len(names)} bodies: {shown}"))
+    note = f"{len(names)} bodies: {shown}"
+    result.unread.append(Unread("Legistar", item.url, f"{PROBED}; {note}" if probing else note))
 
 
 # ----- Granicus and YouTube ---------------------------------------------------------------------
@@ -501,6 +508,9 @@ def _extra_page(result: Search, body: str, url: str, fetcher: Fetcher, today: da
     if item is not None and item.platform == "gdrive":
         _drive_folder(result, body, [item.key], fetcher, today, "given")
         return
+    if item is not None and item.platform in _LISTED:
+        _LISTED[item.platform](result, item, fetcher, today, body)
+        return
     if item is not None:
         result.unread.append(Unread(item.label, url, f"for {body}"))
         return
@@ -603,3 +613,75 @@ def _meeting_pages(links: list[Link], base: str) -> tuple[str, int, date | None]
     if len(days) < 2:
         return "", 0, None
     return follow, len(days), max(days)
+
+
+# ----- CivicClerk, eScribe and CivicPlus --------------------------------------------------------
+
+
+def _listed(
+    result: Search,
+    item: detect.Found,
+    kind: str,
+    fields: dict[str, str],
+    names: list[str],
+    body: str | None,
+    how: str,
+) -> None:
+    if not names:
+        result.unread.append(Unread(item.label, item.url, f"{how}, and names no body"))
+        return
+    bodies = [body] if body else names
+    result.add(
+        make_source(kind, {**fields, "bodies": bodies}),
+        f"{'given' if body else 'linked from the city site'}; {how} {len(names)} bodies",
+    )
+
+
+def _civicclerk(
+    result: Search, item: detect.Found, fetcher: Fetcher, today: date, body: str | None
+) -> None:
+    try:
+        names = platforms.clerk_bodies(item.key, fetcher)
+    except (FetchError, ValueError) as exc:
+        result.unread.append(Unread(item.label, item.url, f"its body list did not answer: {exc}"))
+        return
+    _listed(result, item, "civicclerk", {"tenant": item.key}, names, body, "the portal lists")
+
+
+def _escribe(
+    result: Search, item: detect.Found, fetcher: Fetcher, today: date, body: str | None
+) -> None:
+    try:
+        meetings = platforms.escribe_meetings(item.key, fetcher, today)
+    except (FetchError, ValueError) as exc:
+        result.unread.append(Unread(item.label, item.url, f"its calendar did not answer: {exc}"))
+        return
+    names = platforms.escribe_bodies(meetings)
+    how = f"its calendar's last {platforms.ESCRIBE_DAYS} days show"
+    _listed(result, item, "escribe", {"tenant": item.key}, names, body, how)
+
+
+def _civicplus(
+    result: Search, item: detect.Found, fetcher: Fetcher, today: date, body: str | None
+) -> None:
+    site = (urlsplit(item.url).hostname or item.key).lower()
+    names: list[str] = []
+    seen: list[str] = []
+    for path, bodies_on in (
+        ("/AgendaCenter", platforms.agenda_center_bodies),
+        ("/Archive.aspx", platforms.archive_center_bodies),
+    ):
+        page = fetcher.try_get(f"https://{site}{path}")
+        if page is None:
+            continue
+        site = (urlsplit(page.url).hostname or site).lower()
+        found = bodies_on(page.text)
+        if found:
+            seen.append("Agenda Center" if path == "/AgendaCenter" else "Archive Center")
+        known = {n.casefold() for n in names}
+        names += [n for n in found if n.casefold() not in known]
+    how = f"the {' and '.join(seen) or 'Agenda Center and Archive Center'} list"
+    _listed(result, item, "civicplus", {"site": site}, names, body, how)
+
+
+_LISTED: Final = {"civicclerk": _civicclerk, "escribe": _escribe, "civicplus": _civicplus}

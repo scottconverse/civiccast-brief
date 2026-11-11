@@ -245,3 +245,30 @@ def test_sources_add_edit_remove_and_errors_name_the_field(store, city):
     )
     assert gone.status_code == 400 and "no source" in gone.text
     assert client.get("/sources", params={"edit": "youtube:nope"}).status_code == 404
+
+
+def test_a_platform_source_opens_for_editing_with_its_tenant_filled_in(store, city):
+    sources.add_source(
+        city, sources.make_source("civicclerk", {"tenant": "erieco", "bodies": "Town Council"})
+    )
+    sources.add_source(
+        city, sources.make_source("escribe", {"tenant": "bouldercounty", "bodies": "BOCC"})
+    )
+    client = client_for(store, city)
+    clerk = client.get("/sources", params={"edit": "civicclerk:erieco"})
+    assert clerk.status_code == 200
+    assert 'name="clerk_tenant" value="erieco"' in clerk.text
+    county = client.get("/sources", params={"edit": "escribe:bouldercounty"})
+    assert 'name="escribe_tenant" value="bouldercounty"' in county.text
+    saved = client.post(
+        "/sources/edit",
+        data={
+            "token": token(client),
+            "source_id": "civicclerk:erieco",
+            "kind": "civicclerk",
+            "clerk_tenant": "erieco",
+            "bodies": "Town Council\nPlanning Commission",
+        },
+    )
+    assert saved.status_code == 200
+    assert sources.load_sources(city)[0].bodies == ("Town Council", "Planning Commission")

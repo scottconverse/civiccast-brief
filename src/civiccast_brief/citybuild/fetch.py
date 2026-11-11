@@ -1,4 +1,5 @@
-"""The one way the city search asks the web: a named, size-limited GET.
+"""The one way the city search asks the web: a named, size-limited GET (or, for a meeting
+calendar that is only asked that way, a JSON POST).
 
 Every request says who is asking (the same User-Agent as the PrimeGov reader), follows at most four
 redirects and reads at most a few megabytes. Requests to YouTube take their turn in the process
@@ -71,11 +72,21 @@ class Fetcher:
                 pacing.pacer().wait(what="the city search")
             except pacing.PaceHeld as exc:
                 raise FetchError(f"{url}: {exc}") from exc
+        return self._send("GET", url, youtube=youtube)
+
+    def post_json(self, url: str, data: Any) -> Page:
+        """POST ``data`` as JSON to ``url``, for a meeting calendar that is asked that way."""
+        return self._send("POST", url, data=data)
+
+    def _send(self, method: str, url: str, *, youtube: bool = False, data: Any = None) -> Page:
         self.asked.append(url)
-        self.log(f"GET {url}")
+        self.log(f"{method} {url}")
         assert self.client is not None
+        extra: dict[str, Any] = {} if data is None else {"json": data}
         try:
-            with self.client.stream("GET", url, headers={"User-Agent": user_agent()}) as response:
+            with self.client.stream(
+                method, url, headers={"User-Agent": user_agent()}, **extra
+            ) as response:
                 if youtube and response.status_code == pacing.RATE_LIMIT_STATUS:
                     pacing.pacer().rate_limited(what="the city search", marker="HTTP 429")
                     raise FetchError(f"{url}: YouTube answered 429; YouTube requests now wait")

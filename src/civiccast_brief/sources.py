@@ -15,7 +15,13 @@ The desk's Sources screen adds, edits and removes them. The file::
          "kind": "webpage", "url": "https://www.svvsd.org/about/board-of-education/board-meetings/",
          "follow": "/boardmeetings/", "bodies": ["Board of Education"]},
         {"id": "gdrive:15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2", "kind": "gdrive",
-         "folder_id": "15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2", "bodies": ["Board of Directors"]}
+         "folder_id": "15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2", "bodies": ["Board of Directors"]},
+        {"id": "civicclerk:erieco", "kind": "civicclerk", "tenant": "erieco",
+         "bodies": ["Planning Commission"]},
+        {"id": "escribe:bouldercounty", "kind": "escribe", "tenant": "bouldercounty",
+         "bodies": ["Board of County Commissioners"]},
+        {"id": "civicplus:www.townoflyons.com", "kind": "civicplus",
+         "site": "www.townoflyons.com", "bodies": ["Board of Trustees"]}
       ]
     }
 
@@ -28,6 +34,12 @@ Kinds and what each needs:
   with no meeting platform, like a school board. ``follow`` is optional: the start of a path, like
   ``/boardmeetings/``, for a page that links one page per meeting instead of the documents.
 - ``gdrive``: a public Google Drive folder of meeting documents, by its folder id.
+- ``civicclerk``: a CivicClerk portal, by its tenant: ``erieco`` in
+  ``https://erieco.portal.civicclerk.com``.
+- ``escribe``: an eScribe meetings site, by its tenant: ``bouldercounty`` in
+  ``https://pub-bouldercounty.escribemeetings.com``.
+- ``civicplus``: a CivicPlus town site with an Agenda Center or an Archive Center, by its host:
+  ``www.townoflyons.com``.
 
 Every source lists the bodies (council, boards) it covers: at least one name.
 The id is made from the kind and its address, so one address is listed once.
@@ -46,13 +58,25 @@ from urllib.parse import parse_qs, urlsplit
 
 SETTINGS_NAME: Final = "sources.json"
 FORMAT: Final = 1
-KINDS: Final = ("primegov", "youtube", "granicus", "webpage", "gdrive")
+KINDS: Final = (
+    "primegov",
+    "youtube",
+    "granicus",
+    "webpage",
+    "gdrive",
+    "civicclerk",
+    "escribe",
+    "civicplus",
+)
 KIND_LABELS: Final = {
     "primegov": "PrimeGov portal",
     "youtube": "YouTube channel",
     "granicus": "Granicus video archive",
     "webpage": "Web page of meeting documents",
     "gdrive": "Google Drive folder",
+    "civicclerk": "CivicClerk portal",
+    "escribe": "eScribe meetings site",
+    "civicplus": "CivicPlus Agenda Center or Archive Center",
 }
 
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -61,6 +85,10 @@ _GRANICUS_HOST: Final = re.compile(rf"^{_LABEL}\.granicus\.com$")
 _CHANNEL_ID: Final = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
 _VIEW_ID: Final = re.compile(r"^[0-9]{1,6}$")
 _FOLDER_ID: Final = re.compile(r"^[A-Za-z0-9_-]{10,100}$")
+_CLERK_HOST: Final = re.compile(rf"^({_LABEL})\.(?:portal|api)\.civicclerk\.com$")
+_ESCRIBE_HOST: Final = re.compile(rf"^pub-({_LABEL})\.escribemeetings\.com$")
+_TENANT: Final = re.compile(rf"^{_LABEL}$")
+_SITE: Final = re.compile(rf"^(?:{_LABEL}\.)+[a-z]{{2,24}}$")
 _FOLLOW: Final = re.compile(r"^/[A-Za-z0-9._~%/-]{1,200}$")
 _MAX_URL: Final = 500
 _MAX_BODY: Final = 120
@@ -84,6 +112,10 @@ class Source:
     view_id: str = ""
     follow: str = ""
     folder_id: str = ""
+    #: The CivicClerk or eScribe tenant.
+    tenant: str = ""
+    #: The CivicPlus site's host.
+    site: str = ""
 
     @property
     def id(self) -> str:
@@ -95,6 +127,10 @@ class Source:
             return f"webpage:{self.url}"
         if self.kind == "gdrive":
             return f"gdrive:{self.folder_id}"
+        if self.kind in ("civicclerk", "escribe"):
+            return f"{self.kind}:{self.tenant}"
+        if self.kind == "civicplus":
+            return f"civicplus:{self.site}"
         return f"granicus:{self.host}/{self.view_id}"
 
     @property
@@ -106,6 +142,12 @@ class Source:
             return f"https://www.youtube.com/channel/{self.channel_id}"
         if self.kind == "gdrive":
             return f"https://drive.google.com/drive/folders/{self.folder_id}"
+        if self.kind == "civicclerk":
+            return f"https://{self.tenant}.portal.civicclerk.com"
+        if self.kind == "escribe":
+            return f"https://pub-{self.tenant}.escribemeetings.com"
+        if self.kind == "civicplus":
+            return f"https://{self.site}"
         return f"https://{self.host}/ViewPublisher.php?view_id={self.view_id}"
 
     def to_json(self) -> dict[str, Any]:
@@ -120,6 +162,10 @@ class Source:
                 data["follow"] = self.follow
         elif self.kind == "gdrive":
             data["folder_id"] = self.folder_id
+        elif self.kind in ("civicclerk", "escribe"):
+            data["tenant"] = self.tenant
+        elif self.kind == "civicplus":
+            data["site"] = self.site
         else:
             data["host"] = self.host
             data["view_id"] = self.view_id
@@ -258,6 +304,36 @@ def _folder_id(value: str) -> str:
     return text
 
 
+def _tenant(value: str, host: re.Pattern[str], field: str, example: str) -> str:
+    text = value.strip().lower()
+    if not text:
+        raise SourceError(f"enter the tenant or the site's address, like {example}", field)
+    if "." in text or "/" in text:
+        name = (urlsplit(text if "://" in text else f"https://{text}").hostname or "").lower()
+        match = host.match(name)
+        if not match:
+            raise SourceError(
+                f"{value.strip()!r} is not that kind of site; it looks like {example}", field
+            )
+        return match.group(1)
+    if not _TENANT.match(text):
+        raise SourceError(f"{value.strip()!r} is not a tenant name; it looks like {example}", field)
+    return text
+
+
+def _site(value: str) -> str:
+    text = value.strip().lower()
+    if not text:
+        raise SourceError("enter the town site's address, like https://www.townoflyons.com", "site")
+    name = (urlsplit(text if "://" in text else f"https://{text}").hostname or "").lower()
+    if not _SITE.match(name):
+        raise SourceError(
+            f"{value.strip()!r} is not a site address; it looks like https://www.townoflyons.com",
+            "site",
+        )
+    return name
+
+
 def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     """Check one source's fields and return it, or raise SourceError naming the field."""
     kind = str(kind).strip().lower()
@@ -278,6 +354,22 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     if kind == "gdrive":
         folder = _folder_id(str(fields.get("folder_id") or ""))
         return Source(kind, parse_bodies(fields.get("bodies") or ""), folder_id=folder)
+    if kind == "civicclerk":
+        # The desk form names each kind's tenant field apart; the file calls it tenant.
+        value = str(fields.get("clerk_tenant") or fields.get("tenant") or "")
+        tenant = _tenant(
+            value, _CLERK_HOST, "clerk_tenant", "https://yourtown.portal.civicclerk.com"
+        )
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=tenant)
+    if kind == "escribe":
+        value = str(fields.get("escribe_tenant") or fields.get("tenant") or "")
+        tenant = _tenant(
+            value, _ESCRIBE_HOST, "escribe_tenant", "https://pub-yourcounty.escribemeetings.com"
+        )
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=tenant)
+    if kind == "civicplus":
+        site = _site(str(fields.get("site") or ""))
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), site=site)
     host, view = _granicus(str(fields.get("host") or ""), str(fields.get("view_id") or ""))
     return Source(kind, parse_bodies(fields.get("bodies") or ""), host=host, view_id=view)
 
