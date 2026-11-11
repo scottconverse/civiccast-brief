@@ -77,7 +77,7 @@
   <input type="hidden" name="token" value="{{ token }}">
   <fieldset>
     <legend>Redraft</legend>
-    {% if not has_writer %}<p class="muted">No writer is connected to this desk, so Redraft will say so. The weekly run connects the writers.</p>{% endif %}
+    {% if not has_writer %}<p class="muted">No writer is connected to this desk, so Redraft will say so. Start the desk with <code>--work</code> and the weekly run&rsquo;s work folder to connect the writers.</p>{% endif %}
     <p><label>Note for the writer: what should change?<br>
       <textarea name="note"></textarea></label></p>
     <button type="submit" data-busy="Redrafting… this can take a few minutes">Redraft</button>

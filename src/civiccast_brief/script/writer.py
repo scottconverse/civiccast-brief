@@ -73,7 +73,16 @@ ROUNDUP_ID = "roundup"
 ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October twentieth meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's {video_place}."""
 
 
-def build_prompt(recap: Recap, feedback: str = "") -> str:
+#: A redraft from the desk: the editor's note and the script it is about.
+EDITOR_NOTE = (
+    "The editor read the script below and asks for this change: {note}\n"
+    "Make that change. Every rule above still holds: use only the claims given here, and "
+    "output the whole script again in the same format.\n"
+    "The script:\n{draft}"
+)
+
+
+def build_prompt(recap: Recap, feedback: str = "", editor: tuple[str, str] | None = None) -> str:
     claims = [{"id": c.id, "topic": c.topic, "text": c.text} for c in recap.claims]
     parts = [
         PROMPT_HEAD.replace("{video_place}", recap.video_place),
@@ -81,6 +90,8 @@ def build_prompt(recap: Recap, feedback: str = "") -> str:
     ]
     if recap.video_id == ROUNDUP_ID:
         parts.insert(1, ROUNDUP_NOTE.replace("{video_place}", recap.video_place))
+    if editor is not None:
+        parts.append(EDITOR_NOTE.format(note=editor[0].strip(), draft=editor[1].strip()))
     if feedback.strip():
         parts.append(
             "A previous draft failed the no-new-claims check. Fix every problem below and output "
@@ -129,11 +140,15 @@ def _line_from_dict(obj: dict[str, Any], bad: list[str], raw: str) -> ScriptLine
 
 
 def write_script(
-    recap: Recap, complete: Callable[[str], str], *, feedback: str = ""
+    recap: Recap,
+    complete: Callable[[str], str],
+    *,
+    feedback: str = "",
+    editor: tuple[str, str] | None = None,
 ) -> list[ScriptLine]:
     """Ask the model for the script and parse it. ``complete`` takes the prompt and returns
-    the model's answer text."""
-    return parse_script(complete(build_prompt(recap, feedback)))
+    the model's answer text. ``editor`` is (the editor's note, the script it is about)."""
+    return parse_script(complete(build_prompt(recap, feedback, editor)))
 
 
 def render_txt(lines: list[ScriptLine]) -> str:

@@ -218,8 +218,8 @@ class DeskApp:
         if action == "redraft":
             if self.writer is None:
                 raise ReviewError(
-                    "no writer is connected to this desk yet, so it cannot redraft; edit the "
-                    "text by hand, or run the desk from the weekly run, which connects the writers"
+                    "no writer is connected to this desk, so it cannot redraft; edit the text by "
+                    "hand, or start the desk with --work <the weekly run's work folder>"
                 )
             try:
                 desk.redraft(self.store, item.id, note, self.writer)

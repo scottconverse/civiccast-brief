@@ -23,6 +23,7 @@ from pathlib import Path
 from civiccast_brief.review.export import export_published
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import BIND_HOST, DEFAULT_PORT, make_desk_app, serve
+from civiccast_brief.review.writers import desk_writer
 
 
 def _port(text: str) -> int:
@@ -46,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--db", required=True, type=Path, help="SQLite desk database")
     run.add_argument("--city", type=Path, help="city folder (models.json, desk.json, sources.json)")
     run.add_argument(
+        "--work",
+        type=Path,
+        help="the weekly run's work folder; connects Redraft to the story and script writers",
+    )
+    run.add_argument(
         "--port", type=_port, default=DEFAULT_PORT, help=f"port (default {DEFAULT_PORT})"
     )
 
@@ -60,19 +66,26 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "serve":
-        return _serve(args.db, args.city, args.port)
+        return _serve(args.db, args.city, args.port, args.work)
     return _export(args.db, args.out)
 
 
-def _serve(db: Path, city: Path | None, port: int) -> int:
+def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> int:
     if city is not None and not city.is_dir():
         print(f"error: the city folder {city} does not exist", file=sys.stderr)
         return 1
+    if work is not None and not work.is_dir():
+        print(f"error: the work folder {work} does not exist", file=sys.stderr)
+        return 1
+    if work is not None and city is None:
+        print("error: --work needs --city, which picks the writers' models", file=sys.stderr)
+        return 1
+    writer = desk_writer(work, city) if work is not None else None
     try:
         with ReviewStore(db) as store:
             if store.migrated:
                 print(f"moved {store.migrated} items from the old review screen to the desk")
-            app = make_desk_app(store, city_dir=city)
+            app = make_desk_app(store, city_dir=city, writer=writer)
             print(f"editor desk: http://{BIND_HOST}:{port}/  (Ctrl+C to stop)", flush=True)
             serve(app, port)
     except (ReviewError, OSError, sqlite3.Error) as exc:
