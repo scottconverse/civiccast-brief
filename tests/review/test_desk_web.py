@@ -272,3 +272,22 @@ def test_a_platform_source_opens_for_editing_with_its_tenant_filled_in(store, ci
     )
     assert saved.status_code == 200
     assert sources.load_sources(city)[0].bodies == ("Town Council", "Planning Commission")
+
+
+def test_a_laserfiche_source_opens_for_editing_with_its_folder_filled_in(store, city):
+    url = "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville"
+    client = client_for(store, city)
+    added = client.post(
+        "/sources/add",
+        data={
+            "token": token(client),
+            "kind": "laserfiche",
+            "laserfiche_url": url,
+            "bodies": "Planning Commission",
+        },
+    )
+    assert added.status_code == 200
+    assert sources.load_sources(city)[0].url == url
+    page = client.get("/sources", params={"edit": f"laserfiche:{url}"})
+    assert page.status_code == 200
+    assert 'name="laserfiche_url" value="' + url.replace("&", "&amp;") + '"' in page.text

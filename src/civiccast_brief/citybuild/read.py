@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild import drive, platforms
+from civiccast_brief.citybuild import browser, drive, laserfiche, platforms
 from civiccast_brief.citybuild.documents import (
     Read,
     document_links,
@@ -111,6 +111,7 @@ def read_latest(
         "civicclerk": _civicclerk,
         "escribe": _escribe,
         "civicplus": _civicplus,
+        "laserfiche": _laserfiche,
     }
     try:
         if source.kind == "youtube":
@@ -495,7 +496,7 @@ def _gdrive(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None
 _NOTICE: Final = re.compile(r"\bnotice\b", re.IGNORECASE)
 
 
-def _read_docs(proof: Proof, docs: list[platforms.Doc], fetcher: Fetcher) -> None:
+def _read_docs(proof: Proof, docs: list[platforms.Doc], fetcher: Fetcher | browser.Browser) -> None:
     """Read the first of ``docs`` that opens; they come newest and most useful first."""
     errors: list[str] = []
     for doc in docs[:TRIES]:
@@ -601,3 +602,19 @@ def _civicplus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> N
         key=lambda d: (_NOTICE.search(d.title) is None, d.day, d.what == "agenda"), reverse=True
     )
     _read_docs(proof, docs, fetcher)
+
+
+# ----- Laserfiche WebLink -----------------------------------------------------------------------
+
+
+def _laserfiche(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    """A WebLink folder opens only in a browser; it is read in the installed Chrome.
+
+    The folder is the body's own, so every dated document in it is the body's.
+    """
+    reader = browser.shared()
+    docs, notes = laserfiche.docs(reader, source.url, proof.body, today)
+    if not docs:
+        proof.problem = "; ".join(notes)
+        return
+    _read_docs(proof, docs, laserfiche.Reader(reader))

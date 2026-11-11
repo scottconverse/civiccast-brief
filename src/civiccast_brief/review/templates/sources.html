@@ -106,6 +106,12 @@
                placeholder="https://www.yourtown.gov" {{ invalid("site") }}></p>
       {{ field_error("site") }}
     </div>
+    <div data-kind="laserfiche">
+      <p><label for="laserfiche_url">Address of the body's Laserfiche WebLink folder (it opens in Google Chrome when read)</label><br>
+        <input class="wide" id="laserfiche_url" type="text" name="laserfiche_url" value="{{ form.get("laserfiche_url", "") }}"
+               placeholder="https://records.yourtown.gov/WebLink/Browse.aspx?id=123&amp;dbid=0&amp;repo=YourTown" {{ invalid("laserfiche_url") }}></p>
+      {{ field_error("laserfiche_url") }}
+    </div>
     <p><label for="bodies">Bodies it covers (one per line, or commas between)</label><br>
       <textarea id="bodies" name="bodies" placeholder="City Council" {{ invalid("bodies") }}>{{ form.get("bodies", "") }}</textarea></p>
     {{ field_error("bodies") }}

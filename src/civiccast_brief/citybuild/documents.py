@@ -11,11 +11,14 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError
 from civiccast_brief.citybuild.page import Link, find_dates, squash
+
+if TYPE_CHECKING:
+    from civiccast_brief.citybuild.browser import Browser
 
 _GDOC: Final = re.compile(r"^/document/(?:u/\d+/)?d/([A-Za-z0-9_-]{20,100})")
 _DRIVE_FILE: Final = re.compile(r"^/file/(?:u/\d+/)?d/([A-Za-z0-9_-]{20,100})")
@@ -70,8 +73,11 @@ class Read:
     first_date: date | None = None
 
 
-def read_document(url: str, fetcher: Fetcher, title: str = "") -> Read:
-    """Download one document and read its first lines. Raises FetchError when it cannot."""
+def read_document(url: str, fetcher: Fetcher | Browser, title: str = "") -> Read:
+    """Download one document and read its first lines. Raises FetchError when it cannot.
+
+    ``fetcher`` is the plain client, or the browser for a site that opens only in one.
+    """
     page = fetcher.get(download_url(url))
     content = page.content
     pages: int | None = None
