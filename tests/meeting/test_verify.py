@@ -214,3 +214,44 @@ def test_agenda_loader_drops_the_page_header_and_builds_vocabulary(tmp_path):
     assert agenda.text.startswith("AGENDA")
     assert "golf" in agenda.vocabulary and "subscribe" not in agenda.vocabulary
     assert A.load_agenda(None) is None
+
+
+# Sep 22, 2026 (jhsFsEz0P5A) at 3:02:49: voice 33 introduced herself as Becky Doyle, a name the
+# packet prints, so the speaker label names her. Her name is not an agenda or roster word.
+DOYLE = [
+    seg(10969.0, "uh to to recognize that change and we", speaker="Becky Doyle", turn=True),
+    seg(10971.0, "will be changing the name of the fund to", speaker="Becky Doyle"),
+    seg(10974.8, "the utility customer service fund um and", speaker="Becky Doyle"),
+    seg(10990.0, "Thank you. Questions?", speaker="unknown", turn=True),
+]
+DOYLE_QUOTE = (
+    "uh to to recognize that change and we will be changing the name of the fund to "
+    "the utility customer service fund um and"
+)
+
+
+def test_the_speaker_labels_name_is_allowed_on_that_speakers_own_line():
+    claims, report = check(
+        [
+            item(
+                "Becky Doyle said the utility billing fund will be renamed the utility customer "
+                "service fund.",
+                DOYLE_QUOTE,
+                "3:02:49",
+            )
+        ],
+        segments=DOYLE,
+    )
+    assert report["dropped_items"] == []
+    assert [c.text[:11] for c in claims] == ["Becky Doyle"]
+
+
+def test_the_speaker_labels_name_is_not_allowed_on_someone_elses_line():
+    claims, report = check(
+        [item("Becky Doyle asked for questions.", "Thank you. Questions?", "3:03:10")],
+        segments=DOYLE,
+    )
+    assert claims == []
+    assert report["dropped_items"][0]["reason"] == (
+        "term not in the official agenda or roster: Doyle"
+    )

@@ -233,8 +233,14 @@ def verify(
                 "names a role the quote and speaker key do not give: " + ", ".join(unbacked_roles),
             )
             continue
+        # The speaker label's name counts on that speaker's own line, so a person named from
+        # their own introduction can be named in a claim that quotes them, and nowhere else.
+        spoken_by = speaker_at(nearest.first) if speaker_at else None
+        allowed_here = allowed
+        if spoken_by and spoken_by != "unknown":
+            allowed_here = allowed | {t.lower() for t in spoken_by.split()}
         off_agenda = sorted(
-            {w for w in _capitalised_words(text) if len(w) > 1 and w.lower() not in allowed}
+            {w for w in _capitalised_words(text) if len(w) > 1 and w.lower() not in allowed_here}
         )
         if off_agenda:
             drop(
