@@ -22,6 +22,7 @@ from .conftest import (
     TPCA_ROOT,
     add_primegov,
     add_tpca_drive,
+    data_api,
     feed,
 )
 
@@ -204,3 +205,27 @@ def test_build_saves_only_the_chosen_sources(web, tmp_path):
     )
     build_city(tmp_path, found, chosen=[f"gdrive:{TPCA_ROOT}"])
     assert [s.id for s in load_sources(tmp_path)] == [f"gdrive:{TPCA_ROOT}"]
+
+
+def test_a_channel_whose_feed_answers_404_is_found_through_the_data_api(web, monkeypatch):
+    """Longmont's feed answered 404 on 2026-11-10; the saved key still lists the channel."""
+    from civiccast_brief.record import credentials
+
+    monkeypatch.setattr(credentials, "read_credential", lambda target: "fake-key-not-real")
+    longmont(web)
+    web.add(f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL}", b"", status=404)
+    api = data_api(
+        ("aaaaaaaaaaa", "City Council Regular Session 10/28/2026", "2026-10-29T03:00:00Z"),
+        ("bbbbbbbbbbb", "Planning and Zoning Commission 11/5/2026", "2026-11-06T03:00:00Z"),
+    )
+    pages = web.handle
+    web.handle = lambda r: api(r) if r.url.host == "www.googleapis.com" else pages(r)
+
+    found = search_city(
+        "Longmont", "CO", website=LONGMONT_HOME, extra=EXTRA, fetcher=web.fetcher(), today=TODAY
+    )
+
+    (channel,) = by_kind(found)["youtube"]
+    assert channel.channel_id == CHANNEL
+    assert channel.bodies == ("City Council", "Planning and Zoning Commission")
+    assert not [u for u in found.unread if u.platform == "YouTube"]

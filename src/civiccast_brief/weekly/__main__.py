@@ -35,7 +35,7 @@ def real_listers(client: Any) -> Listers:
     """The readers for live portals, channels and archives, over one ``httpx.Client``."""
     from civiccast_brief.meeting import granicus
     from civiccast_brief.record.adapters.primegov import PrimeGovAdapter
-    from civiccast_brief.record.video.youtube.rss import RssLister
+    from civiccast_brief.record.video.youtube.channel import channel_lister
 
     adapters: dict[str, PrimeGovAdapter] = {}
 
@@ -64,12 +64,12 @@ def real_listers(client: Any) -> Listers:
             fetchers[url] = Fetcher(adapter(url))
         return read_documents(fetchers[url], meeting, body)
 
-    rss = RssLister(client)
+    channel = channel_lister(client)
     return Listers(
         primegov=primegov,
         primegov_agenda=primegov_agenda,
         primegov_documents=primegov_documents,
-        youtube=rss.list_videos,
+        youtube=channel.list_videos,
         granicus=granicus.list_clips,
     )
 

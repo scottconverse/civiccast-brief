@@ -23,6 +23,9 @@ from civiccast_brief.citybuild.documents import (
 )
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError
 from civiccast_brief.citybuild.page import link_date, parse, squash
+from civiccast_brief.record import credentials
+from civiccast_brief.record.video.youtube.data_api import DataApiClient
+from civiccast_brief.record.video.youtube.listing import VideoError
 from civiccast_brief.sources import Source
 
 COMMITTEES_PATH: Final = "/api/committee/GetCommitteeesListByShowInPublicPortal"
@@ -258,8 +261,25 @@ _FEED_ENTRY: Final = re.compile(
 
 
 def feed_entries(channel_id: str, fetcher: Fetcher) -> list[tuple[str, str, date]]:
-    """The channel's newest videos (YouTube lists 15): id, title and day published."""
-    page = fetcher.get(FEED_URL.format(channel_id=channel_id))
+    """The channel's newest videos: id, title and day published.
+
+    With a saved YouTube Data API key the API lists the newest 50; when it fails, or with no
+    key, the public feed lists 15 (and some channels' feeds answer 404).
+    """
+    api_problem = ""
+    key = credentials.youtube_api_key()
+    client = getattr(fetcher, "client", None)
+    if key and client is not None:
+        try:
+            return _api_entries(DataApiClient(key, client).list_channel_videos(channel_id))
+        except VideoError as exc:
+            api_problem = str(exc)
+    try:
+        page = fetcher.get(FEED_URL.format(channel_id=channel_id))
+    except FetchError as exc:
+        if api_problem:
+            raise FetchError(f"{api_problem}; then {exc}") from exc
+        raise
     found: list[tuple[str, str, date]] = []
     for match in _FEED_ENTRY.finditer(page.text):
         try:
@@ -267,6 +287,17 @@ def feed_entries(channel_id: str, fetcher: Fetcher) -> list[tuple[str, str, date
         except ValueError:
             continue
         found.append((match[1], squash(html.unescape(match[2])), day))
+    return found
+
+
+def _api_entries(videos: list) -> list[tuple[str, str, date]]:
+    found: list[tuple[str, str, date]] = []
+    for video in videos:
+        try:
+            day = datetime.fromisoformat(str(video.published)).date()
+        except ValueError:
+            continue
+        found.append((video.video_id, squash(video.title), day))
     return found
 
 
