@@ -6,6 +6,7 @@ Pages:
     episode, Regenerate audio;
   - ``/settings``: which model writes each task, per body, and auto-publish per body;
   - ``/sources``: the city's meeting sources (add, edit, remove).
+  - ``/sources/find``: search a city's site and the meeting platforms, then add what was found.
 
 Jinja2 autoescaping is on, so editor text is shown as text. A small script (``/static/desk.js``)
 shows "Working..." on the pressed button; every action also ends on a page that says what
@@ -35,6 +36,7 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader
+from starlette.concurrency import run_in_threadpool
 
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
@@ -53,7 +55,9 @@ STATIC_DIR: Final = HERE / "static"
 
 RegenerateCallback = Callable[[DeskItem], None]
 
-_SOURCE_ID: Final = re.compile(r"^(primegov|youtube|granicus):[A-Za-z0-9._/-]{1,200}$")
+_SOURCE_ID: Final = re.compile(
+    r"^(primegov|youtube|granicus|webpage|gdrive):[A-Za-z0-9._/:~%?=&-]{1,500}$"
+)
 _ITEM_ACTIONS: Final = ("save", "publish", "hold", "kill", "redraft", "regenerate")
 _CSP: Final = (
     "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; "
@@ -141,6 +145,12 @@ class DeskApp:
         self.token = secrets.token_urlsafe(24)
         self._regenerate = regenerate or (lambda item: store.record_audio_request(item.id))
         self.templates = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
+        #: Makes the fetcher the city search asks the web through (a test gives its own).
+        self.make_fetcher: Callable[[], Any] = _default_fetcher
+        #: The last few searches, by id, so Add saves exactly what the editor was shown.
+        self.searches: dict[str, Any] = {}
+        #: What the last Add from a search did, shown once on the Sources page.
+        self.found_lines: list[str] = []
         self.templates.filters["localtime"] = local_time
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
@@ -364,6 +374,33 @@ class DeskApp:
         )
 
 
+def _default_fetcher() -> Any:
+    from civiccast_brief.citybuild.fetch import Fetcher
+
+    return Fetcher()
+
+
+#: How many finished searches the desk keeps for their Add button.
+MAX_SEARCHES = 5
+
+
+def _city_names(city_dir: Path | None) -> dict[str, str]:
+    """The city's name and state from city.json and roster.json, to start the find form."""
+    out: dict[str, str] = {}
+    if city_dir is None:
+        return out
+    for name, keys in (("city.json", ("name",)), ("roster.json", ("name", "state"))):
+        try:
+            data = json.loads((city_dir / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for key in keys:
+            value = data.get(key) if isinstance(data, dict) else None
+            if isinstance(value, str) and value.strip() and key not in out:
+                out[key] = value.strip()
+    return out
+
+
 def _redirect(location: str) -> RedirectResponse:
     return RedirectResponse(location, status_code=303)
 
@@ -524,6 +561,8 @@ def make_desk_app(
                 for k, v in found[0].to_json().items()
                 if k != "id"
             }
+            if found[0].kind == "webpage":
+                form["page_url"] = form.pop("url", "")
         return state.sources_page(form=form, editing=edit, notice=source_notice(done, id, rows))
 
     def source_notice(done: str, source_id: str, rows: list[city_sources.Source]) -> str:
@@ -532,9 +571,122 @@ def make_desk_app(
         if done in ("added", "saved") and match is not None:
             verb = "Added" if done == "added" else "Saved"
             return f"{verb} {match.address} for {', '.join(match.bodies)}. Saved to {where}."
+        if done == "found" and state.found_lines:
+            lines, state.found_lines = state.found_lines, []
+            return " ".join(line.rstrip(".") + "." for line in lines)
         if done == "removed" and match is None and _SOURCE_ID.match(source_id):
             return f"Removed {source_id}. Saved to {where}."
         return ""
+
+    @app.get("/sources/find", response_class=HTMLResponse)
+    def find_page() -> HTMLResponse:
+        return state.page(
+            "find.html",
+            title="Find sources",
+            form=_city_names(state.city_dir),
+            found=None,
+            error="",
+            error_field="",
+        )
+
+    @app.post("/sources/find", response_class=HTMLResponse)
+    async def find_search(request: Request) -> Response:
+        from civiccast_brief.citybuild.cli import parse_also
+        from civiccast_brief.citybuild.search import search_city
+
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+
+        def again(error: str, error_field: str = "", status: int = 400) -> HTMLResponse:
+            return state.page(
+                "find.html",
+                status=status,
+                title="Find sources",
+                form=form,
+                found=None,
+                error=error,
+                error_field=error_field,
+            )
+
+        if state.city_dir is None:
+            return again("Start the desk with --city to find and save sources.")
+        name, region = form.get("name", "").strip(), form.get("state", "").strip()
+        if not name:
+            return again("Enter the city's name.", "name")
+        if not region:
+            return again("Enter the state, like CO or Colorado.", "state")
+        lines = [line for line in form.get("also", "").splitlines() if line.strip()]
+        try:
+            extra = parse_also(lines)
+        except ValueError as exc:
+            return again(str(exc).replace("--also ", "The line "), "also")
+        fetcher = state.make_fetcher()
+        found = await run_in_threadpool(
+            search_city,
+            name,
+            region,
+            website=form.get("website", "").strip() or None,
+            extra=extra,
+            fetcher=fetcher,
+        )
+        search_id = secrets.token_urlsafe(9)
+        state.searches[search_id] = found
+        while len(state.searches) > MAX_SEARCHES:
+            state.searches.pop(next(iter(state.searches)))
+        return state.page(
+            "find.html",
+            title="Find sources",
+            form=form,
+            found=found,
+            search_id=search_id,
+            kind_labels=city_sources.KIND_LABELS,
+            error="",
+            error_field="",
+        )
+
+    @app.post("/sources/find/save")
+    async def find_save(request: Request) -> Response:
+        from civiccast_brief.citybuild.build import build_city
+
+        raw = await request.form()
+        form = {k: str(v) for k, v in raw.items()}
+        if not state.token_ok(form):
+            return bad_token()
+        if state.city_dir is None:
+            return state.sources_page(
+                error="Start the desk with --city to save sources.", status=400
+            )
+        found = state.searches.get(form.get("search", ""))
+        if found is None:
+            return state.page(
+                "find.html",
+                status=400,
+                title="Find sources",
+                form=_city_names(state.city_dir),
+                found=None,
+                error_field="",
+                error="That search is no longer kept. Search again, then add.",
+            )
+        chosen = [str(v) for v in raw.getlist("chosen")]
+        if not chosen:
+            return state.page(
+                "find.html",
+                status=400,
+                title="Find sources",
+                form={},
+                found=found,
+                search_id=form.get("search", ""),
+                error_field="",
+                kind_labels=city_sources.KIND_LABELS,
+                error="Nothing was added: check at least one source.",
+            )
+        try:
+            built = await run_in_threadpool(build_city, state.city_dir, found, chosen=chosen)
+        except (OSError, city_sources.SourceError) as exc:
+            return state.sources_page(error=f"Not saved: {exc}", status=400)
+        state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
+        return _redirect("/sources?" + urlencode({"done": "found"}))
 
     @app.post("/sources/{action}")
     async def source_action(action: str, request: Request) -> Response:

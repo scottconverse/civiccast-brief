@@ -17,6 +17,46 @@ writes. Run the commands from the repository folder with the project's Python
 
 ## 1. Start the city folder
 
+### Let the program find the sources
+
+`city find` reads the city's website and asks the meeting platforms what they list. It uses no AI
+model, only plain web requests. Give it the city's name and state, and its website when you know it
+(otherwise it guesses addresses like `www.yourcitystate.gov`):
+
+```
+python -m civiccast_brief city find --name "Your City" --state CO --website https://yourcity.gov/ --dry-run
+```
+
+It prints each source it can read, with the bodies (council, boards, commissions) the source lists
+and how it was found. It also lists the platforms it found but cannot read yet (Legistar, BoardDocs,
+CivicClerk) so you can add those by hand later. School boards and charter schools are usually not
+linked from a city's site. Add each with `--also "Body name | address"`, where the address is the
+page that links its agendas or its Google Drive folder:
+
+```
+python -m civiccast_brief city find --name Longmont --state CO --website https://longmontcolorado.gov/ --also "Board of Education | https://www.svvsd.org/about/board-of-education/board-meetings/2026-board-meetings/" --out cities/longmont
+```
+
+With `--out`, it writes `sources.json`, plus `city.json` and `roster.json` stubs when the folder has
+none. It never overwrites a city.json or roster.json you already have. A source already in
+sources.json gains only the bodies it lacked. It ends with the fields still to fill in.
+
+Then check that each body really reads:
+
+```
+python -m civiccast_brief city check --city cities/longmont
+```
+
+For each body, this reads the newest meeting the source lists (agenda, packet or minutes) and prints
+its date and a line of its text, or why it could not. Add `--body "Water Board"` to check only some
+bodies, and `--captions` to also read YouTube captions (slower; YouTube limits how fast you can ask).
+It saves the result to `city-check.json` and exits with an error when any body was not read.
+
+The editor desk has the same search under **Sources > Find a city's sources**. It shows what it
+found with a checkbox for each source, and saves only the sources you leave checked.
+
+### Or set the folder up by hand
+
 Find where the city puts its meeting videos.
 
 - **YouTube.** Each meeting is a video whose title holds the meeting date.
@@ -53,6 +93,13 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | PrimeGov portal | the portal's home address | `https://longmont.primegov.com` |
 | YouTube channel | the channel id: `UC` and 22 more letters, digits, `-` or `_` | `UCH5_wkpLrKYb1JuUk6-UdNg` |
 | Granicus video archive | the host and the `view_id` number | `yourcity.granicus.com`, `2` |
+| Web page of meeting documents | the page that links the agendas, packets or minutes; optionally the path its meeting pages start with | `https://www.svcmontessori.org/board-meetings`; `/boardmeetings/` |
+| Google Drive folder | the public folder's address or id | `https://drive.google.com/drive/folders/15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2` |
+
+A web page source reads the newest dated document it links. When the page links one page per
+meeting instead (a school district's board calendar, for example), give the path those pages start
+with, and the program opens the newest one and reads the documents on it. A Drive folder source
+looks through the folder and its subfolders for the newest agenda.
 
 A channel handle such as `@yourcity` is not a channel id; YouTube shows the id under About > Share
 channel > Copy channel ID. The screen checks each field, names the one that is wrong, and keeps what

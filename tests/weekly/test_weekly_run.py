@@ -95,6 +95,7 @@ class Fake:
     def review(self, argv):
         self.calls.append(("review", list(argv)))
         out = Path(_opt(argv, "--out"))
+        out.mkdir(parents=True, exist_ok=True)  # the real export always writes manifest.json
         for name, meta in self.exported.items():
             (out / name).mkdir(parents=True, exist_ok=True)
             (out / name / "item.json").write_text(json.dumps(meta), encoding="utf-8")
@@ -352,3 +353,24 @@ def test_the_documents_come_before_the_recap_so_the_recap_can_read_names_from_th
     run_week(_settings(tmp_path / "b"), [COUNCIL_MEETING], LAST, other.steps())
     [argv] = [a for step, a in other.calls if step == "meeting"]
     assert "--documents" not in argv
+
+
+def test_nothing_published_yet_waits_for_review_and_is_not_a_failure(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    site.episodes.mkdir()
+    (site.episodes / "city.json").write_text("{}", encoding="utf-8")
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {}  # every item is still on the desk for review
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+
+    assert report.failed == 0
+    assert ("site", "build") not in fake.names()
+    assert "site: not built: no episode is published yet; approve items on the desk" in report.lines
