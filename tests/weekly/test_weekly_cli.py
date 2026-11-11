@@ -67,3 +67,24 @@ def test_a_city_without_sources_is_refused(tmp_path, capsys):
     (args.city / "sources.json").unlink()
     assert cli._run(args, Listers()) == 1
     assert "has no sources.json" in capsys.readouterr().err
+
+
+def test_the_portal_client_stays_open_while_the_week_runs(tmp_path, monkeypatch, capsys):
+    # The documents step fetches packets during run_week, over the client the listers made.
+    clients = []
+
+    def listers(client):
+        clients.append(client)
+        return Listers(primegov=lambda url, first, last: [])
+
+    open_during_run = []
+
+    def run_week(settings, meetings, last):
+        open_during_run.append(not clients[0].is_closed)
+        return NS(lines=[], failed=0)
+
+    monkeypatch.setattr(cli, "real_listers", listers)
+    monkeypatch.setattr(cli, "run_week", run_week)
+    assert cli._run(_args(tmp_path)) == 0
+    assert open_during_run == [True]
+    assert clients[0].is_closed

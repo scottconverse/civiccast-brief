@@ -374,3 +374,28 @@ def test_nothing_published_yet_waits_for_review_and_is_not_a_failure(tmp_path):
     assert report.failed == 0
     assert ("site", "build") not in fake.names()
     assert "site: not built: no episode is published yet; approve items on the desk" in report.lines
+
+
+def test_a_documents_fetch_that_breaks_is_reported_and_the_meeting_still_runs(tmp_path):
+    from dataclasses import replace
+
+    calls = []
+
+    def documents():
+        calls.append(1)
+        raise RuntimeError("Cannot send a request, as the client has been closed.")
+
+    fake = Fake()
+    settings = _settings(tmp_path)
+    meeting = replace(COUNCIL_MEETING, documents=documents)
+    report = run_week(settings, [meeting], LAST, fake.steps())
+
+    folder = settings.work / "2026-11-03-city-council-owzpzjzjwne"
+    assert not (folder / "documents.json").exists()
+    assert "2026-11-03 City Council Regular Session: done" in report.lines
+    assert (
+        "2026-11-03 City Council Regular Session: documents not read: "
+        "Cannot send a request, as the client has been closed." in report.lines
+    )
+    assert ("meeting", "run") in fake.names()
+    assert calls == [1]
