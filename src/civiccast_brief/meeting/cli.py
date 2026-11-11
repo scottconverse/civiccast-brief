@@ -3,7 +3,7 @@
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
     python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
     python -m civiccast_brief.meeting run <video_or_clip_id> --city CITY_DIR --out DIR
-        [--agenda AGENDA.txt] [--roster ROSTER.json] [--ytdlp-python PATH]
+        [--agenda AGENDA.txt] [--documents documents.json] [--roster ROSTER.json] [--ytdlp-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
 With --city and no --model, the recap and the judge use the city's model picks (models.json).
@@ -86,6 +86,7 @@ def _run(args: argparse.Namespace) -> int:
             ytdlp_python=args.ytdlp_python,
             roster_path=args.roster,
             agenda_path=args.agenda,
+            documents_path=args.documents,
             window_s=args.window_minutes * 60.0,
             model=model,
             complete=recap_writer,
@@ -129,6 +130,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")
+    run_cmd.add_argument(
+        "--documents",
+        type=Path,
+        help="the meeting's documents.json (packet and minutes text); names a voice that "
+        "introduces itself by a name printed there",
+    )
     run_cmd.add_argument(
         "--city", type=Path, help="city folder from `python -m civiccast_brief setup`"
     )

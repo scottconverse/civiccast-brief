@@ -168,9 +168,19 @@ The roster is the only list of speaker names. A line gets a name in three ways:
   speaks next, within 10 seconds, and at least 80 percent of those addresses are not to a pro tem.
   The line then gets the roster's mayor. When the pro tem chairs, the chair's lines stay unknown.
 
-A self-introduction ("My name is ...") never names anyone. It is listed under `introductions` in
-`speakers.json` for the producer. A visitor's name can sound like a member's ("Morgan Lundy"
-matched Jake Marsing at 0.96), and names not on the roster are spelled by the captioner.
+A self-introduction names a voice only when the meeting's own documents print that name: the
+agenda, or the packet and minutes pages in `documents.json` (the weekly run fetches them before
+the recap; a single run takes `--documents`). Three forms count, in the voice's own lines: "My
+name is Morgan Lundy", "I'm Kristin Cote" or "I am Lance Smith", and a name right after a
+greeting at the podium ("Good evening, council. Josh Sherman,"). The name must be two or more
+words and match the printed words exactly, apart from case; "Nathan Jones" is not "Nathan
+Jones-Meyer". The chair's voice, a voice the roll call or a recognition named, a roster member's
+name, and a voice that gives two different names are never named this way. A name someone else
+says ("invite Jen Uten to the podium") never names a voice. Each introduction is listed under
+`introductions` in `speakers.json` with where its name is printed, or why it was not used. No
+role is shown for these people. Names not printed stay unknown: the captioner spells visitors'
+names ("Espanzoriz", "Jack Bestl"), and a sound match is not trusted ("Morgan Lundy" matched
+Jake Marsing at 0.96).
 
 Every other line stays "unknown" for the producer to name. On five Longmont council meetings in
 November 2026 this named 22 to 33 percent of caption lines (before, about one line a meeting). A

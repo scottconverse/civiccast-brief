@@ -9,6 +9,9 @@ last name, plus the first name when the call gives one, plus "Mayor" only for th
 by a short acknowledgment in the next turn ("present", "here", "yes"), names the member who
 answered. Any other turn stays unknown: the calls that do not match are listed in the report, so a
 reader can see what was not named and why.
+
+After diarization, a voice that introduces itself is named only when the meeting's documents
+print that name (see ``introductions``).
 """
 
 from __future__ import annotations
@@ -503,7 +506,52 @@ _INTRODUCTION = re.compile(
     r"\bmy name is\s+(?:(?:uh|um),?\s+)*(?P<name>[A-Za-z][\w'\-]*(?:\s+[A-Za-z][\w'\-]*){0,2})",
     re.IGNORECASE,
 )
+#: "I'm Kristin Cote", "I am Lance Smith": the name must be two or three capitalized words.
+_I_AM = re.compile(
+    r"\b(?:I'?m|I am)\s+(?:(?:[Uu]h|[Uu]m),?\s+)*"
+    r"(?P<name>[A-Z][\w'\-]*[.,]?(?:\s+[A-Z][\w'\-]*[.,]?){1,2})"
+)
 _NAME_STOP = frozenset({"and", "i", "i'm", "im", "from", "with", "at", "the", "uh", "um", "good"})
+#: Words a speaker says before giving their name at the start of their turn at the podium.
+_GREETING = frozenset(
+    {
+        "uh", "um", "hi", "hello", "hey", "good", "evening", "morning", "afternoon", "thank",
+        "thanks", "you", "so", "okay", "ok", "yes", "again", "and", "all", "everyone", "everybody",
+        "the", "of", "members", "council", "city", "folks", "well", "alright", "pro", "tem",
+    }
+)  # fmt: skip
+#: Words that greet the body at the podium; "uh" or "so" alone are not a greeting.
+_GREETED = frozenset(
+    {
+        "hi",
+        "hello",
+        "hey",
+        "evening",
+        "morning",
+        "afternoon",
+        "thank",
+        "thanks",
+        "council",
+        "members",
+    }
+)
+#: Titles a speaker addresses ("member Popkin", "Mayor Hidalgo-Fahring"); the name after one
+#: belongs to the person addressed, so it is skipped.
+_ADDRESS_TITLES = frozenset({"mayor", "member", "councilmember", "chair"}) | OTHER_TITLES
+#: Capitalized words that open a sentence, never a name ("Public Works", "My name").
+_NOT_A_FIRST_NAME = frozenset(
+    {
+        "i", "i'm", "im", "i'll", "i've", "i'd", "my", "our", "we", "this", "that", "these", "those", "it", "its", "there", "here",
+        "public", "city", "planning", "community", "staff", "item", "next", "as", "on", "in",
+        "for", "to", "at", "with", "from", "by", "if", "when", "what", "why", "how", "just",
+        "yeah", "no", "not", "great", "please", "let", "can", "could", "would", "will", "is",
+        "are", "do", "does", "one", "two", "first", "last", "a", "an", "but", "or", "now",
+    }
+)  # fmt: skip
+#: How many lines at the start of a voice's run are read for a name after the greeting.
+_RUN_OPENING_LINES = 4
+_WORD = re.compile(r"\[[^\]]*\]|[A-Za-z][\w'\-]*[.,!?;:]?")
+_GAP = re.compile(r"[\s\xa0\ufffd]+")
 
 
 def _addresses(text: str) -> tuple[int, int]:
@@ -561,36 +609,214 @@ def chair_name(segments: list[Segment], chair: str | None, roster: Roster | None
     return result
 
 
-def introductions(segments: list[Segment]) -> list[dict[str, Any]]:
-    """Self-introductions ("My name is ..."), listed for the editor. They never name anyone.
+#: A title that starts the next name in a PDF table ("Mr. Chris Neils Mr. Frank DeSiena").
+_NEXT_TITLE = re.compile(r"\s+(?:Mr|Mrs|Ms|Dr)\.?\s")
 
-    The sound match is built for names said to council members. A visitor's own name can sound
-    like a member's: on the Longmont meetings "Joan Peek" (a resident) matched Matthew Popkin at
-    0.85 and "Morgan Lundy" (city staff) matched Jake Marsing at 0.96. Names of people not on the
-    roster are spelled by the captioner ("Espanzoriz", "Jack Bestl") and cannot be checked here.
+
+class PrintedNames:
+    """The meeting's own documents (agenda text, packet and minutes pages), searched for a name.
+
+    A name is found only as two or more whole words, in order, with any case and any spacing
+    (the PDF text puts no-break spaces and replacement marks between words). A printed name
+    followed straight on by another capitalized word ("Mary Jane Voogt") is a longer name, so
+    "Mary Jane" is not found in it.
     """
-    found: list[dict[str, Any]] = []
-    for position, segment in enumerate(segments):
-        nxt = segments[position + 1].text if position + 1 < len(segments) else ""
-        match = _INTRODUCTION.search(f"{segment.text} {nxt}")
-        if match is None or match.start() >= len(segment.text):
-            continue
-        words: list[str] = []
-        for word in match.group("name").split():
-            if word.casefold().strip("'.,") in _NAME_STOP:
-                break
-            words.append(word.strip(".,"))
-        if not words:
-            continue
-        found.append(
-            {
-                "start": hms(segment.start),
-                "voice": segment.voice,
-                "spoken": " ".join(words),
-                "status": "not named: a self-introduction is not checked against a roster",
-            }
+
+    def __init__(self, pages: list[tuple[str, str]]) -> None:
+        self.pages = [(where, _GAP.sub(" ", text)) for where, text in pages if text]
+
+    @classmethod
+    def from_documents(cls, data: dict[str, Any] | None, agenda: str | None = None) -> PrintedNames:
+        pages: list[tuple[str, str]] = []
+        if agenda:
+            pages.append(("agenda", agenda))
+        for document in (data or {}).get("documents", []):
+            kind = str(document.get("kind") or "document")
+            for page in document.get("pages", []):
+                pages.append((f"{kind} p. {page.get('page')}", str(page.get("text") or "")))
+        return cls(pages)
+
+    @classmethod
+    def load(cls, path: Any, agenda: str | None = None) -> PrintedNames:
+        import json
+        from pathlib import Path
+
+        return cls.from_documents(json.loads(Path(path).read_text(encoding="utf-8")), agenda)
+
+    def find(self, name: str) -> str | None:
+        """Where the name is printed ("minutes p. 10"), or None."""
+        words = name.split()
+        if len(words) < 2:
+            return None
+        pattern = re.compile(
+            r"(?<![\w'\-])" + r"\s+".join(re.escape(w) for w in words) + r"(?![\w'\-])",
+            re.IGNORECASE,
         )
-    return found
+        for where, text in self.pages:
+            for match in pattern.finditer(text):
+                # The case-blind match must not swallow a following capitalized word.
+                rest = text[match.end() :]
+                if not re.match(r"\s+[A-Z]", rest) or re.match(_NEXT_TITLE, rest):
+                    return where
+        return None
+
+
+def _name_words(raw: str, capitalized: bool) -> list[str]:
+    """The words of a spoken name, up to a stop word or the end of its phrase."""
+    words: list[str] = []
+    for word in raw.split():
+        bare = word.strip("'.,")
+        if bare.casefold() in _NAME_STOP or (capitalized and not bare[:1].isupper()):
+            break
+        words.append(bare)
+        if word[-1] in ".,":
+            break
+    return words
+
+
+def _opening_name(text: str) -> list[str]:
+    """A name said first at the podium, after the greeting: "Good evening, council. Josh Sherman,".
+
+    Greeting words are skipped, and so is the name after a title the speaker addresses ("member
+    Popkin", "Mayor Hidalgo-Fahring"). The first other word must start a capitalized name of two or
+    three words that ends its phrase; anything else ("I my name is", "My name is") is not one.
+    There must be a greeting ("good evening", "thank you", "Mayor, council") first: a short answer that
+    starts a voice's run ("South Main.", "Improvement District.") is not an introduction.
+    """
+    tokens = _WORD.findall(text)
+    position = 0
+    greeted = False
+    while position < len(tokens):
+        token = tokens[position]
+        bare = token.rstrip(".,!?;:")
+        folded = bare.casefold()
+        if token.startswith("["):
+            position += 1
+        elif folded in _ADDRESS_TITLES:
+            greeted = True  # addressing the body ("Mayor, council members,") greets it
+            position += 1
+            if token == bare:  # "member Popkin, mayor": skip the addressed name too
+                while position < len(tokens) and tokens[position][:1].isupper():
+                    position += 1
+                    if tokens[position - 1][-1] in ".,!?;:":
+                        break
+        elif folded in _GREETING:
+            greeted = greeted or folded in _GREETED
+            position += 1
+        else:
+            break
+    if not greeted:
+        return []
+    words: list[str] = []
+    for token in tokens[position : position + 3]:
+        bare = token.rstrip(".,!?;:")
+        if not bare[:1].isupper() or bare.casefold() in _NOT_A_FIRST_NAME:
+            break
+        words.append(bare)
+        if token != bare:
+            break
+    # Three capitalized words with no stop after them may run on; only a bounded name counts.
+    if len(words) < 2 or tokens[position + len(words) - 1][-1] not in ".,":
+        return []
+    return words
+
+
+def _spoken_introductions(segments: list[Segment]) -> list[tuple[int, list[str]]]:
+    """(line, name words) for every self-introduction, in the speaker's own lines."""
+    found: dict[tuple[int, str], list[str]] = {}
+    for position, segment in enumerate(segments):
+        nxt = segments[position + 1] if position + 1 < len(segments) else None
+        joined = segment.text
+        if nxt is not None and nxt.voice == segment.voice:
+            joined = f"{segment.text} {nxt.text}"
+        for pattern, capitalized in ((_INTRODUCTION, False), (_I_AM, True)):
+            for match in pattern.finditer(joined):
+                if match.start() >= len(segment.text):
+                    continue
+                words = _name_words(match.group("name"), capitalized)
+                if words:
+                    found.setdefault((position, " ".join(words).casefold()), words)
+        starts_run = position == 0 or segments[position - 1].voice != segment.voice
+        if segment.voice is not None and starts_run:
+            run = [segment.text]
+            for later in segments[position + 1 : position + _RUN_OPENING_LINES]:
+                if later.voice != segment.voice:
+                    break
+                run.append(later.text)
+            words = _opening_name(" ".join(run))
+            if words:
+                found.setdefault((position, " ".join(words).casefold()), words)
+    return [(position, words) for (position, _), words in sorted(found.items())]
+
+
+def introductions(
+    segments: list[Segment],
+    printed: PrintedNames | None = None,
+    roster: Roster | None = None,
+    chair: str | None = None,
+    named: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    """Self-introductions, and the voices they name: {voice: (name, where it is printed)}.
+
+    A voice is named from its own introduction ("My name is Morgan Lundy", "I am Lance Smith",
+    "Good evening, council. Josh Sherman,") only when the meeting's documents print that name, as
+    two or more words. A name the documents do not print stays unnamed: names of people not on
+    the roster are spelled by the captioner ("Espanzoriz", "Jack Bestl") and cannot be checked.
+    The chair's voice, a voice the roll call or recognitions named, a roster member's name, and a
+    voice that introduces two different printed names are never named this way.
+    """
+    named = named or {}
+    members = {m.name.casefold() for m in roster.members} if roster else set()
+    found: list[dict[str, Any]] = []
+    for position, words in _spoken_introductions(segments):
+        segment = segments[position]
+        spoken = " ".join(words)
+        entry: dict[str, Any] = {
+            "start": hms(segment.start),
+            "voice": segment.voice,
+            "spoken": spoken,
+            "name": None,
+            "printed_in": None,
+        }
+        candidates = [words[:n] for n in (3, 2) if len(words) >= n]
+        if printed is None:
+            entry["status"] = "not named: no documents were given"
+        elif len(words) < 2:
+            entry["status"] = "not named: one word is not a full name"
+        else:
+            for candidate in candidates:
+                where = printed.find(" ".join(candidate))
+                if where is not None:
+                    entry["name"], entry["printed_in"] = " ".join(candidate), where
+                    break
+            if entry["name"] is None:
+                entry["status"] = "not named: the name is not printed in the meeting's documents"
+            elif entry["name"].casefold() in members:
+                entry["status"] = (
+                    "not named: a roster member is named by the roll call and recognitions"
+                )
+            elif segment.voice is None:
+                entry["status"] = "not named: the line has no voice"
+            elif segment.voice == chair:
+                entry["status"] = "not named: the chair's voice is named by the chair rule"
+            elif segment.voice in named:
+                entry["status"] = f"not named: the voice is already named {named[segment.voice]}"
+            else:
+                entry["status"] = "named"
+        found.append(entry)
+    by_voice: dict[str, set[str]] = {}
+    for entry in found:
+        if entry["status"] == "named":
+            by_voice.setdefault(entry["voice"], set()).add(entry["name"].casefold())
+    voices: dict[str, tuple[str, str]] = {}
+    for entry in found:
+        if entry["status"] != "named":
+            continue
+        if len(by_voice[entry["voice"]]) > 1:
+            entry["status"] = "not named: this voice also introduces another name"
+        else:
+            voices.setdefault(entry["voice"], (entry["name"], entry["printed_in"]))
+    return found, voices
 
 
 def label_voices(
@@ -598,6 +824,7 @@ def label_voices(
     turns: list[Turn],
     recognitions: list[dict[str, Any]],
     roster: Roster | None = None,
+    printed: PrintedNames | None = None,
 ) -> dict[str, Any]:
     """Name caption lines by voice, after diarization. Writes each line's speaker.
 
@@ -607,6 +834,8 @@ def label_voices(
     is labelled:
     - a line in the chair's voice stays unknown (the chair's words are not the member's);
     - a line in a named voice gets that voice's name;
+    - a line in a voice that introduced itself by a name the documents print (see introductions)
+      gets that name;
     - a line of a named turn in the turn's own voice, or with no voice, keeps the turn's name,
       when that voice is on MIN_OWN_SHARE of the turn's voiced lines and, if the voice has no
       name, MIN_HOME_SHARE of the voice's lines are in turns named that person;
@@ -640,6 +869,7 @@ def label_voices(
     if chair_found["name"] is not None and chair_found["name"] in named.values():
         chair_found["name"] = None
         chair_found["status"] = "another voice already has the mayor's name"
+    intros, introduced = introductions(segments, printed, roster, chair, named)
     voice_lines: dict[str, int] = {}
     home_lines: dict[tuple[str, str], int] = {}
     for turn in turns:
@@ -675,6 +905,9 @@ def label_voices(
                 label = named[voice]
                 if label != turn.speaker:
                     by_voice += 1
+            elif voice in introduced:
+                label, where = introduced[voice]
+                segment.basis = f"introduced:{where}"
             elif turn.speaker is not None and (voice is None or voice == own):
                 label = turn.speaker
             else:
@@ -684,7 +917,8 @@ def label_voices(
         "method": "voice",
         "chair_voice": chair,
         "chair": chair_found,
-        "introductions": introductions(segments),
+        "introductions": intros,
+        "introduced_voices": {v: name for v, (name, _) in sorted(introduced.items())},
         "min_turns": MIN_VOICE_TURNS,
         "min_share": MIN_VOICE_SHARE,
         "voices": voices,

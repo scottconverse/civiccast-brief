@@ -331,6 +331,30 @@ def test_the_meetings_documents_are_written_passed_to_the_story_and_reported(tmp
     ]
 
 
+def test_the_documents_come_before_the_recap_so_the_recap_can_read_names_from_them(tmp_path):
+    from dataclasses import replace
+
+    data = {"format": 1, "documents": [{"kind": "minutes", "url": "https://x.test/m", "pages": []}]}
+    fake = Fake()
+    seen = []
+    meeting_main = fake.meeting
+
+    def meeting(argv):
+        documents = Path(_opt(argv, "--documents"))
+        seen.append(json.loads(documents.read_text(encoding="utf-8")))
+        return meeting_main(argv)
+
+    fake.meeting = meeting
+    settings = _settings(tmp_path)
+    run_week(settings, [replace(COUNCIL_MEETING, documents=lambda: (data, []))], LAST, fake.steps())
+    assert seen == [data]
+    # A meeting with no portal documents runs without the flag.
+    other = Fake()
+    run_week(_settings(tmp_path / "b"), [COUNCIL_MEETING], LAST, other.steps())
+    [argv] = [a for step, a in other.calls if step == "meeting"]
+    assert "--documents" not in argv
+
+
 def test_nothing_published_yet_waits_for_review_and_is_not_a_failure(tmp_path):
     site = Site(
         episodes=tmp_path / "site-in",

@@ -36,6 +36,7 @@ from civiccast_brief.meeting.recap import (
 )
 from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.meeting.speakers import (
+    PrintedNames,
     apply_turns,
     label_recognitions,
     label_roll_call,
@@ -72,6 +73,7 @@ def run(
     ytdlp_python: str | None = None,
     roster_path: Path | None = None,
     agenda_path: Path | None = None,
+    documents_path: Path | None = None,
     window_s: float = DEFAULT_WINDOW_S,
     model: str = llm.DEFAULT_MODEL,
     reuse_draft: bool = False,
@@ -86,6 +88,9 @@ def run(
 
     ``complete`` writes the recap drafts and ``judge_complete`` judges the claims; each falls
     back to the Ollama ``model``. ``models.complete_for`` makes them from the city's picks.
+
+    ``documents_path`` is the meeting's documents.json (packet and minutes text). With it, and
+    the agenda, a voice that introduces itself by a name those documents print is named.
     """
     if roster_path is None:
         raise PipelineError("a run needs the city's roster file (--roster, or --city)")
@@ -152,13 +157,20 @@ def run(
     segments = transcript_mod.segments_from_capture(items)
 
     roster = load_roster(roster_path)
+    agenda = load_agenda(agenda_path)
+    agenda_text = agenda.text if agenda else None
+    printed = None
+    if documents_path is not None:
+        printed = PrintedNames.load(documents_path, agenda_text)
+    elif agenda_text:
+        printed = PrintedNames.from_documents(None, agenda_text)
     turns = split_turns(segments)
     roll_call = label_roll_call(turns, roster)
     recognitions = label_recognitions(segments, turns, roster)
     apply_turns(segments, turns)
     diarization = _diarize(video_id, out, segments, diarize, fetch_audio, log)
     voices = (
-        label_voices(segments, turns, recognitions["recognitions"], roster)
+        label_voices(segments, turns, recognitions["recognitions"], roster, printed)
         if diarization.get("status") == "run"
         else None
     )
@@ -170,6 +182,11 @@ def run(
         "city": roster.city,
         "body": roster.body,
         "sources": list(roster.sources),
+    }
+    speakers["documents"] = {
+        "file": str(documents_path) if documents_path else None,
+        "agenda": str(agenda_path) if agenda else None,
+        "pages": len(printed.pages) if printed else 0,
     }
     _write(
         out / "transcript.json",
@@ -183,7 +200,6 @@ def run(
         f"{speakers['counts']['segments']} caption lines named"
     )
 
-    agenda = load_agenda(agenda_path)
     vocabulary = agenda.vocabulary if agenda else frozenset()
     index = TranscriptIndex(segments)
     cut = windows(segments, window_s)
