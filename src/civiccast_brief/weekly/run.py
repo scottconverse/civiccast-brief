@@ -213,6 +213,13 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
     folder.mkdir(parents=True, exist_ok=True)
     entry.update(folder=str(folder), body=meeting.body, day=meeting.day.isoformat())
     done: list[str] = entry.setdefault("done", [])
+    # The documents come first: the recap names a voice from a self-introduction only when
+    # the packet, the minutes or the agenda print that name.
+    if "documents" not in done and meeting.documents is not None:
+        data, lines = meeting.documents()
+        write_documents(folder, data)
+        entry["documents"] = lines
+        done.append("documents")
     if "recap" not in done:
         roster = roster_for(settings.city, meeting.body)
         if roster is None:
@@ -225,6 +232,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             agenda = folder / "agenda.txt"
             agenda.write_text(meeting.agenda.text(date.today()), encoding="utf-8", newline="\n")
             argv += ["--agenda", str(agenda)]
+        if "documents" in done:
+            argv += ["--documents", str(folder / DOCUMENTS_NAME)]
         if meeting.granicus_host:
             argv += [
                 "--granicus",
@@ -243,11 +252,6 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
     if "episode" not in done:
         _stage_episode(steps, settings, folder, Path(entry["script_json"]))
         done.append("episode")
-    if "documents" not in done and meeting.documents is not None:
-        data, lines = meeting.documents()
-        write_documents(folder, data)
-        entry["documents"] = lines
-        done.append("documents")
     if "article" not in done:
         entry["article"] = _article(steps, settings, folder)
         done.append("article")

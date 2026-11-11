@@ -71,6 +71,14 @@ _BASIS = {
 }
 
 
+def _basis_text(basis: str) -> str:
+    """How a name was found, for the speaker key. "introduced:<where>" names the page."""
+    if basis.startswith("introduced:"):
+        where = basis.split(":", 1)[1]
+        return f"introduced themselves; the name is printed in {where}"
+    return _BASIS.get(basis, basis)
+
+
 def speaker_key(
     segments: list[Segment],
     turns: list[Turn],
@@ -93,7 +101,7 @@ def speaker_key(
         role = f", {roles[name].lower()}" if name in roles else ""
         rows.append(
             f"- {hms(segments[first].start)} to {hms(segments[last].end)}: "
-            f"{name}{role} ({_BASIS.get(basis, basis)})"
+            f"{name}{role} ({_basis_text(basis)})"
         )
 
     for position in range(window.first, window.last + 1):
