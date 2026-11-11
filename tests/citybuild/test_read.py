@@ -450,3 +450,25 @@ def test_civicplus_names_where_it_looked_when_nothing_matches(web):
     assert not proof.ok
     assert proof.problem.startswith("/AgendaCenter did not answer; /Archive.aspx lists ")
     assert proof.problem.endswith("none for 'Library Board'")
+
+
+def test_granicus_reads_the_newest_past_clip_of_the_body(web, monkeypatch):
+    from civiccast_brief.meeting import granicus
+
+    host = "townofsuperior.granicus.com"
+    clips = [
+        granicus.Clip(host, 13, 901, "Planning Commission", "December 16, 2025"),
+        granicus.Clip(host, 13, 950, "Planning Commission", "October 6, 2026"),
+        granicus.Clip(host, 13, 960, "Planning Commission", "December 1, 2026"),
+        granicus.Clip(host, 13, 940, "Town Board", "October 20, 2026"),
+    ]
+    monkeypatch.setattr(granicus, "list_clips", lambda h, v: clips)
+    source = make_source(
+        "granicus", {"host": host, "view_id": 13, "bodies": ["Planning Commission"]}
+    )
+    proof = read_latest(source, "Planning Commission", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    # The December 2026 clip is after today, and "December" sorts after "October" as text: the
+    # newest past clip is still the October one.
+    assert proof.meeting_date == date(2026, 10, 6)
+    assert proof.document == granicus.video_url(host, 13, 950)

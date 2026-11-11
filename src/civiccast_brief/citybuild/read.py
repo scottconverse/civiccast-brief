@@ -368,7 +368,8 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     for clip in clips:
         day = granicus.long_date(clip.date)
         if day and body_matches(proof.body, clip.name):
-            when = date.fromisoformat(day)
+            # long_date writes "October 6, 2026", not an ISO date.
+            when = datetime.strptime(day, "%B %d, %Y").date()
             if when <= today:
                 dated.append((when, clip))
     if not dated:
