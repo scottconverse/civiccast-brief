@@ -13,6 +13,7 @@ from civiccast_brief.article.writer import (
     caption_windows,
     check_article,
     load_article,
+    load_documents,
     site_article,
 )
 from civiccast_brief.audio.ffmpeg import probe_duration
@@ -121,9 +122,16 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
 
 
 def _article(
-    article_dir: Path, recap: Recap, data: dict[str, Any], segments: list[Any]
+    article_dir: Path,
+    recap: Recap,
+    data: dict[str, Any],
+    segments: list[Any],
+    documents: Path | None = None,
 ) -> dict[str, Any]:
-    """The published story for the episode, in the site's format, checked once more."""
+    """The published story for the episode, in the site's format, checked once more.
+
+    ``documents`` is the meeting's ``documents.json``, for a story that cites document pages.
+    """
     meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
     if meta.get("kind") != "article" or meta.get("status") != "published":
         raise EpisodeError(f"{article_dir} is not a published article export")
@@ -135,10 +143,11 @@ def _article(
     try:
         article = load_article(article_dir / "article.json")
         windows = caption_windows(recap, segments) if segments else None
-        report = check_article(recap, article, windows)
+        pages = load_documents(documents) if documents and documents.exists() else None
+        report = check_article(recap, article, windows, pages)
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
-        return site_article(recap, article)
+        return site_article(recap, article, pages)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
@@ -222,7 +231,9 @@ def assemble(
         ],
     }
     if article_dir is not None:
-        episode["article"] = _article(article_dir, recap, data, segments)
+        episode["article"] = _article(
+            article_dir, recap, data, segments, meeting_dir / "documents.json"
+        )
     return episode
 
 

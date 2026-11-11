@@ -6,7 +6,9 @@ For each meeting :mod:`find` turned up, in date order:
 2. ``meeting run`` (captions, speakers, recap) with the body's roster;
 3. ``script write``; when the check fails, once more with the report, then ``script repair``;
 4. the episode goes on the editor desk (auto-publish per ``desk.json``);
-5. ``article write`` and ``article stage``.
+5. ``documents.json`` from the portal: the meeting's packet and its minutes (published, or the
+   draft in a later packet); a document that is not there is a line in the report;
+6. ``article write`` and ``article stage``, with ``documents.json`` when there is one.
 
 With two or more meetings done in the window, a roundup follows: ``script roundup``, a script,
 a written title, and its episode on the desk.
@@ -30,6 +32,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
 
 Main = Callable[[Sequence[str]], int]
@@ -179,14 +182,26 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
     recap = str(folder / "recap.json")
     out = folder / "article"
     city = ["--city", str(settings.city)]
+    documents = folder / DOCUMENTS_NAME
+    docs = ["--documents", str(documents)] if documents.is_file() else []
     article = out.with_suffix(".json")
     article.unlink(missing_ok=True)
-    steps.article(["write", "--recap", recap, "--out", str(out), *city])
+    steps.article(["write", "--recap", recap, "--out", str(out), *city, *docs])
     if not article.exists():
         raise StepFailed("article write failed (no story was written)")
     _call(
         steps.article,
-        ["stage", "--db", str(settings.db), "--recap", recap, "--article", str(article), *city],
+        [
+            "stage",
+            "--db",
+            str(settings.db),
+            "--recap",
+            recap,
+            "--article",
+            str(article),
+            *city,
+            *docs,
+        ],
         "article stage",
     )
     return str(article)
@@ -228,6 +243,11 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
     if "episode" not in done:
         _stage_episode(steps, settings, folder, Path(entry["script_json"]))
         done.append("episode")
+    if "documents" not in done and meeting.documents is not None:
+        data, lines = meeting.documents()
+        write_documents(folder, data)
+        entry["documents"] = lines
+        done.append("documents")
     if "article" not in done:
         entry["article"] = _article(steps, settings, folder)
         done.append("article")
@@ -420,6 +440,8 @@ def run_week(
             continue
         _record(state, entry, "")
         report.add(f"{meeting.day} {meeting.title}: done")
+        for line in entry.get("documents", []):
+            report.add(f"{meeting.day} {meeting.title}: {line}")
     line = run_roundup(steps, settings, state, last)
     report.add(line, failed=line.startswith("roundup: failed"))
     if settings.site is not None:
