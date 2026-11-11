@@ -10,6 +10,10 @@ from ``--model provider:model``. It writes, checks, and when the check fails it 
 with the report as feedback. A paragraph that still fails is dropped. It saves ``article.json``
 (paragraphs with their video citations) and ``article.md``. Exit 0 when the saved article passes.
 
+``write``, ``check`` and ``stage`` read the meeting's documents from ``--documents`` (default:
+``documents.json`` next to the recap, when it is there). A paragraph may then cite document
+pages as well as claims, and the check looks in the cited pages too.
+
 ``title`` writes a checked episode title (model task "roundup") to ``title.json`` next to the
 recap. Exit 1 and no file when no draft passes; the episode then keeps its dated title.
 
@@ -30,11 +34,13 @@ from civiccast_brief import models
 from civiccast_brief.article.title import save_title, write_title
 from civiccast_brief.article.writer import (
     ArticleFormatError,
+    DocPage,
     article_to_dict,
     caption_windows,
     check_article,
     drop_unsupported,
     load_article,
+    load_documents,
     save_article,
     write_article,
 )
@@ -71,27 +77,37 @@ def _windows(args: argparse.Namespace, recap) -> dict[str, str] | None:
     return caption_windows(recap, transcript_mod.from_json(data))
 
 
+def _pages(args: argparse.Namespace) -> dict[str, DocPage] | None:
+    path = args.documents or args.recap.with_name("documents.json")
+    if not path.exists():
+        return None
+    return load_documents(path)
+
+
 def _write(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     complete = _complete(args, recap.body)
     windows = _windows(args, recap)
+    pages = _pages(args)
     try:
-        article = write_article(recap, complete, windows=windows)
-        report = check_article(recap, article, windows)
+        article = write_article(recap, complete, windows=windows, pages=pages)
+        report = check_article(recap, article, windows, pages)
         if not report.passed:
             print("first draft failed the check; writing again with the report", file=sys.stderr)
             print(report.render(), file=sys.stderr)
-            article = write_article(recap, complete, feedback=report.render(), windows=windows)
-            report = check_article(recap, article, windows)
+            article = write_article(
+                recap, complete, feedback=report.render(), windows=windows, pages=pages
+            )
+            report = check_article(recap, article, windows, pages)
     except (models.ModelCallError, ArticleFormatError) as exc:
         print(f"write failed: {exc}", file=sys.stderr)
         return 1
     if not report.passed:
-        article, dropped = drop_unsupported(recap, article, windows)
+        article, dropped = drop_unsupported(recap, article, windows, pages)
         for line in dropped.lines():
             print(line, file=sys.stderr)
-        report = check_article(recap, article, windows)
-    json_path, md_path = save_article(recap, article, args.out)
+        report = check_article(recap, article, windows, pages)
+    json_path, md_path = save_article(recap, article, args.out, pages)
     print(f"wrote {json_path} and {md_path}")
     print(report.render())
     return 0 if report.passed and article.paragraphs else 1
@@ -115,7 +131,7 @@ def _title(args: argparse.Namespace) -> int:
 
 def _check(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
-    report = check_article(recap, load_article(args.article), _windows(args, recap))
+    report = check_article(recap, load_article(args.article), _windows(args, recap), _pages(args))
     print(report.render())
     return 0 if report.passed else 1
 
@@ -127,7 +143,7 @@ def _stage(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"stage failed: {exc}", file=sys.stderr)
         return 1
-    report = check_article(recap, article, _windows(args, recap))
+    report = check_article(recap, article, _windows(args, recap), _pages(args))
     try:
         item = stage_item(
             args.db,
@@ -158,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     write.add_argument("--city", type=Path, default=Path("."), help="city folder (models.json)")
     write.add_argument("--model", help="provider:model, overrides models.json")
     write.add_argument("--transcript", type=Path, help="default: transcript.json next to the recap")
+    write.add_argument("--documents", type=Path, help="default: documents.json next to the recap")
     write.set_defaults(func=_write)
     title = sub.add_parser("title", help="write and check an episode title (title.json)")
     title.add_argument("--recap", type=Path, required=True)
@@ -169,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--recap", type=Path, required=True)
     check.add_argument("--article", type=Path, required=True)
     check.add_argument("--transcript", type=Path, help="default: transcript.json next to the recap")
+    check.add_argument("--documents", type=Path, help="default: documents.json next to the recap")
     check.set_defaults(func=_check)
     stage = sub.add_parser("stage", help="check a saved article and put it on the editor desk")
     stage.add_argument("--db", type=Path, required=True, help="desk database")
@@ -176,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("--article", type=Path, required=True)
     stage.add_argument("--city", type=Path, help="city folder (desk.json auto-publish)")
     stage.add_argument("--transcript", type=Path, help="default: transcript.json next to the recap")
+    stage.add_argument("--documents", type=Path, help="default: documents.json next to the recap")
     stage.set_defaults(func=_stage)
     args = parser.parse_args(argv)
     return int(args.func(args))

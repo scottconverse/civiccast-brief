@@ -13,11 +13,13 @@ from civiccast_brief.article.writer import (
     caption_windows,
     check_article,
     load_article,
+    load_documents,
     site_article,
 )
 from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.meeting import transcript as transcript_mod
-from civiccast_brief.review.store import ReviewStore
+from civiccast_brief.review.desk import stage_item
+from civiccast_brief.script.checker import check_script
 from civiccast_brief.script.recap import Recap, load_recap
 from civiccast_brief.script.writer import ROUNDUP_ID, load_script, render_txt
 
@@ -65,19 +67,29 @@ def _meeting_id(recap: Recap, data: dict[str, Any]) -> str:
     return str(data["video_id"])
 
 
-def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
-    """Add the meeting as a draft review item. Returns the new item id."""
+def stage(db: Path, meeting_dir: Path, script_json: Path, city_dir: Path | None = None) -> int:
+    """Add the meeting to the desk. Returns the new item id.
+
+    The script is checked against the recap again. With ``city_dir``, a script that passes is
+    auto-published when ``desk.json`` says so for the body; otherwise the item waits for review.
+    """
     recap, data = _meeting(meeting_dir)
     script = load_script(script_json)
-    with ReviewStore(db) as store:
-        item = store.add_item(
-            meeting_id=_meeting_id(recap, data),
-            title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),
-            meeting_date=recap.meeting_date,
-            speakers=voice_map(meeting_dir),
-            recap=recap_text(recap),
-            script=render_txt(script),
-        )
+    report = check_script(recap, script)
+    item = stage_item(
+        db,
+        city_dir,
+        kind="episode",
+        meeting_id=_meeting_id(recap, data),
+        title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),
+        meeting_date=recap.meeting_date,
+        body=recap.body,
+        checks_passed=report.passed,
+        checks_note=report.render(),
+        speakers=voice_map(meeting_dir),
+        recap=recap_text(recap),
+        script=render_txt(script),
+    )
     return item.id
 
 
@@ -110,9 +122,16 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
 
 
 def _article(
-    article_dir: Path, recap: Recap, data: dict[str, Any], segments: list[Any]
+    article_dir: Path,
+    recap: Recap,
+    data: dict[str, Any],
+    segments: list[Any],
+    documents: Path | None = None,
 ) -> dict[str, Any]:
-    """The published story for the episode, in the site's format, checked once more."""
+    """The published story for the episode, in the site's format, checked once more.
+
+    ``documents`` is the meeting's ``documents.json``, for a story that cites document pages.
+    """
     meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
     if meta.get("kind") != "article" or meta.get("status") != "published":
         raise EpisodeError(f"{article_dir} is not a published article export")
@@ -124,10 +143,11 @@ def _article(
     try:
         article = load_article(article_dir / "article.json")
         windows = caption_windows(recap, segments) if segments else None
-        report = check_article(recap, article, windows)
+        pages = load_documents(documents) if documents and documents.exists() else None
+        report = check_article(recap, article, windows, pages)
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
-        return site_article(recap, article)
+        return site_article(recap, article, pages)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
@@ -211,7 +231,9 @@ def assemble(
         ],
     }
     if article_dir is not None:
-        episode["article"] = _article(article_dir, recap, data, segments)
+        episode["article"] = _article(
+            article_dir, recap, data, segments, meeting_dir / "documents.json"
+        )
     return episode
 
 

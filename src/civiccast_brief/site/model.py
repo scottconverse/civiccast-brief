@@ -122,9 +122,19 @@ class ArticleCite:
 
 
 @dataclass(frozen=True)
+class ArticlePage:
+    """A page of a meeting document a paragraph cites ("packet" or "minutes")."""
+
+    kind: str
+    url: str
+    page: int
+
+
+@dataclass(frozen=True)
 class ArticleParagraph:
     text: str
     cites: tuple[ArticleCite, ...]
+    pages: tuple[ArticlePage, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -709,6 +719,27 @@ def _cites(
     return tuple(cites)
 
 
+def _pages(check: _Checker, paragraph: dict[str, Any], label: str) -> tuple[ArticlePage, ...]:
+    """The optional document pages of a paragraph: an http(s) document and a page from 1."""
+    pages: list[ArticlePage] = []
+    for index, page in enumerate(_list(check, paragraph, "pages"), start=1):
+        p_label = f"{label}.pages[{index}]"
+        if not isinstance(page, dict):
+            check.fail(p_label, "must be an object")
+            continue
+        kind = check.text(page, "kind", limit=40)
+        url = check.https_url(page, "url")
+        if not url:
+            check.fail(f"{p_label}.url", "must be the https address of the document")
+            continue
+        number = page.get("page")
+        if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+            check.fail(f"{p_label}.page", "must be a page number from 1")
+            continue
+        pages.append(ArticlePage(kind=kind, url=url, page=number))
+    return tuple(pages)
+
+
 def _sections(check: _Checker, raw: dict[str, Any], claim_count: int) -> tuple[ArticleSection, ...]:
     items = raw.get("sections")
     if not isinstance(items, list) or not items:
@@ -736,7 +767,8 @@ def _sections(check: _Checker, raw: dict[str, Any], claim_count: int) -> tuple[A
                 continue
             text = check.text(paragraph, "text", limit=4000)
             cites = _cites(check, paragraph, p_label, claim_count)
-            paragraphs.append(ArticleParagraph(text=text, cites=cites))
+            pages = _pages(check, paragraph, p_label)
+            paragraphs.append(ArticleParagraph(text=text, cites=cites, pages=pages))
         sections.append(
             ArticleSection(
                 heading=heading.strip()[:200] if isinstance(heading, str) else None,
@@ -821,6 +853,7 @@ def _article(check: _Checker, data: dict[str, Any], claim_count: int) -> Article
 __all__ = [
     "Article",
     "ArticleCite",
+    "ArticlePage",
     "ArticleParagraph",
     "ArticleQuote",
     "ArticleSection",

@@ -349,3 +349,51 @@ cd worker/signup && npx wrangler pages deploy ../../home --project-name civiccas
 
 Only cities with `"live": true` are listed. Use `wrangler pages deploy`: other upload tools skip
 the `_headers` file that keeps Cloudflare from changing the pages.
+
+## 9. Run every week
+
+Steps 3 to 7 run by themselves with one command. It reads the city's `sources.json`, finds the
+meetings of the last 7 days and runs each one that is new:
+
+```
+python -m civiccast_brief.weekly run --city cities/yourcity --work runs/weekly --db review.db --episodes site-in --media media --site-out site --base-url https://yourcity.example.org --media-base-url https://media.example.org
+```
+
+For each meeting, in date order:
+
+1. the portal's HTML agenda is saved as `agenda.txt`;
+2. `meeting run` makes the transcript, speakers and recap;
+3. `script write` writes the script. When the check fails, it writes once more with the check
+   report, and then `script repair` drops the lines that fail;
+4. the episode goes on the editor desk (auto-published when `desk.json` says so for the body);
+5. `article write` and `article stage` write the story and put it on the desk.
+
+With two or more meetings done in the week, a roundup follows: a combined recap, its script, a
+written title and its episode on the desk.
+
+Then the desk is exported, and every published episode that is not built yet gets its audio, its
+episode JSON (with the published story of the same meeting) and its media files, named after the
+episode. Last, the site is built into `--site-out`. Leave out all five site settings to stop after
+the desk.
+
+**Which meetings run.** A portal meeting needs a YouTube video link; a channel video needs a title
+that reads as a meeting and names one of the source's bodies. The same video from two sources is
+one meeting, with the portal's agenda. A meeting with no video, a cancelled one, or one whose body
+no source covers is listed with the reason and not run.
+
+**Rosters.** Each body needs a roster: `rosters/<body>.json` in the city folder (for example
+`rosters/planning-and-zoning-commission.json`), or `roster.json` when its `body` is that body. A
+meeting with no roster fails with a message that names the file to add.
+
+**Reruns.** `weekly-state.json` in the work folder records each meeting's steps. Run the same
+command again to retry what failed: finished meetings and steps are not run again. Exit code 0
+means every runnable meeting and the site finished; 1 means something failed (the output says what).
+
+**Minutes.** The run reads the video captions and the agenda. Meeting minutes are not read yet.
+
+**Schedule it.** To run it every week, add a scheduled task that runs the command, for example on
+Windows:
+
+```
+schtasks /Create /TN "CivicCast Brief weekly" /SC WEEKLY /D TUE /ST 06:00 /TR "C:\path\to\python.exe -m civiccast_brief.weekly run --city ... (the rest of the command)"
+```
