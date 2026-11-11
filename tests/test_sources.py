@@ -233,3 +233,37 @@ def test_bad_meeting_platform_fields_name_the_field(kind, fields, field, match):
     with pytest.raises(S.SourceError, match=match) as info:
         S.make_source(kind, {"bodies": "Board", **fields})
     assert info.value.field == field
+
+
+def test_a_laserfiche_folder_is_kept_by_its_browse_address(tmp_path):
+    from civiccast_brief.review.web import _SOURCE_ID
+
+    source = S.make_source(
+        "laserfiche",
+        {
+            "laserfiche_url": "laserfiche.louisvilleco.gov/WebLink/browse.aspx?repo=Louisville"
+            "&id=8986&cr=1#top",
+            "bodies": "Planning Commission",
+        },
+    )
+    url = "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville"
+    assert source.url == source.address == url
+    assert source.id == f"laserfiche:{url}"
+    assert _SOURCE_ID.match(source.id)
+    S.add_source(tmp_path, source)
+    assert S.load_sources(tmp_path) == [source]
+
+
+@pytest.mark.parametrize(
+    "value,match",
+    [
+        ("", "enter the address"),
+        ("https://laserfiche.louisvilleco.gov/WebLink/DocView.aspx?id=1", "ending in Browse.aspx"),
+        ("https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986", "repository"),
+        ("https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=x&repo=L", "names the folder"),
+    ],
+)
+def test_a_bad_laserfiche_address_names_the_field(value, match):
+    with pytest.raises(S.SourceError, match=match) as info:
+        S.make_source("laserfiche", {"laserfiche_url": value, "bodies": "Board"})
+    assert info.value.field == "laserfiche_url"

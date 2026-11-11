@@ -26,6 +26,9 @@ dependencies = [
 # provides. soundfile reads the audio; pyannote 4 no longer pulls it in. This pulls the
 # PyTorch stack, so it is optional: captions and stories do not need it.
 diarize = ["pyannote.audio>=4.0", "soundfile>=0.13"]
+# Reading record sites that open only in a browser (Laserfiche WebLink), in the installed
+# Google Chrome. Playwright drives that Chrome; it does not download a browser of its own.
+browser = ["playwright>=1.50"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]

@@ -21,7 +21,11 @@ The desk's Sources screen adds, edits and removes them. The file::
         {"id": "escribe:bouldercounty", "kind": "escribe", "tenant": "bouldercounty",
          "bodies": ["Board of County Commissioners"]},
         {"id": "civicplus:www.townoflyons.com", "kind": "civicplus",
-         "site": "www.townoflyons.com", "bodies": ["Board of Trustees"]}
+         "site": "www.townoflyons.com", "bodies": ["Board of Trustees"]},
+        {"id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville",
+         "kind": "laserfiche",
+         "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville",
+         "bodies": ["Planning Commission"]}
       ]
     }
 
@@ -40,6 +44,9 @@ Kinds and what each needs:
   ``https://pub-bouldercounty.escribemeetings.com``.
 - ``civicplus``: a CivicPlus town site with an Agenda Center or an Archive Center, by its host:
   ``www.townoflyons.com``.
+- ``laserfiche``: one body's folder in a Laserfiche WebLink records site, by its Browse.aspx
+  address. These sites open only in a browser, so the folder is read in the installed Google
+  Chrome (see :mod:`civiccast_brief.citybuild.browser`).
 
 Every source lists the bodies (council, boards) it covers: at least one name.
 The id is made from the kind and its address, so one address is listed once.
@@ -67,6 +74,7 @@ KINDS: Final = (
     "civicclerk",
     "escribe",
     "civicplus",
+    "laserfiche",
 )
 KIND_LABELS: Final = {
     "primegov": "PrimeGov portal",
@@ -77,6 +85,7 @@ KIND_LABELS: Final = {
     "civicclerk": "CivicClerk portal",
     "escribe": "eScribe meetings site",
     "civicplus": "CivicPlus Agenda Center or Archive Center",
+    "laserfiche": "Laserfiche WebLink folder (read in Chrome)",
 }
 
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -123,8 +132,8 @@ class Source:
             return f"primegov:{urlsplit(self.url).hostname}"
         if self.kind == "youtube":
             return f"youtube:{self.channel_id}"
-        if self.kind == "webpage":
-            return f"webpage:{self.url}"
+        if self.kind in ("webpage", "laserfiche"):
+            return f"{self.kind}:{self.url}"
         if self.kind == "gdrive":
             return f"gdrive:{self.folder_id}"
         if self.kind in ("civicclerk", "escribe"):
@@ -136,7 +145,7 @@ class Source:
     @property
     def address(self) -> str:
         """What a person reads: the portal, the channel, the page or the folder."""
-        if self.kind in ("primegov", "webpage"):
+        if self.kind in ("primegov", "webpage", "laserfiche"):
             return self.url
         if self.kind == "youtube":
             return f"https://www.youtube.com/channel/{self.channel_id}"
@@ -166,6 +175,8 @@ class Source:
             data["tenant"] = self.tenant
         elif self.kind == "civicplus":
             data["site"] = self.site
+        elif self.kind == "laserfiche":
+            data["url"] = self.url
         else:
             data["host"] = self.host
             data["view_id"] = self.view_id
@@ -334,6 +345,30 @@ def _site(value: str) -> str:
     return name
 
 
+def _laserfiche_url(value: str) -> str:
+    from civiccast_brief.citybuild.laserfiche import LaserficheError, browse_url, parse_url
+
+    text = value.strip()
+    if not text:
+        raise SourceError(
+            "enter the address of the body's WebLink folder, ending in Browse.aspx?id=...",
+            "laserfiche_url",
+        )
+    if len(text) > _MAX_URL or any(c.isspace() for c in text):
+        raise SourceError("that folder address is too long or has spaces in it", "laserfiche_url")
+    try:
+        host, base, folder, repo = parse_url(text)
+    except LaserficheError as exc:
+        raise SourceError(str(exc), "laserfiche_url") from exc
+    if not _SITE.match(host) or not re.fullmatch(r"(?:/[A-Za-z0-9._~-]+)*", base):
+        raise SourceError(f"{value.strip()!r} is not a WebLink folder address", "laserfiche_url")
+    if not re.fullmatch(r"[A-Za-z0-9 ._-]{1,100}", repo):
+        raise SourceError(
+            "the repository name (repo=...) has letters it cannot have", "laserfiche_url"
+        )
+    return browse_url(host, base, folder, repo)
+
+
 def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     """Check one source's fields and return it, or raise SourceError naming the field."""
     kind = str(kind).strip().lower()
@@ -370,6 +405,11 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     if kind == "civicplus":
         site = _site(str(fields.get("site") or ""))
         return Source(kind, parse_bodies(fields.get("bodies") or ""), site=site)
+    if kind == "laserfiche":
+        # The desk form names the field apart from PrimeGov's url; the file calls it url.
+        value = str(fields.get("laserfiche_url") or fields.get("url") or "")
+        url = _laserfiche_url(value)
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), url=url)
     host, view = _granicus(str(fields.get("host") or ""), str(fields.get("view_id") or ""))
     return Source(kind, parse_bodies(fields.get("bodies") or ""), host=host, view_id=view)
 

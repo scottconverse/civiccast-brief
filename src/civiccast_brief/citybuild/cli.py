@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.citybuild import browser
 from civiccast_brief.citybuild.build import build_city
 from civiccast_brief.citybuild.fetch import Fetcher
 from civiccast_brief.citybuild.read import Proof, read_latest
@@ -75,20 +76,24 @@ def check_city(
     """Read each body's newest meeting from each source that lists it."""
     fetcher = fetcher or Fetcher()
     proofs: list[Proof] = []
-    for source in load_sources(folder):
-        for body in source.bodies:
-            if bodies and body.casefold() not in {b.casefold() for b in bodies}:
-                continue
-            proofs.append(
-                read_latest(
-                    source,
-                    body,
-                    fetcher,
-                    today=today,
-                    captions=captions,
-                    work_dir=folder / "city-check",
+    try:
+        for source in load_sources(folder):
+            for body in source.bodies:
+                if bodies and body.casefold() not in {b.casefold() for b in bodies}:
+                    continue
+                proofs.append(
+                    read_latest(
+                        source,
+                        body,
+                        fetcher,
+                        today=today,
+                        captions=captions,
+                        work_dir=folder / "city-check",
+                    )
                 )
-            )
+    finally:
+        # A Laserfiche folder opens Chrome; the window closes when the check is done.
+        browser.close_shared()
     return proofs
 
 
