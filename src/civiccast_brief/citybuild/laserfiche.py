@@ -47,9 +47,8 @@ DOCUMENT: Final = -2
 _YEAR: Final = re.compile(r"^\s*(\d{4})\b(?!\s*(?:-|–|&|and\b|to\b))", re.IGNORECASE)
 _TAG: Final = re.compile(r"<[^>]{0,2000}>")
 #: How many months with meetings in them are read, newest first, where a year is filed by month.
+#: Empty month folders are passed over: a board that last met ten months ago is still read.
 MONTHS: Final = 3
-#: Month folders listed at most, newest first, empty ones included.
-MONTHS_LISTED: Final = 6
 #: "10 OCT" or "10 October" is a month's folder.
 _MONTH: Final = re.compile(r"^\s*(\d{1,2})\s+[a-z]{3}", re.IGNORECASE)
 _NAME_DAY: Final = re.compile(r"(?<!\d)(\d{4})[ ._-](\d{1,2})[ ._-](\d{1,2})(?!\d)")
@@ -99,12 +98,22 @@ def _results(data: Any) -> tuple[list[dict[str, Any]], int]:
 
 
 def entries(browser: Browser, host: str, base: str, folder: int, repo: str) -> list[dict[str, Any]]:
-    """Every entry of one folder, by opening its page in the browser.
+    """Every entry of one folder, by opening its page in the browser."""
+    return listing(browser, host, base, folder, repo)[0]
+
+
+def listing(
+    browser: Browser, host: str, base: str, folder: int, repo: str
+) -> tuple[list[dict[str, Any]], str]:
+    """Every entry of one folder and the folder's own name, by opening its page in the browser.
 
     The page lists the first 30 entries; a folder with more is asked again for all of them, from
     the page, the way the page asks.
     """
-    rows, total = _results(browser.open_and_catch(browse_url(host, base, folder, repo), LISTING))
+    data = browser.open_and_catch(browse_url(host, base, folder, repo), LISTING)
+    block = data.get("data") if isinstance(data, dict) else None
+    name = str(block.get("name") or "") if isinstance(block, dict) else ""
+    rows, total = _results(data)
     if total > len(rows):
         ask = {
             "repoName": repo,
@@ -116,7 +125,7 @@ def entries(browser: Browser, host: str, base: str, folder: int, repo: str) -> l
             "sortAscending": True,
         }
         rows, _ = _results(browser.post_json(f"{base}{LISTING}", ask, _ASK_HEADERS))
-    return rows
+    return rows, name
 
 
 def year_of(name: str) -> int | None:
@@ -149,23 +158,34 @@ def docs(browser: Browser, url: str, body: str, today: date) -> tuple[list[Doc],
     folders. On one day an agenda or packet comes before the minutes.
     """
     host, base, folder, repo = parse_url(url)
-    top = entries(browser, host, base, folder, repo)
-    found = [r for r in top if r.get("type") == DOCUMENT]
-    years = sorted(
-        (
-            (year, r)
-            for r in top
-            if r.get("type") == FOLDER
-            and (year := year_of(str(r.get("name") or ""))) is not None
-            and year <= today.year
-        ),
-        key=lambda pair: pair[0],
-        reverse=True,
-    )
-    notes = [f"the folder has {len(top)} entries, {len(years)} of them year folders"]
+    top, name = listing(browser, host, base, folder, repo)
+    own_year = year_of(name)
+    if own_year is not None and own_year <= today.year:
+        # The address is the body's folder for one year ("2026"), not the body's folder.
+        notes = [f'the folder is the year folder "{name}", with {len(top)} entries']
+        years_read: list[tuple[int, list[dict[str, Any]]]] = [(own_year, top)]
+        found: list[dict[str, Any]] = []
+    else:
+        found = [r for r in top if r.get("type") == DOCUMENT]
+        years = sorted(
+            (
+                (year, r)
+                for r in top
+                if r.get("type") == FOLDER
+                and (year := year_of(str(r.get("name") or ""))) is not None
+                and year <= today.year
+            ),
+            key=lambda pair: pair[0],
+            reverse=True,
+        )
+        notes = [f"the folder has {len(top)} entries, {len(years)} of them year folders"]
+        years_read = [
+            (year, entries(browser, host, base, int(row["entryId"]), repo))
+            for year, row in years[:YEARS]
+        ]
     months: list[tuple[tuple[int, int], dict[str, Any]]] = []
-    for year, row in years[:YEARS]:
-        for r in entries(browser, host, base, int(row["entryId"]), repo):
+    for year, rows in years_read:
+        for r in rows:
             if r.get("type") == DOCUMENT:
                 found.append(r)
             elif (
@@ -176,7 +196,7 @@ def docs(browser: Browser, url: str, body: str, today: date) -> tuple[list[Doc],
                 months.append(((year, month), r))
     months.sort(key=lambda pair: pair[0], reverse=True)
     with_meetings = 0
-    for _when, row in months[:MONTHS_LISTED]:
+    for _when, row in months:
         if with_meetings >= MONTHS:
             break
         before = len(found)

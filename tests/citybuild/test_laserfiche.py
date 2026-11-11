@@ -292,3 +292,47 @@ def test_a_challenge_page_is_known_and_a_pdf_is_known_by_its_bytes():
     assert not browser.challenged(403, "<html>Forbidden</html>")
     assert browser.kind_of_file(b"%PDF-1.7") == "application/pdf"
     assert browser.kind_of_file(b"  <!doctype html>") == "text/html"
+
+
+def boulder_body(folder: int, body: str):
+    url = f"{BOULDER}/WebLink/Browse.aspx?id={folder}&dbid=0&repo=LF8PROD2"
+    return make_source("laserfiche", {"url": url, "bodies": body})
+
+
+def test_a_board_that_last_met_months_ago_is_read_past_its_empty_months(fake, web):
+    """Boulder's Board of Zoning Adjustment (32770), saved on 2026-11-11: its 2026 folder has a
+    folder for every month, and only January's has documents. Its own folder also holds a
+    procedural rules document "Adopted 11.08.22", which is not a meeting."""
+    fake.files[boulder_file(200960)] = text_pdf(
+        "Board of Zoning Adjustment", "Disposition", "January 13, 2026"
+    )
+    proof = read_latest(
+        boulder_body(32770, "Board of Zoning Adjustment"),
+        "Board of Zoning Adjustment",
+        web.fetcher(),
+        today=date(2026, 11, 11),
+    )
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 1, 13)
+    assert proof.title == "01.13.26 BOZ2025-00013 Disposition Packet"
+    assert fake.got == [boulder_file(200960)]
+
+
+def test_an_address_that_is_a_boards_year_folder_is_read_as_that_year(fake, web):
+    """Boulder's Open Space Board of Trustees address (198102) is the board's "2026" folder,
+    which holds "01 JAN" ... "12 DEC" itself. October holds two meeting folders; the newest is
+    the 30 October retreat."""
+    fake.files[boulder_file(205847)] = text_pdf(
+        "Open Space Board of Trustees", "Retreat", "October 30, 2026"
+    )
+    proof = read_latest(
+        boulder_body(198102, "Open Space Board of Trustees"),
+        "Open Space Board of Trustees",
+        web.fetcher(),
+        today=date(2026, 11, 11),
+    )
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 30)
+    assert proof.document == boulder_file(205847)
+    # The year folder itself, its empty November, then October and its two meetings.
+    assert [laserfiche.parse_url(u)[2] for u in fake.opened][:3] == [198102, 198568, 198567]
