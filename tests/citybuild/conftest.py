@@ -175,3 +175,25 @@ def pace(tmp_path: Path) -> Iterator[pacing.Pacer]:
 @pytest.fixture
 def web() -> Web:
     return Web()
+
+
+def data_api(*videos: tuple[str, str, str]):
+    """A fake YouTube Data API answering the three calls with (video id, title, published)."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/channels"):
+            uploads = {"relatedPlaylists": {"uploads": "UU" + CHANNEL[2:]}}
+            return httpx.Response(200, json={"items": [{"contentDetails": uploads}]})
+        if path.endswith("/playlistItems"):
+            items = [
+                {
+                    "snippet": {"title": t, "publishedAt": p, "channelId": CHANNEL},
+                    "contentDetails": {"videoId": v, "videoPublishedAt": p},
+                }
+                for v, t, p in videos
+            ]
+            return httpx.Response(200, json={"items": items})
+        return httpx.Response(200, json={"items": []})
+
+    return handle
