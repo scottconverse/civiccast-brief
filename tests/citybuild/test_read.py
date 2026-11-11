@@ -369,6 +369,35 @@ def test_civicclerk_skips_cancelled_and_future_meetings(web):
     assert (proof.meeting_date, proof.document) == (date(2026, 10, 21), _clerk_file(2162))
 
 
+def test_civicclerk_follows_the_apis_next_page_links_to_an_older_meeting(web):
+    """Erie's API answers 15 meetings at a time with a link to the next 15 (saved on 2026-11-11;
+    the fourth page's own next link is cut off). The Board of Adjustment/Board of Appeals last
+    met on 22 July 2026, on the fourth page."""
+    import json
+
+    from civiccast_brief.citybuild import platforms
+
+    from .conftest import HERE
+
+    today = date(2026, 11, 11)
+    url = platforms.clerk_events_url(ERIE, today)
+    for n in (1, 2, 3, 4):
+        name = f"civicclerk-erie-events-2026-11-11-page{n}.json"
+        web.fixture(url, name, "application/json")
+        url = json.loads((HERE / name).read_text(encoding="utf-8")).get("@odata.nextLink")
+    web.add(
+        _clerk_file(1051),
+        text_pdf("Board of Adjustment/Board of Appeals", "July 22, 2026"),
+        "application/pdf",
+    )
+    body = "Board of Adjustment/Board of Appeals"
+    source = make_source("civicclerk", {"tenant": ERIE, "bodies": [body]})
+    proof = read_latest(source, body, web.fetcher(), today=today)
+    assert proof.ok, proof.problem
+    assert (proof.meeting_date, proof.document) == (date(2026, 7, 22), _clerk_file(1051))
+    assert len([u for u in web.asked if "/Events?" in u]) == 4
+
+
 def test_escribe_reads_the_newest_past_html_agenda(web):
     add_boulder_county(web)
     today = date(2026, 11, 6)
