@@ -110,24 +110,27 @@ def redraft(store: ReviewStore, item_id: int, note: str, writer: Writer) -> Cont
         raise ReviewError(f"no item with id {item_id}")
     result = dict(writer(item, note))
     allowed = (
-        {"article", "checks_passed"}
+        {"article", "checks_passed", "checks_note"}
         if item.kind == "article"
         else {
             "recap",
             "script",
             "speakers",
             "checks_passed",
+            "checks_note",
         }
     )
     unknown = set(result) - allowed
     if unknown:
         raise ReviewError(f"the writer returned fields an {item.kind} has not: {sorted(unknown)}")
     checks = result.pop("checks_passed", None)
+    checks_note = str(result.pop("checks_note", "") or "")
     update = store.update_content(
         item_id,
         action="redrafted",
         note=note,
         checks_passed=None if checks is None else bool(checks),
+        checks_note=checks_note,
         expected_hash=item.content_hash,
         **result,
     )

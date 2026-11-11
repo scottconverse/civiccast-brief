@@ -69,6 +69,8 @@ def story(*paragraphs: tuple[str, list[str]], headline: str) -> str:
     )
 
 
+OLD_REPORT = "CHECK RESULT: PASS Article: 1 sections, 1 paragraphs (the old draft's report)"
+
 GOOD = ("The council approved the 8513 St. Vrain Road annexation 6-1.", ["c01"])
 NEW_NUMBER = ("The annexation covers 40 acres.", ["c01"])
 
@@ -91,6 +93,7 @@ def stage_story(db, city):
         meeting_date="2026-10-20",
         body="City Council",
         checks_passed=True,
+        checks_note=OLD_REPORT,
         article=OLD_STORY,
     )
 
@@ -125,6 +128,8 @@ def test_redraft_writes_the_story_again_with_the_editors_note(work, tmp_path) ->
     assert after.article["headline"] == "Council approves annexation 6-1"
     assert after.checks_passed is True
     assert after.status == "review"
+    # The desk shows the new draft's report, not the old one's.
+    assert after.checks_note != OLD_REPORT and "CHECK RESULT: PASS" in after.checks_note
 
 
 def test_a_redraft_that_adds_a_fact_is_rewritten_once_then_cut_to_what_the_claims_back(
@@ -209,3 +214,15 @@ def test_serve_connects_the_writers_when_given_the_weekly_work_folder(tmp_path, 
     assert cli.main([*base, "--work", str(work)]) == 0
     assert seen["w"] is not None
     assert cli.main([*base, "--work", str(tmp_path / "none")]) == 1
+
+
+def test_an_editors_own_save_drops_the_old_drafts_check_report(tmp_path) -> None:
+    db, city = tmp_path / "desk.db", tmp_path / "city"
+    city.mkdir()
+    item = stage_story(db, city)
+    edited = json.loads(story(GOOD, headline="Council approves annexation"))
+
+    ReviewStore(db).update_content(item.id, article=edited)
+
+    after = ReviewStore(db).get_item(item.id)
+    assert after.checks_passed is None and after.checks_note == ""

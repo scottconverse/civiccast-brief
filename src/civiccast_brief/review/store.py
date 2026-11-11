@@ -543,11 +543,13 @@ class ReviewStore:
         action: str = "edited",
         note: str = "",
         checks_passed: bool | None = None,
+        checks_note: str = "",
         expected_hash: str | None = None,
     ) -> ContentUpdate:
         """Save new content. Any change sends the item back to review and clears publishing.
 
-        Fields left as None keep their value. ``expected_hash`` refuses the save if the item
+        The check result and its report are replaced too: a new text has not been through the
+        old text's check. Fields left as None keep their value. ``expected_hash`` refuses the save if the item
         changed since the caller read it (a redraft takes a while).
         """
         with self._connect(write=True) as conn:
@@ -581,7 +583,8 @@ class ReviewStore:
             conn.execute(
                 "UPDATE items SET speakers = ?, recap = ?, script = ?, article = ?,"
                 " status = 'review', published_at = NULL, published_hash = NULL,"
-                " published_by = NULL, note = ?, checks_passed = ?, updated_at = ? WHERE id = ?",
+                " published_by = NULL, note = ?, checks_passed = ?, checks_note = ?, updated_at = ?"
+                " WHERE id = ?",
                 (
                     json.dumps(new_values.get("speakers", {}), ensure_ascii=False),
                     new_values.get("recap", ""),
@@ -589,6 +592,7 @@ class ReviewStore:
                     _canonical(new_values["article"]) if old.kind == "article" else "",
                     str(note) or old.note,
                     None if checks_passed is None else int(bool(checks_passed)),
+                    str(checks_note),
                     _now(),
                     item_id,
                 ),

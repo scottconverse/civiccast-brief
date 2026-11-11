@@ -110,7 +110,11 @@ def _story(folder: Path, recap: Recap, item: DeskItem, note: str, pick: Complete
         report = check_article(recap, article, windows, pages)
     if not article.paragraphs:
         raise ReviewError("every paragraph of the new draft failed the check; nothing was changed")
-    return {"article": article_to_dict(article), "checks_passed": report.passed}
+    return {
+        "article": article_to_dict(article),
+        "checks_passed": report.passed,
+        "checks_note": report.render(),
+    }
 
 
 def _script(recap: Recap, item: DeskItem, note: str, pick: CompleteFor):
@@ -125,4 +129,8 @@ def _script(recap: Recap, item: DeskItem, note: str, pick: CompleteFor):
     if not report.passed:
         lines, _dropped = checker.drop_unsupported(recap, lines)
         report = checker.check_script(recap, lines)
-    return {"script": render_txt(lines), "checks_passed": report.passed}
+    return {
+        "script": render_txt(lines),
+        "checks_passed": report.passed,
+        "checks_note": report.render(),
+    }
