@@ -350,7 +350,7 @@ def _download_to_temp(asset: PinnedAsset, *, timeout: int, max_bytes: int) -> Pa
 
     deadline = time.monotonic() + timeout
     try:
-        request = urllib.request.Request(asset.url, headers={"User-Agent": "civiccast-brief"})
+        request = urllib.request.Request(asset.url)
         with urllib.request.urlopen(request, timeout=min(timeout, 60)) as response:
             declared = response.headers.get("Content-Length")
             if declared is not None:

@@ -312,7 +312,7 @@ export async function runSender(
   for (const [slug, city] of Object.entries(env.CITIES)) {
     let items;
     try {
-      const res = await fetcher(city.feed, { headers: { "User-Agent": "CivicCast Brief email sender" } });
+      const res = await fetcher(city.feed);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       items = parseFeed(await res.text());
     } catch (err) {

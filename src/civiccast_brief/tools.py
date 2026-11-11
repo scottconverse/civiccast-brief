@@ -50,7 +50,7 @@ def install_ytdlp(
     manager = manager or RuntimeManager(root=root or Settings.from_env().runtime_root)
     probe = capture_probe(test_video_url=url)
     own_client = client is None
-    client = client or httpx.Client(timeout=30.0, headers={"User-Agent": "civiccast-brief"})
+    client = client or httpx.Client(timeout=30.0)
     try:
         return manager.check_and_update(url, probe, client=client)
     finally:

@@ -54,7 +54,7 @@ def test_install_hands_the_test_video_to_the_runtime_check():
     url, probe, client = manager.calls[0]
     assert url == "https://www.youtube.com/watch?v=abc"
     assert callable(probe)
-    assert client.headers["User-Agent"] == "civiccast-brief"
+    assert "civiccast" not in client.headers.get("User-Agent", "").casefold()
     assert client.is_closed  # the client it opened is closed again
 
 
