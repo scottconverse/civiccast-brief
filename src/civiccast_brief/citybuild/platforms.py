@@ -22,7 +22,8 @@ from typing import Any, Final
 from civiccast_brief.citybuild.fetch import Fetcher
 from civiccast_brief.citybuild.page import first_date, squash
 
-#: How many CivicClerk meetings one request lists, newest first.
+#: How many CivicClerk meetings are listed, newest first. The API answers a few at a time (15 for
+#: Erie, checked on 2026-11-11) with a link to the next ones, which is followed up to this many.
 CLERK_EVENTS: Final = 200
 #: How far back the eScribe calendar is asked for meetings.
 ESCRIBE_DAYS: Final = 120
@@ -83,10 +84,16 @@ def clerk_docs(tenant: str, fetcher: Fetcher, today: date) -> list[Doc]:
     The API writes the town's local time with a Z ("2026-11-10T19:30:00Z" for a 7:30 PM
     meeting), so the day is read as written.
     """
-    data = fetcher.get(clerk_events_url(tenant, today)).json()
-    rows = data.get("value") if isinstance(data, dict) else None
+    rows: list[Any] = []
+    url: Any = clerk_events_url(tenant, today)
+    while isinstance(url, str) and url and len(rows) < CLERK_EVENTS:
+        data = fetcher.get(url).json()
+        if not isinstance(data, dict) or not isinstance(data.get("value"), list):
+            break
+        rows += data["value"]
+        url = data.get("@odata.nextLink")
     found: list[Doc] = []
-    for row in rows if isinstance(rows, list) else []:
+    for row in rows[:CLERK_EVENTS]:
         if not isinstance(row, dict):
             continue
         title = squash(str(row.get("eventName") or ""))
