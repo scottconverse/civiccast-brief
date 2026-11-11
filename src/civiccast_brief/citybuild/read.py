@@ -617,4 +617,4 @@ def _laserfiche(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> 
     if not docs:
         proof.problem = "; ".join(notes)
         return
-    _read_docs(proof, docs, reader)
+    _read_docs(proof, docs, laserfiche.Reader(reader))
