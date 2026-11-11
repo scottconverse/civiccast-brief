@@ -72,7 +72,7 @@ def test_primegov_skips_cancelled_and_future_meetings(web):
         source, "Golf Course Advisory Board", web.fetcher(), today=date(2026, 9, 30)
     )
     assert not proof.ok
-    assert "no meeting of committee 12" in proof.problem
+    assert "no meeting of committee 12 on or before 2026-09-30 in 2015-2026" in proof.problem
     hpc = read_latest(
         source, "Historic Preservation Commission", web.fetcher(), today=date(2026, 9, 30)
     )
@@ -80,6 +80,30 @@ def test_primegov_skips_cancelled_and_future_meetings(web):
     # one tried, and its failure is named.
     assert not hpc.ok
     assert "2026-01-01" in hpc.problem
+
+
+def test_primegov_looks_back_years_for_a_board_that_last_met_before_last_year(web):
+    """Longmont's Marijuana Licensing Authority last met on 12 July 2024 (portal read 2026-11-11).
+    The 2024 archive is the first year back with a meeting, so earlier years are not asked."""
+    add_primegov(web)
+    web.fixture(
+        PRIMEGOV + "/api/v2/PublicPortal/ListArchivedMeetings?year=2024",
+        "primegov-archived-2024-mla.json",
+        "application/json",
+    )
+    agenda = PRIMEGOV + "/Public/CompiledDocument?meetingTemplateId=12805&compileOutputType=1"
+    web.fixture(agenda, "primegov-mla-agenda-2024-07-12.pdf", "application/pdf")
+    source = make_source("primegov", {"url": PRIMEGOV, "bodies": ["Marijuana Licensing Authority"]})
+    proof = read_latest(
+        source, "Marijuana Licensing Authority", web.fetcher(), today=date(2026, 11, 11)
+    )
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2024, 7, 12)
+    assert proof.title == "Marijuana Licensing Authority Hearing"
+    assert proof.what == "agenda"
+    assert proof.document == agenda
+    assert proof.lines[1:3] == ["1", "MARIJUANA LICENSING AUTHORITY (MLA)"]
+    assert not any("year=2023" in url for url in web.asked)
 
 
 def test_primegov_names_a_body_the_portal_does_not_list(web):

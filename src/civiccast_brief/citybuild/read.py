@@ -33,6 +33,8 @@ COMMITTEES_PATH: Final = "/api/committee/GetCommitteeesListByShowInPublicPortal"
 FEED_URL: Final = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 #: How many meetings or documents a reader tries before it says it found none it could read.
 TRIES: Final = 5
+#: The earliest year of a PrimeGov archive that is asked for a board's last meeting.
+PRIMEGOV_FIRST_YEAR: Final = 2015
 #: A meeting page that follows a list is read only when its date is this close to today.
 FOLLOW_TRIES: Final = 4
 _MEETING_WORD: Final = re.compile(r"\b(meeting|session|hearing)\b", re.IGNORECASE)
@@ -183,27 +185,31 @@ def _primegov(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     assert fetcher.client is not None
     adapter = PrimeGovAdapter(base, fetcher.client)
     meetings: dict[int, dict[str, Any]] = {}
-    lists = [
-        adapter.archived_meetings_url(today.year),
-        adapter.archived_meetings_url(today.year - 1),
-    ]
-    lists.append(adapter.upcoming_meetings_url())
-    for url in lists:
+
+    def add(url: str) -> list[tuple[datetime, dict[str, Any]]]:
         payload = fetcher.get(url).json()
         for row in payload if isinstance(payload, list) else []:
             if isinstance(row, dict) and row.get("committeeId") == committee and row.get("id"):
                 meetings.setdefault(int(row["id"]), row)
-    dated: list[tuple[datetime, dict[str, Any]]] = []
-    for row in meetings.values():
-        try:
-            when = datetime.fromisoformat(str(row.get("dateTime")))
-        except ValueError:
-            continue
-        if when.date() <= today and not _cancelled(row):
-            dated.append((when, row))
-    dated.sort(key=lambda pair: pair[0], reverse=True)
+        return _past_meetings(meetings, today)
+
+    for url in (
+        adapter.archived_meetings_url(today.year),
+        adapter.archived_meetings_url(today.year - 1),
+        adapter.upcoming_meetings_url(),
+    ):
+        dated = add(url)
+    # A board that has not met since before last year is still read: earlier years are asked one
+    # at a time until one has a meeting.
+    year = today.year - 2
+    while not dated and year >= PRIMEGOV_FIRST_YEAR:
+        dated = add(adapter.archived_meetings_url(year))
+        year -= 1
     if not dated:
-        proof.problem = f"no meeting of committee {committee} on or before {today} in {today.year - 1}-{today.year}"
+        proof.problem = (
+            f"no meeting of committee {committee} on or before {today} "
+            f"in {PRIMEGOV_FIRST_YEAR}-{today.year}"
+        )
         return
     tried: list[str] = []
     for when, row in dated[:TRIES]:
@@ -245,6 +251,22 @@ def _primegov(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
             proof.document = url
             return
     proof.problem = "; ".join(tried) or "nothing to read"
+
+
+def _past_meetings(
+    meetings: dict[int, dict[str, Any]], today: date
+) -> list[tuple[datetime, dict[str, Any]]]:
+    """The meetings held on or before ``today`` and not cancelled, newest first."""
+    dated: list[tuple[datetime, dict[str, Any]]] = []
+    for row in meetings.values():
+        try:
+            when = datetime.fromisoformat(str(row.get("dateTime")))
+        except ValueError:
+            continue
+        if when.date() <= today and not _cancelled(row):
+            dated.append((when, row))
+    dated.sort(key=lambda pair: pair[0], reverse=True)
+    return dated
 
 
 def _read_lines(read: Read) -> list[str]:

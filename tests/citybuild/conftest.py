@@ -118,7 +118,8 @@ class Web:
 
 
 def add_primegov(web: Web, base: str = PRIMEGOV) -> None:
-    """The Longmont portal: its committees, the 2026 archive, the upcoming list, two agendas."""
+    """The Longmont portal: its committees, the 2026 archive (2015-2025 empty), the upcoming list,
+    two agendas."""
     web.fixture(
         base + "/api/committee/GetCommitteeesListByShowInPublicPortal",
         "primegov-committees-longmont.json",
@@ -129,7 +130,12 @@ def add_primegov(web: Web, base: str = PRIMEGOV) -> None:
         "archived-meetings-2026.json",
         "application/json",
     )
-    web.add(base + "/api/v2/PublicPortal/ListArchivedMeetings?year=2025", "[]", "application/json")
+    for year in range(2015, 2026):
+        web.add(
+            base + f"/api/v2/PublicPortal/ListArchivedMeetings?year={year}",
+            "[]",
+            "application/json",
+        )
     web.fixture(
         base + "/api/v2/PublicPortal/ListUpcomingMeetings",
         "upcoming-meetings.json",
