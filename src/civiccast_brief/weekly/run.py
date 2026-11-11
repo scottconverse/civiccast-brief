@@ -32,6 +32,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.review.store import ReviewStore
+from civiccast_brief.script.writer import ROUNDUP_ID
 from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
@@ -159,7 +161,22 @@ def _script(steps: Steps, settings: Settings, folder: Path) -> tuple[Path, Path]
     return final, final.with_suffix(".json")
 
 
+def _on_desk(settings: Settings, folder: Path, kind: str) -> bool:
+    """True when the desk already has this item: a run that stopped after staging it and
+    before saving its progress. Staging it again would fail with "already exists"."""
+    if not Path(settings.db).is_file():
+        return False
+    recap = json.loads((folder / "recap.json").read_text(encoding="utf-8"))
+    meeting_id = str(recap.get("video_id", ROUNDUP_ID))
+    if meeting_id == ROUNDUP_ID:
+        meeting_id = f"roundup {recap.get('meeting_date', '')}"
+    with ReviewStore(settings.db) as store:
+        return any(i.kind == kind and i.meeting_id == meeting_id for i in store.list_items())
+
+
 def _stage_episode(steps: Steps, settings: Settings, folder: Path, script_json: Path) -> None:
+    if _on_desk(settings, folder, "episode"):
+        return
     _call(
         steps.episode,
         [
@@ -186,6 +203,8 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
     documents = folder / DOCUMENTS_NAME
     docs = ["--documents", str(documents)] if documents.is_file() else []
     article = out.with_suffix(".json")
+    if article.exists() and _on_desk(settings, folder, "article"):
+        return str(article)
     article.unlink(missing_ok=True)
     steps.article(["write", "--recap", recap, "--out", str(out), *city, *docs])
     if not article.exists():

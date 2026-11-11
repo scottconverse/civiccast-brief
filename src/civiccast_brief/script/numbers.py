@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 
 UNIT_WORDS = {
     "zero": 0,
@@ -105,7 +106,11 @@ NUMBER_WORDS = frozenset(
 )
 _ONE_NOT_NUMBER_BEFORE = frozenset({"no", "some", "any", "every", "each"})
 _ONE_NOT_NUMBER_AFTER = frozenset(
-    {"of", "another", "more", "thing", "things", "day", "way", "side", "sides", "by", "at", "after"}
+    {
+        *("of", "another", "more", "thing", "things", "day", "way", "side", "sides", "by", "at"),
+        "after",
+        "speaker",  # the script prompt says "one speaker" for "a speaker"
+    }
 )
 # A word between two numbers that joins them, and the text it becomes.
 _CONNECTORS = {"dash": "-", "to": "-", "point": "."}
@@ -169,6 +174,7 @@ def _read_chunk(tokens: list[_Token], text: str, start: int, ordinal_ok: bool) -
     multiplied = False
     ordinal = False
     last: str | None = None
+    scale = 0  # the size of the last "hundred", "thousand" or "million" read
     index = start
     while index < len(tokens):
         token = tokens[index]
@@ -196,6 +202,7 @@ def _read_chunk(tokens: list[_Token], text: str, start: int, ordinal_ok: bool) -
             current *= 100
             multiplied = True
             last = "hundred"
+            scale = 100
         elif word in MULTIPLIER_WORDS:
             if last is None or last == "mult":
                 break
@@ -203,7 +210,13 @@ def _read_chunk(tokens: list[_Token], text: str, start: int, ordinal_ok: bool) -
             current = 0
             multiplied = True
             last = "mult"
-        elif word == "and" and last in ("hundred", "mult") and _next_is_number(tokens, text, index):
+            scale = MULTIPLIER_WORDS[word]
+        elif (
+            word == "and"
+            and last in ("hundred", "mult")
+            and _next_is_number(tokens, text, index)
+            and not _new_amount_after(tokens, text, index, scale)
+        ):
             index += 1
             continue
         elif word in ORDINAL_UNIT_WORDS:
@@ -244,6 +257,23 @@ def _next_is_number(tokens: list[_Token], text: str, index: int) -> bool:
     if nxt.is_digits or not _SPACE_RE.fullmatch(_gap(text, tokens[index], nxt)):
         return False
     return nxt.lower in UNIT_WORDS or nxt.lower in TENS_WORDS
+
+
+def _new_amount_after(tokens: list[_Token], text: str, index: int, scale: int) -> bool:
+    """True when the words after "and" make a second amount of the same size or bigger:
+    "thirty million and fifty million" is two amounts, "one hundred and five" is one."""
+    j = index + 1
+    while j < len(tokens) and not tokens[j].is_digits:
+        if j > index + 1 and not _NUMERIC_GAP_RE.fullmatch(_gap(text, tokens[j - 1], tokens[j])):
+            return False
+        word = tokens[j].lower
+        size = 100 if word == "hundred" else MULTIPLIER_WORDS.get(word, 0)
+        if size >= scale > 0:
+            return True
+        if word not in UNIT_WORDS and word not in TENS_WORDS and not size:
+            return False
+        j += 1
+    return False
 
 
 def _number_at(tokens: list[_Token], text: str, index: int) -> tuple[str, int] | None:
@@ -360,4 +390,14 @@ def number_atoms(text: str) -> frozenset[str]:
     Commas inside numbers are dropped, so "$200,000" gives {"200000"}.
     """
     converted = _THOUSANDS_COMMA_RE.sub("", spoken_to_digits(text))
+    converted = _SCALED_RE.sub(_scaled, converted)
     return frozenset(_DIGITS_RE.findall(converted))
+
+
+# "$6 million" is the same amount as "six million", which reads as 6000000.
+_SCALED_RE = re.compile(r"(\d+(?:\.\d+)?)\s+(thousand|million|billion)\b", re.IGNORECASE)
+
+
+def _scaled(match: re.Match[str]) -> str:
+    value = Decimal(match.group(1)) * MULTIPLIER_WORDS[match.group(2).lower()]
+    return str(value.normalize()) if value != value.to_integral() else str(int(value))

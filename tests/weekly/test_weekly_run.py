@@ -399,3 +399,87 @@ def test_a_documents_fetch_that_breaks_is_reported_and_the_meeting_still_runs(tm
     )
     assert ("meeting", "run") in fake.names()
     assert calls == [1]
+
+
+STORY = {
+    "headline": "h",
+    "dek": "",
+    "sections": [{"heading": None, "paragraphs": [{"text": "p", "cites": []}]}],
+    "votes": [],
+    "quotes": [],
+    "topics": [],
+}
+
+
+class DeskFake(Fake):
+    """Stages on a real desk, the way the real episode and article stages do: a second
+    stage of the same item fails with "already exists"."""
+
+    def __init__(self, db, crash_on=None):
+        super().__init__()
+        self.db, self.crash_on = db, crash_on
+
+    def _stage(self, kind, argv):
+        from civiccast_brief.review import desk
+        from civiccast_brief.review.store import ReviewError
+
+        if kind == self.crash_on:
+            raise RuntimeError("the run stopped here")
+        name = "--meeting" if kind == "episode" else "--recap"
+        folder = Path(_opt(argv, name))
+        folder = folder if folder.is_dir() else folder.parent
+        recap = json.loads((folder / "recap.json").read_text(encoding="utf-8"))
+        try:
+            desk.stage_item(
+                self.db, None, kind=kind, meeting_id=recap["video_id"], title="t",
+                meeting_date="2026-11-03", body=COUNCIL, checks_passed=True,
+                article=STORY if kind == "article" else None,
+            )  # fmt: skip
+        except ReviewError:
+            return 1
+        return 0
+
+    def episode(self, argv):
+        if argv[0] == "stage":
+            self.calls.append(("episode", list(argv)))
+            return self._stage("episode", argv)
+        return super().episode(argv)
+
+    def article(self, argv):
+        if argv[0] == "stage":
+            self.calls.append(("article", list(argv)))
+            return self._stage("article", argv)
+        return super().article(argv)
+
+
+def test_a_run_that_stopped_after_staging_resumes_without_staging_again(tmp_path):
+    settings = _settings(tmp_path)
+    crashed = DeskFake(settings.db, crash_on="article")
+    try:
+        run_week(settings, [COUNCIL_MEETING], LAST, crashed.steps())
+    except RuntimeError:
+        pass  # the run stopped after the episode went on the desk, before progress was saved
+
+    rerun = DeskFake(settings.db)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
+
+    assert report.failed == 0, report.lines
+    assert "2026-11-03 City Council Regular Session: done" in report.lines
+    assert ("episode", "stage") not in rerun.names()  # the episode on the desk is kept
+    assert ("article", "stage") in rerun.names()
+
+
+def test_a_story_already_on_the_desk_is_not_written_again(tmp_path):
+    settings = _settings(tmp_path)
+    first = DeskFake(settings.db)
+    run_week(settings, [COUNCIL_MEETING], LAST, first.steps())
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    for entry in state["meetings"].values():  # as if the run stopped before saving
+        entry.update(status="", done=["recap", "script"])
+    (settings.work / STATE_NAME).write_text(json.dumps(state), encoding="utf-8")
+
+    rerun = DeskFake(settings.db)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
+
+    assert report.failed == 0, report.lines
+    assert rerun.names() == []
