@@ -54,10 +54,13 @@ def _find(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
             print("not written: give --out FOLDER to write the city folder")
         return 0 if found.candidates else 1
     try:
-        built = build_city(args.out, found)
+        built = build_city(args.out, found, fetcher=fetcher, open_in_browser=browser.open_page)
     except (OSError, SourceError) as exc:
         print(f"city find: not written: {exc}", file=sys.stderr)
         return 1
+    finally:
+        # A members page that opens only in a browser opens Chrome; it closes here.
+        browser.close_shared()
     for line in built.lines:
         print(line)
     for line in built.to_fill:

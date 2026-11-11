@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from civiccast_brief.citybuild import cli
+from civiccast_brief.citybuild import cli, members
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.review.web import make_desk_app
 from civiccast_brief.sources import add_source, load_sources, make_source
@@ -44,7 +44,8 @@ def test_also_lines_need_a_bar():
         cli.parse_also(["Board https://x.test/"])
 
 
-def test_find_prints_and_writes_only_with_out(web, tmp_path, capsys):
+def test_find_prints_and_writes_only_with_out(web, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(members, "PAUSE_S", 0)
     longmont(web)
     assert cli._find(find_args(), web.fetcher()) == 0
     out = capsys.readouterr().out
@@ -57,7 +58,8 @@ def test_find_prints_and_writes_only_with_out(web, tmp_path, capsys):
     assert cli._find(find_args(out=folder, also=also), web.fetcher()) == 0
     out = capsys.readouterr().out
     assert f"wrote {folder / 'city.json'}" in out
-    assert "to fill in: city.json contact_email" in out
+    assert "to fill in: roster.json members: the City Council members (no page on" in out
+    assert "contact_email" not in out  # the podcast address is the publisher's
     assert [s.kind for s in load_sources(folder)] == ["primegov", "youtube", "webpage"]
 
 
@@ -117,7 +119,8 @@ def desk(web, tmp_path):
         yield TestClient(app, base_url="http://127.0.0.1"), city
 
 
-def test_the_find_screen_searches_then_adds_only_the_checked_sources(web, desk):
+def test_the_find_screen_searches_then_adds_only_the_checked_sources(web, desk, monkeypatch):
+    monkeypatch.setattr(members, "PAUSE_S", 0)
     client, city = desk
     longmont(web)
     t = client.app.state.desk.token
@@ -155,7 +158,7 @@ def test_the_find_screen_searches_then_adds_only_the_checked_sources(web, desk):
     assert "Added 2 sources: PrimeGov portal (" in saved.text
     assert "Google Drive folder (1 body)" in saved.text
     assert "Kept city.json (already there)." in saved.text
-    assert "Wrote roster.json." in saved.text
+    assert "Wrote roster.json with no members." in saved.text
     assert "Still to fill in: roster.json members" in saved.text
     assert "saved the search to" not in saved.text  # the notice names files, not paths
     assert "added https://longmont.primegov.com" not in saved.text
