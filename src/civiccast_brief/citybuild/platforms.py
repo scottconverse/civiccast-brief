@@ -260,10 +260,33 @@ def archive_center(host: str, text: str) -> list[Doc]:
     return found
 
 
+#: An Archive Center list with no "Agendas" or "Minutes" in its name is a body's only when its name
+#: names a body ("Local Liquor Licensing Authority") and not some other kind of document.
+_BODY_WORD: Final = re.compile(
+    r"\b(?:board|commission|committee|subcommittee|council|authority|trustees|task ?force|"
+    r"working group|district)\b",
+    re.IGNORECASE,
+)
+_NOT_MEETINGS: Final = re.compile(
+    r"\b(?:notices?|reports?|budgets?|ordinances?|financials?|newsletters?|messages?|profile|"
+    r"applications?|articles?)\b",
+    re.IGNORECASE,
+)
+
+
 def archive_center_bodies(text: str) -> list[str]:
+    """The bodies with an agenda list, or with an unnamed list whose name is a body's.
+
+    Erie's "Mayor's Message" and Lyons's "Board of Trustees Public Hearing Notices" are lists of
+    other documents, not of meetings, and are left out.
+    """
     names = []
     for _module, label, _options in _MODULE.findall(text):
         body, what = _module_body(label)
-        if what in ("agenda", "") and body:
+        if not body:
+            continue
+        if what == "agenda" or (
+            what == "" and _BODY_WORD.search(body) and not _NOT_MEETINGS.search(body)
+        ):
             names.append(body)
     return list(dict.fromkeys(names))

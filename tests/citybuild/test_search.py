@@ -292,3 +292,29 @@ def test_a_portal_whose_body_list_does_not_answer_is_named(web):
     ((platform, note),) = [(u.platform, u.note) for u in found.unread]
     assert platform == "CivicClerk"
     assert note.startswith("its body list did not answer: ")
+
+
+def test_archive_lists_of_other_documents_are_not_taken_for_bodies(web):
+    # The Archive Center markup as Lafayette, Erie and Lyons serve it, one list per module.
+    def module(number: int, label: str, item: str) -> str:
+        return (
+            f'<label for="amidDDN{number}">{label}</label><br>'
+            f'<select id="amidDDN{number}"><option value="1_1_0_{number}00">{item} </option></select>'
+        )
+
+    web.add(
+        "https://www.town.test/Archive.aspx",
+        "<html>"
+        + module(1, "Mayor's Message:", "November 1, 2026")
+        + module(2, "Board of Trustees Public Hearing Notices:", "November 10, 2026")
+        + module(3, "Local Liquor Licensing Authority:", "November 3, 2026 Agenda Packet")
+        + module(4, "Town Council Agendas:", "November 4, 2026")
+        + module(5, "Town Council Minutes:", "October 21, 2026")
+        + "</html>",
+    )
+    web.add("https://www.town.test/", '<html><a href="/Archive.aspx">Archive Center</a></html>')
+    found = search_city(
+        "Town", "CO", website="https://www.town.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    (site,) = found.candidates
+    assert site.source.bodies == ("Local Liquor Licensing Authority", "Town Council")
