@@ -151,3 +151,16 @@ def test_command_line_reports_bad_input(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "url must be an https://" in result.stderr + result.stdout
+
+
+def test_an_unknown_address_on_the_home_site_says_not_found_and_lists_the_cities(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "home"
+    build_home(_cities(tmp_path, [LONGMONT]), out, BASE)
+    html = (out / "404.html").read_text(encoding="utf-8")
+    assert "<title>Page not found | CivicCast Brief</title>" in html
+    assert '<h1 id="hero-title">Page not found</h1>' in html
+    assert '<meta name="robots" content="noindex">' in html
+    assert '<a href="https://longmont.civiccastbrief.org/">Longmont</a>' in html
+    assert "noindex" not in (out / "index.html").read_text(encoding="utf-8")

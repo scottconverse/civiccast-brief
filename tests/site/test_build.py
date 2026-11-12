@@ -31,6 +31,7 @@ def test_build_writes_every_expected_file(built: tuple[Path, object]) -> None:
         "podcast/index.html",
         "how-this-is-made/index.html",
         "about/index.html",
+        "404.html",
         "search-index.json",
         "feed.xml",
         "sitemap.xml",
@@ -127,3 +128,16 @@ def test_command_line_reports_bad_input_and_exits_nonzero(tmp_path: Path) -> Non
 def test_command_line_needs_a_subcommand() -> None:
     result = _run_cli()
     assert result.returncode != 0
+
+
+def test_an_unknown_address_gets_a_not_found_page_kept_out_of_search(
+    built: tuple[Path, object],
+) -> None:
+    """Cloudflare Pages serves 404.html, with a 404, for an address with no page. Without the
+    file it served the front page with a 200 (seen live at /corrections/, 2026-11-11)."""
+    out, _ = built
+    html = (out / "404.html").read_text(encoding="utf-8")
+    assert '<h1 id="notfound-title">Page not found</h1>' in html
+    assert '<meta name="robots" content="noindex">' in html
+    assert "404.html" not in (out / "sitemap.xml").read_text(encoding="utf-8")
+    assert "noindex" not in (out / "index.html").read_text(encoding="utf-8")
