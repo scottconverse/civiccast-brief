@@ -11,23 +11,23 @@ The list is fixed at 22 items. An item is done only when it is shown, not claime
 | 2 | One full live weekly run with documents, stories and auto-publish (old item 9) | open | |
 | 3 | The weekly run on a schedule | open | |
 | 4 | Newsletter replies do not bounce | open (rule set) | Routing rule cc2010b5992944efba28e04496c2e00d: brief@civiccastbrief.org forwards to Scott's Gmail, 2026-11-11. Not yet shown with a test message |
-| 5 | Walk the live site at desktop and phone widths; missing pages show "not found" (old item 18) | open | |
+| 5 | Walk the live site at desktop and phone widths; missing pages show "not found" (old item 18) | open (partly) | #34 (86e9500) and #35 (3d3be9f), deployed 2026-11-11. Live curl: longmont.civiccastbrief.org and civiccastbrief.org `/corrections/` and an unknown page answer 404 "Page not found"; `/` answers 200. Still showing: the live roundup headline lists every date in full, because it is stored in the approved episode (#35 fixes new episodes only) |
 | 6 | Name more speakers (old item 7) | open | |
 | 7 | Bugs: redraft keeps old audio; name check flags capitalised words; YouTube publish dates | open | |
-| 8 | Captions for the Sustainability Board, Oct 21 (old item 1) | open | |
-| 9 | Say why each unaligned item did not align (old item 2) | open | |
-| 10 | Rosters for boards and schools; check Boulder after the election; check Superior's 5 | open | |
+| 8 | Captions for the Sustainability Board, Oct 21 (old item 1) | done | #41 (5167fa3): "Oct. 21, 2026" titles are found and dated. Live 2026-11-11: the Oct 20–22 find lists nYT8LOdpskY as the Sustainability Advisory Board (not on the old code); the meeting run on it: rc 0, 2,126 caption lines, 22 of 35 claims kept |
+| 9 | Say why each unaligned item did not align (old item 2) | done | All 98 unplaced items of the live-m1i run checked in their transcripts, each with a reason (scratch item9/ITEM9-REPORT.md). The 9 announced-but-missed items: 8 now placed by #42 (e8a9ce9), 91 items placed by spoken transitions instead of 81; the one left (Water Board roll call, cue split across two caption lines) is named in the report |
+| 10 | Rosters for boards and schools; check Boulder after the election; check Superior's 5 | open (partly) | #39 (03f3dc8): `city rosters` reads PrimeGov member lists and school board pages; live 2026-11-11, Longmont 21 of 28 boards written (7 have no public list), Boards of Education 7 members each. Not yet: other towns' boards, Boulder after the election, Superior's 5 |
 | 11 | Hold, kill, redraft and auto-publish walked in the live desk (old item 11) | open | |
 | 12 | Walk the Add-source screen (old item 12) | open | |
 | 13 | A board story written live with DeepSeek (old item 10) | open | |
-| 14 | Bugs: Remove notice shows an id; Chrome window pops up during reads; help text says longmont.civiccast.org | open | |
+| 14 | Bugs: Remove notice shows an id; Chrome window pops up during reads; help text says longmont.civiccast.org | done | #37 (d753ce1): the notice names the address and bodies; help text and urls.py say longmont.civiccastbrief.org; Chrome minimizes right after it opens. Tests fail on the old code. Live: Louisville Planning Commission listed 20 documents and one downloaded with the window minimized |
 | 15 | Check each town's capture platform (all default to YouTube) | open | |
 | 16 | YouTube key limited to this app; GPU box (old item 26) | open | |
 | 17 | Apple Podcasts and Spotify submission | open | |
 | 18 | Brevo account and a live sign-up end to end | open | |
 | 19 | Runs on other machines: installer (old item 27) | open | |
 | 20 | Someone else sets up a city (old item 28) | open | |
-| 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | open | |
+| 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | done | #40 (6e4e702). Live 2026-11-11: the transcript panel read 1,144 lines of unNcPhKJ45o with yt-dlp made to fail; BVSD's channel tabs listed 60 videos; the player status said upcoming for y-xlQWT-Y6E and finished for sxB7gqQltMg with no yt-dlp call |
 | 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | done | Rows 13, 15, 16, 17 below set to live from the 2026-11-11 curl checks |
 
 # Goal: finish CivicCast Brief, 28 items A to F (set by Scott, 2026-11-09)
