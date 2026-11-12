@@ -43,6 +43,24 @@ _POST_JS: Final = """async ([url, data, headers]) => {
 }"""
 
 
+#: A line of YouTube's transcript panel: the 2026 markup, then the older one.
+_PANEL_LINE: Final = "transcript-segment-view-model, ytd-transcript-segment-renderer"
+_PANEL_JS: Final = """() => {
+  const rows = [];
+  for (const el of document.querySelectorAll('transcript-segment-view-model')) {
+    const stamp = el.querySelector('[aria-hidden="true"]'), text = el.querySelector('[role="text"]');
+    if (stamp && text) rows.push([stamp.innerText.trim(), text.innerText]);
+  }
+  for (const el of document.querySelectorAll('ytd-transcript-segment-renderer')) {
+    const stamp = el.querySelector('.segment-timestamp'), text = el.querySelector('.segment-text');
+    if (stamp && text) rows.push([stamp.innerText.trim(), text.innerText]);
+  }
+  const player = window.ytInitialPlayerResponse;
+  const length = player && player.videoDetails ? Number(player.videoDetails.lengthSeconds) : null;
+  return {rows, length: length || null};
+}"""
+
+
 class Browser(Protocol):
     """What a reader asks of the browser. Tests give a fake one."""
 
@@ -203,6 +221,34 @@ class Chrome:
         return Page(
             url=page.url, status=200, content=text.encode("utf-8"), content_type="text/html"
         )
+
+    def transcript_panel(self, url: str) -> dict[str, Any]:
+        """Open a YouTube watch page, press "Show transcript" and return the panel's lines."""
+        from playwright.sync_api import Error
+
+        page = self._open()
+        self._wait_turn()
+        try:
+            page.goto(url, wait_until="load")
+            expand = page.locator("#description-inline-expander #expand:visible").first
+            try:
+                expand.wait_for(state="visible", timeout=15_000)
+                expand.click()
+            except Error:
+                pass  # a short description has no "more" to press; the button may still be there
+            # The page holds a second, hidden copy of the button; the visible one is pressed.
+            button = page.locator(
+                "ytd-video-description-transcript-section-renderer button:visible"
+            )
+            try:
+                button.first.wait_for(state="visible", timeout=15_000)
+            except Error as exc:
+                raise FetchError(f"{url}: the page has no Show transcript button") from exc
+            button.first.click()
+            page.wait_for_selector(_PANEL_LINE, timeout=TIMEOUT_MS)
+            return dict(page.evaluate(_PANEL_JS))
+        except Error as exc:
+            raise FetchError(f"{url}: the transcript panel did not open in Chrome: {exc}") from exc
 
     def close(self) -> None:
         # Closing must not hide the run's own result, so a failure to close is only logged.

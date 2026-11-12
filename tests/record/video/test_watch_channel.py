@@ -68,6 +68,7 @@ from civiccast_brief.record.video.watch import (
 from civiccast_brief.record.video.youtube.classify import MeetingClassifier
 from civiccast_brief.record.video.youtube.ladder import ListingLadder
 from civiccast_brief.record.video.youtube.listing import (
+    SOURCE_CHANNEL_TAB,
     SOURCE_DATA_API,
     SOURCE_RSS,
     SOURCE_YTDLP,
@@ -587,6 +588,7 @@ def test_a_listing_that_finds_nothing_names_every_method_it_tried(
     assert [row["method"] for row in checkpoint["methods_tried"]] == [
         SOURCE_DATA_API,
         SOURCE_RSS,
+        SOURCE_CHANNEL_TAB,
         SOURCE_YTDLP,
     ]
     assert all(row["reason"] for row in checkpoint["methods_tried"])

@@ -2,8 +2,8 @@
 
 The spec gives the order. First the official Data API: its
 ``liveBroadcastContent`` with the video's length. Then yt-dlp's
-``live_status``. A third path, the player endpoint, needs the network and is
-not built here.
+``live_status``. The player status on the watch page is read in
+:mod:`civiccast_brief.record.video.youtube.page`.
 
 ``unknown`` is not a failure. It means "waiting for status metadata (will
 retry)", which is the honest answer when nothing has said anything yet: a

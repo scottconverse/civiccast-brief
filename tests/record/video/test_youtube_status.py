@@ -32,7 +32,7 @@ from civiccast_brief.record.video.youtube.readiness import (
 )
 from civiccast_brief.record.video.youtube.status import (
     API_NOT_CONFIGURED,
-    PLAYER_NOT_BUILT,
+    PLAYER_NOT_CONFIGURED,
     SOURCE_PLAYER,
     STATUS_TIMEOUT_S,
     StatusAsker,
@@ -165,23 +165,23 @@ def test_with_no_api_key_the_ask_says_so_and_yt_dlp_is_the_step_that_decides(
     assert answer.readiness == READINESS_FINISHED
     assert [ask.method for ask in answer.asks] == [SOURCE_DATA_API, SOURCE_PLAYER, SOURCE_YTDLP]
     assert answer.asks[0].reason == API_NOT_CONFIGURED
-    assert answer.asks[1].reason == PLAYER_NOT_BUILT
+    assert answer.asks[1].reason == PLAYER_NOT_CONFIGURED
     assert len(runner.calls) == 1
     assert answer.sentence == (
         "Asked: the official API: no API key was given; "
-        "the player endpoint status: not built here; "
+        "the player endpoint status: no watch page reader was given; "
         "yt-dlp --dump-single-json said finished (yt-dlp says live_status=was_live)."
     )
 
 
-def test_a_step_that_is_not_built_is_named_rather_than_passed_over_in_silence() -> None:
-    # The middle step of the spec is a network call this reader does not make.
-    # Its sentence names it, so the reason never reads as though it had run.
+def test_a_step_with_no_reader_is_named_rather_than_passed_over_in_silence() -> None:
+    # With no watch page reader given, the middle step's sentence names it,
+    # so the reason never reads as though it had run.
     ask = StatusAsker(runner=FakeRunner(), api=None)._ask_player(VIDEO_ID, URL)  # noqa: SLF001
     assert ask.method == SOURCE_PLAYER
     assert ask.readiness == READINESS_UNKNOWN
     assert not ask.answered
-    assert ask.reason == PLAYER_NOT_BUILT
+    assert ask.reason == PLAYER_NOT_CONFIGURED
 
 
 @pytest.mark.parametrize(
@@ -263,7 +263,7 @@ def test_a_status_that_stays_unknown_after_the_whole_order_says_what_it_asked(
     assert answer.sentence.startswith("Asked: ")
     assert answer.sentence.endswith(".")
     assert "the official API: no API key was given" in answer.sentence
-    assert "the player endpoint status: not built here" in answer.sentence
+    assert "the player endpoint status: no watch page reader was given" in answer.sentence
     assert "yt-dlp --dump-single-json: live_status=post_live" in answer.sentence
     # The reason is what a deferred job says, and the queue caps a reason at 300
     # characters (jobs/queue.py MAX_REASON): nothing asked may be cut off.

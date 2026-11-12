@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.meeting import panel
 from civiccast_brief.record import proc
 from civiccast_brief.record.captions.parse import parse_srv3, parse_vtt
 from civiccast_brief.record.capture import command, sidecar
@@ -102,11 +103,14 @@ def capture_captions(
     *,
     python: str | None = None,
     runner: Runner = proc.run,
+    browser: panel.PanelBrowser | None = None,
 ) -> Capture:
     """Fetch the auto-caption track for one YouTube video id into ``work_dir``.
 
     Reuses a caption file already in ``work_dir``, so a second run does not call YouTube again.
     ``python`` names the interpreter that runs yt-dlp; by default it is the private runtime.
+    When yt-dlp gets no captions, the watch page's "Show transcript" panel is read in Chrome
+    (spec 8.4.2); ``browser`` stands in for Chrome in tests.
     """
     if not video_id.replace("-", "").replace("_", "").isalnum():
         raise CaptureError(f"not a YouTube video id: {video_id!r}")
@@ -115,53 +119,78 @@ def capture_captions(
     work_dir = Path(work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    caption = _caption_file(work_dir, video_id)
+    caption = _caption_file(work_dir, video_id) or _panel_kept(work_dir, video_id)
     reused = caption is not None
     if caption is None:
-        tool = ytdlp(python)
-        argv = command.capture_argv(
-            interpreter=tool.python,
-            work_dir=work_dir,
-            archive=work_dir / "download-archive.txt",
-            url=command.WATCH_URL.format(platform_video_id=video_id),
-            js_runtime=tool.js_runtime,
-        )
-        result = _run(runner, argv, video_id)
-        info_file = work_dir / f"{video_id}.info.json"
-        if (
-            result.ok
-            and info_file.exists()
-            and sidecar.has_uploaded_track(json.loads(info_file.read_text(encoding="utf-8")))
-        ):
-            # Spec 8.3's second request: the town uploaded its own captions.
-            result = _run(runner, command.uploaded_argv(argv), video_id)
-        if not result.ok:
-            detail = {
-                "returncode": result.returncode,
-                "stderr_tail": result.last_stderr_line(),
-                "bot_check": command.bot_check_marker(result.stderr),
-            }
-            raise CaptureError(f"caption fetch failed for {video_id}: yt-dlp failed {detail}")
-        caption = _caption_file(work_dir, video_id)
-        if caption is None:
-            raise CaptureError(
-                f"caption fetch failed for {video_id}: yt-dlp finished but wrote no caption file "
-                "(no English captions?)"
-            )
+        try:
+            caption = _ytdlp_captions(video_id, work_dir, python, runner)
+        except CaptureError as exc:
+            try:
+                caption = panel.read_panel(video_id, work_dir, browser)
+            except panel.PanelError as panel_exc:
+                raise CaptureError(f"{exc}; then the Show transcript panel: {panel_exc}") from exc
 
-    parser = parse_srv3 if caption.suffix == ".srv3" else parse_vtt
-    segments = parser(caption.read_bytes())
+    if caption.name.endswith(panel.SUFFIX):
+        segments = panel.load(caption)
+    else:
+        parser = parse_srv3 if caption.suffix == ".srv3" else parse_vtt
+        segments = [
+            {"start_ms": s.start_ms, "end_ms": s.end_ms, "text": s.text}
+            for s in parser(caption.read_bytes())
+        ]
     return Capture(
         video_id=video_id,
         caption_file=caption,
         caption_reused=reused,
         info=_info(work_dir, video_id),
-        segments=[{"start_ms": s.start_ms, "end_ms": s.end_ms, "text": s.text} for s in segments],
+        segments=segments,
     )
 
 
+def _panel_kept(work: Path, video_id: str) -> Path | None:
+    path = panel.panel_file(work, video_id)
+    return path if path.exists() else None
+
+
+def _ytdlp_captions(video_id: str, work_dir: Path, python: str | None, runner: Runner) -> Path:
+    """yt-dlp's caption file for the video, or :class:`CaptureError` with its reason."""
+    tool = ytdlp(python)
+    argv = command.capture_argv(
+        interpreter=tool.python,
+        work_dir=work_dir,
+        archive=work_dir / "download-archive.txt",
+        url=command.WATCH_URL.format(platform_video_id=video_id),
+        js_runtime=tool.js_runtime,
+    )
+    result = _run(runner, argv, video_id)
+    info_file = work_dir / f"{video_id}.info.json"
+    if (
+        result.ok
+        and info_file.exists()
+        and sidecar.has_uploaded_track(json.loads(info_file.read_text(encoding="utf-8")))
+    ):
+        # Spec 8.3's second request: the town uploaded its own captions.
+        result = _run(runner, command.uploaded_argv(argv), video_id)
+    if not result.ok:
+        detail = {
+            "returncode": result.returncode,
+            "stderr_tail": result.last_stderr_line(),
+            "bot_check": command.bot_check_marker(result.stderr),
+        }
+        raise CaptureError(f"caption fetch failed for {video_id}: yt-dlp failed {detail}")
+    caption = _caption_file(work_dir, video_id)
+    if caption is None:
+        raise CaptureError(
+            f"caption fetch failed for {video_id}: yt-dlp finished but wrote no caption file "
+            "(no English captions?)"
+        )
+    return caption
+
+
 def caption_origin(work_dir: Path, video_id: str) -> dict[str, Any]:
-    """Whether YouTube's own track or its automatic captions were used, from yt-dlp's info file."""
+    """Whether YouTube's own track, its automatic captions or the transcript panel was used."""
+    if _caption_file(work_dir, video_id) is None and _panel_kept(work_dir, video_id):
+        return {"kind": "youtube_transcript_panel"}
     info_file = work_dir / f"{video_id}.info.json"
     if not info_file.exists():
         return {"kind": "unknown", "reason": "no info file"}
