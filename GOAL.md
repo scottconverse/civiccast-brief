@@ -1,3 +1,35 @@
+# Goal: the 22-item finish list (set by Scott, 2026-11-11)
+
+Scott: "Then do everyone of the items on the list. ... Make this your goal."
+Scott chose option 1 for newsletter replies (forward brief@ to his Gmail).
+This OKs the scope calls the list named: new weekly readers (item 1), a weekly schedule (item 3) and naming more speakers (item 6).
+The list is fixed at 22 items. An item is done only when it is shown, not claimed. FAILED, BLOCKED or SKIPPED never count as done.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | Weekly run reads Laserfiche, CivicPlus, CivicClerk, eScribe, web pages and Google Drive, not only PrimeGov, YouTube and Granicus | open | |
+| 2 | One full live weekly run with documents, stories and auto-publish (old item 9) | open | |
+| 3 | The weekly run on a schedule | open | |
+| 4 | Newsletter replies do not bounce | open (rule set) | Routing rule cc2010b5992944efba28e04496c2e00d: brief@civiccastbrief.org forwards to Scott's Gmail, 2026-11-11. Not yet shown with a test message |
+| 5 | Walk the live site at desktop and phone widths; missing pages show "not found" (old item 18) | open | |
+| 6 | Name more speakers (old item 7) | open | |
+| 7 | Bugs: redraft keeps old audio; name check flags capitalised words; YouTube publish dates | open | |
+| 8 | Captions for the Sustainability Board, Oct 21 (old item 1) | open | |
+| 9 | Say why each unaligned item did not align (old item 2) | open | |
+| 10 | Rosters for boards and schools; check Boulder after the election; check Superior's 5 | open | |
+| 11 | Hold, kill, redraft and auto-publish walked in the live desk (old item 11) | open | |
+| 12 | Walk the Add-source screen (old item 12) | open | |
+| 13 | A board story written live with DeepSeek (old item 10) | open | |
+| 14 | Bugs: Remove notice shows an id; Chrome window pops up during reads; help text says longmont.civiccast.org | open | |
+| 15 | Check each town's capture platform (all default to YouTube) | open | |
+| 16 | YouTube key limited to this app; GPU box (old item 26) | open | |
+| 17 | Apple Podcasts and Spotify submission | open | |
+| 18 | Brevo account and a live sign-up end to end | open | |
+| 19 | Runs on other machines: installer (old item 27) | open | |
+| 20 | Someone else sets up a city (old item 28) | open | |
+| 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | open | |
+| 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | open | |
+
 # Goal: finish CivicCast Brief, 28 items A to F (set by Scott, 2026-11-09)
 
 Scott: "merge PR #30 and do the P&Z rule first. Then implement ALL 28 items, phased by letter (A through F). ... Make this your goal."
