@@ -84,6 +84,23 @@ def test_channel_videos_must_be_meetings_in_the_window():
     assert found[1].reason.startswith("the title names no body this source covers")
 
 
+def test_a_channel_video_is_on_the_day_its_title_names_not_the_day_it_went_up():
+    """Lafayette's 2 November 2026 workshop went up at 05:56 UTC on 3 November; Boulder's
+    13 October zoning board video went up on 3 November."""
+    videos = [
+        NS(video_id="DDDDDDDDDDD", title="City Council Workshop - November 2, 2026", published="2026-11-03T05:56:35Z"),
+        NS(video_id="EEEEEEEEEEE", title="10-13-26 City Council Meeting", published="2026-11-03T19:59:30Z"),
+        NS(video_id="FFFFFFFFFFF", title="City Council Regular Session", published="2026-11-04T02:10:00Z"),
+    ]  # fmt: skip
+    found, _ = find_meetings([CHANNEL], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    days = {m.video: m.day for m in found}
+    assert days["DDDDDDDDDDD"] == date(2026, 11, 2)
+    # Posted inside the days, of a meeting before them: listed, on its own day.
+    assert days["EEEEEEEEEEE"] == date(2026, 10, 13)
+    # No day in the title: the day it went up.
+    assert days["FFFFFFFFFFF"] == date(2026, 11, 4)
+
+
 def test_the_same_video_from_portal_and_channel_is_one_meeting_with_the_agenda():
     agenda = Agenda("https://longmont.primegov.com/agenda/1", ("1. Call to order",))
     council = _meeting(
