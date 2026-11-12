@@ -335,7 +335,7 @@ def test_a_video_whose_status_stays_unknown_defers_and_says_what_it_asked(
     reason = str(caught.value)
     assert reason.startswith("waiting for status metadata (will retry). Asked:")
     assert "the official API: no API key was given" in reason
-    assert "the player endpoint status: not built here" in reason
+    assert "the player endpoint status: no watch page reader was given" in reason
     assert "yt-dlp --dump-single-json: live_status=post_live" in reason
     assert reason.endswith(".")
     assert len(reason) < 300, "the reason is not truncated, so nothing asked is lost"

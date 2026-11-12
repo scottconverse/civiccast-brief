@@ -320,20 +320,21 @@ def classifier_for(source: Source) -> tuple[MeetingClassifier, str | None]:
 def service_ladder(
     *, client: Any = None, interpreter: str | None = None, ytdlp: Any = None
 ) -> ListingLadder:
-    """The ladder a real service watches with: the feed, then yt-dlp.
+    """The ladder a real service watches with: the feed, the channel tabs, then yt-dlp.
 
     The official API of spec 8.1 step 1 is not wired here and the ladder says
     why: it needs an API key, and no setting holds one yet, so the step reports
     "the official API is not configured: no API key was given" and the ladder
-    moves on. The channel tab HTML of step 3 is a later unit's step
-    (``TODO(unit D)`` in the ladder). Both missing steps are named in the
-    checkpoint's ``methods_tried`` rather than passed over in silence.
+    moves on. That step is named in the checkpoint's ``methods_tried`` rather
+    than passed over in silence.
     """
     from .youtube.rss import RssLister
+    from .youtube.tab import ChannelTabLister
     from .youtube.ytdlp import YtdlpFlatLister
 
     return ListingLadder(
         rss=None if client is None else RssLister(client),
+        channel_tab=None if client is None else ChannelTabLister(client),
         ytdlp=ytdlp if ytdlp is not None else YtdlpFlatLister(interpreter=interpreter),
     )
 

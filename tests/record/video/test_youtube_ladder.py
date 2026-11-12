@@ -1,26 +1,23 @@
-"""The listing ladder: official API, then the public feed, then yt-dlp (spec 8.1).
+"""The listing ladder: official API, the public feed, the channel tabs, then yt-dlp (spec 8.1).
 
 Each step is a method of its own and answers with the same dataclass. The
 ladder records which method produced the list, so the interface can say how
 the channel was read (spec 8.1). A day with nothing from any method is a
 failure that carries every method's reason, never a quiet zero.
 
-Step 3, the channel tab HTML, is not part of this unit. The test below
-checks that it is a TODO and not a stub that pretends to read a page.
+Step 3, the channel tab HTML, sits between the feed and yt-dlp.
 """
 
 from __future__ import annotations
 
-import inspect
-
 import pytest
-from civiccast_brief.record.video.youtube import ladder as ladder_module
 from civiccast_brief.record.video.youtube.ladder import (
     YOUTUBE_CHANNEL_URL,
     LadderResult,
     ListingLadder,
 )
 from civiccast_brief.record.video.youtube.listing import (
+    SOURCE_CHANNEL_TAB,
     SOURCE_DATA_API,
     SOURCE_LABELS,
     SOURCE_RSS,
@@ -92,7 +89,7 @@ def test_the_interface_says_which_method_read_the_channel() -> None:
     """Spec 8.1: show it to the user, in these two words."""
     assert source_label(SOURCE_DATA_API) == "Read YouTube with the official API"
     assert source_label(SOURCE_RSS) == "Read the public feed instead"
-    assert set(SOURCE_LABELS) == {SOURCE_DATA_API, SOURCE_RSS, SOURCE_YTDLP}
+    assert set(SOURCE_LABELS) == {SOURCE_DATA_API, SOURCE_RSS, SOURCE_CHANNEL_TAB, SOURCE_YTDLP}
 
     api = FakeMethod(error=QuotaBlocked("the day's quota is used up"))
     feed = FakeMethod([a_video("rss00000001", SOURCE_RSS)])
@@ -129,9 +126,11 @@ def test_ytdlp_is_reached_when_both_public_readers_fail() -> None:
     assert [attempt.method for attempt in result.attempts] == [
         SOURCE_DATA_API,
         SOURCE_RSS,
+        SOURCE_CHANNEL_TAB,
         SOURCE_YTDLP,
     ]
-    assert [attempt.ok for attempt in result.attempts] == [False, False, True]
+    assert [attempt.ok for attempt in result.attempts] == [False, False, False, True]
+    assert result.attempts[2].reason == "the tab reader is not configured"
     assert result.attempts[1].reason == "the feed listed 0 videos"
 
 
@@ -151,6 +150,7 @@ def test_zero_from_every_method_is_a_failure_with_every_reason() -> None:
     assert [attempt.method for attempt in caught.value.attempts] == [
         SOURCE_DATA_API,
         SOURCE_RSS,
+        SOURCE_CHANNEL_TAB,
         SOURCE_YTDLP,
     ]
     assert isinstance(caught.value, VideoError)
@@ -225,7 +225,7 @@ def test_a_step_that_is_not_configured_records_that_reason() -> None:
         ListingLadder().list_videos(channel_id=CITY_CHANNEL_ID)
 
     message = str(caught.value)
-    assert message.count("not configured") == 3, "every step says why it did not run"
+    assert message.count("not configured") == 4, "every step says why it did not run"
 
 
 def test_each_step_is_handed_the_channel_it_was_given() -> None:
@@ -257,14 +257,29 @@ def test_a_channel_url_is_used_when_one_is_given() -> None:
     assert YOUTUBE_CHANNEL_URL == "https://www.youtube.com/channel/{channel_id}"
 
 
-def test_the_channel_tab_html_step_is_a_todo_and_not_a_stub() -> None:
-    """Spec 8.1 step 3 belongs to another unit. Nothing here pretends."""
-    source = inspect.getsource(ladder_module)
+def test_the_channel_tabs_answer_when_the_feed_fails_and_before_ytdlp() -> None:
+    """Spec 8.1 step 3: the channel's own pages, read with the channel id."""
+    feed = FakeMethod(error=VideoError("the YouTube feed answered HTTP 404"))
+    tabs = FakeMethod([a_video("tab00000001", SOURCE_CHANNEL_TAB)])
+    flat = FakeMethod([a_video("yt000000001", SOURCE_YTDLP)])
 
-    assert "TODO" in source
-    assert "8.1 step 3" in source
-    assert "channel tab" in source.lower()
-    assert not hasattr(ladder_module, "from_channel_html")
-    assert not [name for name in vars(ListingLadder) if "html" in name.lower()]
-    for name in ("from_data_api", "from_rss", "from_ytdlp_flat"):
-        assert callable(getattr(ListingLadder, name))
+    result = ListingLadder(rss=feed, channel_tab=tabs, ytdlp=flat).list_videos(
+        channel_id=CITY_CHANNEL_ID
+    )
+
+    assert result.method == SOURCE_CHANNEL_TAB
+    assert result.label == "Read the channel's own page"
+    assert [attempt.method for attempt in result.attempts] == [
+        SOURCE_DATA_API,
+        SOURCE_RSS,
+        SOURCE_CHANNEL_TAB,
+    ]
+    assert tabs.calls == [("feed", CITY_CHANNEL_ID)]
+    assert flat.calls == [], "yt-dlp is not started when the pages answered"
+
+
+def test_the_channel_tabs_need_the_channel_id() -> None:
+    tabs = FakeMethod([a_video("tab00000001", SOURCE_CHANNEL_TAB)])
+    with pytest.raises(ListingFailed, match="need a channel id"):
+        ListingLadder(channel_tab=tabs).from_channel_html(None)
+    assert tabs.calls == []
