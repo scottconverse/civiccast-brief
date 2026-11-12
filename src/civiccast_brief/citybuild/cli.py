@@ -16,7 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.citybuild import boards, browser
+from civiccast_brief.citybuild import boards, boardsites, browser
 from civiccast_brief.citybuild.build import build_city
 from civiccast_brief.citybuild.fetch import Fetcher
 from civiccast_brief.citybuild.read import Proof, read_latest
@@ -145,6 +145,21 @@ def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
             lines += boards.write_primegov_rosters(folder, source, name, state, fetcher, today)
     lines += boards.write_page_rosters(folder, sources, name, state, fetcher, today)
     lines += boards.copy_shared_rosters(folder, sources)
+    try:
+        search = json.loads((folder / "city-search.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        search = {}
+    lines += boardsites.write_site_rosters(
+        folder,
+        sources,
+        name,
+        state,
+        fetcher,
+        today,
+        website=str(search.get("website", "")) if isinstance(search, dict) else "",
+        open_in_browser=browser.open_page,
+    )
+    browser.close_shared()
     for line in lines or [f"{folder}: no board has a member list this can read"]:
         print(line)
     return 0

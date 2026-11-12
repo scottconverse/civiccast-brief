@@ -72,13 +72,15 @@ def _portal(packet: bytes, asked: list[str]):
     return handler
 
 
-def _setup(packet: bytes, **limits):
+def _setup(packet: bytes, fetch_limit: int | None = None, **limits):
     asked: list[str] = []
     client = httpx.Client(transport=httpx.MockTransport(_portal(packet, asked)))
     adapter = PrimeGovAdapter(BASE, client, **limits)
     meetings = {m.id: m for m in adapter.list_meetings(date(2026, 9, 1), date(2026, 9, 30))}
     asked.clear()
     fetcher = Fetcher(adapter, pause_s=1.5, sleep=lambda s: asked.append(f"pause {s}"))
+    if fetch_limit is not None:
+        fetcher.limit_bytes = fetch_limit
     return fetcher, meetings, asked
 
 
@@ -128,8 +130,19 @@ def test_the_sep_22_packet_is_read_page_by_page_and_written(packet_sep22, tmp_pa
     assert json.loads(path.read_text(encoding="utf-8")) == data
 
 
-def test_a_packet_over_the_adapter_limit_is_a_line_not_a_download(packet_sep22):
+def test_a_packet_over_the_adapter_packet_limit_is_still_read(packet_sep22):
+    # Boulder's 22 October 2026 study session packet is 340 MB, past the adapter's 200 MiB
+    # packet limit; the weekly run reads it.
     fetcher, meetings, _ = _setup(packet_sep22, packet_limit_bytes=1000)
+
+    data, lines = read_documents(fetcher, meetings[3712], COUNCIL)
+
+    assert lines[0].startswith("packet: ") and "not read" not in lines[0]
+    assert any(d["kind"] == "packet" for d in data["documents"])
+
+
+def test_a_packet_over_the_run_limit_is_a_line_not_a_download(packet_sep22):
+    fetcher, meetings, _ = _setup(packet_sep22, fetch_limit=1000)
 
     data, lines = read_documents(fetcher, meetings[3712], COUNCIL)
 
