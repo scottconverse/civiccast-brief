@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from civiccast_brief.record.records.portal import body_name
+from civiccast_brief.record.video.watch import title_day
 from civiccast_brief.record.video.youtube.classify import MeetingClassifier
 from civiccast_brief.sources import Source
 
@@ -174,9 +175,14 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
 def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
     found: list[Found] = []
     for video in listers.youtube(source.channel_id):  # type: ignore[misc]
-        day = _day(video.published)
         title = str(video.title)
-        if day is None or not first <= day <= last or not listers.classifier.is_meeting(title):
+        posted = _day(video.published)
+        # The meeting's day is the one its title names; the video goes up later, often the next
+        # day in UTC and sometimes weeks after. A video posted in the days is listed even when
+        # its meeting was before them, so a late video is not passed over.
+        day = title_day(title) or posted
+        in_days = any(d is not None and first <= d <= last for d in (day, posted))
+        if day is None or not in_days or not listers.classifier.is_meeting(title):
             continue
         body = match_body(title, source.bodies)
         reason = "" if body else f"the title names no body this source covers ({body_name(title)})"
