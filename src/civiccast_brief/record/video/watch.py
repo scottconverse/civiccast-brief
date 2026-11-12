@@ -320,20 +320,21 @@ def classifier_for(source: Source) -> tuple[MeetingClassifier, str | None]:
 def service_ladder(
     *, client: Any = None, interpreter: str | None = None, ytdlp: Any = None
 ) -> ListingLadder:
-    """The ladder a real service watches with: the feed, then yt-dlp.
+    """The ladder a real service watches with: the feed, the channel tabs, then yt-dlp.
 
     The official API of spec 8.1 step 1 is not wired here and the ladder says
     why: it needs an API key, and no setting holds one yet, so the step reports
     "the official API is not configured: no API key was given" and the ladder
-    moves on. The channel tab HTML of step 3 is a later unit's step
-    (``TODO(unit D)`` in the ladder). Both missing steps are named in the
-    checkpoint's ``methods_tried`` rather than passed over in silence.
+    moves on. That step is named in the checkpoint's ``methods_tried`` rather
+    than passed over in silence.
     """
     from .youtube.rss import RssLister
+    from .youtube.tab import ChannelTabLister
     from .youtube.ytdlp import YtdlpFlatLister
 
     return ListingLadder(
         rss=None if client is None else RssLister(client),
+        channel_tab=None if client is None else ChannelTabLister(client),
         ytdlp=ytdlp if ytdlp is not None else YtdlpFlatLister(interpreter=interpreter),
     )
 
@@ -747,11 +748,18 @@ _MONTH_NUMBERS = {
         start=1,
     )
 }
+#: "Oct. 21, 2026", as Longmont's channel titles its boards' meetings.
+_MONTH_NUMBERS |= {
+    short: _MONTH_NUMBERS[name]
+    for name in list(_MONTH_NUMBERS)
+    for short in (("sept", "sep") if name == "september" else (name[:3],))
+    if short != name
+}
 _MONTH = "|".join(_MONTH_NUMBERS)
 #: "November 3, 2026" and "3 November 2026", the two spellings the Longmont
 #: channels title a sitting with, and "11/3/26" from the portal's own titles.
-_MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
-_DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\s+(\d{{4}})\b", re.IGNORECASE)
+_MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\.?\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
+_DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\.?\s+(\d{{4}})\b", re.IGNORECASE)
 #: "11/3/26", and "11-09-26" as Boulder's channel titles its boards' meetings.
 _SLASH_DATE = re.compile(r"\b(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})\b")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")

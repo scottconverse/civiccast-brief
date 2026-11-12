@@ -16,3 +16,25 @@ def no_real_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.delenv(credentials.YOUTUBE_API_KEY_ENV, raising=False)
     monkeypatch.setattr(credentials, "read_credential", lambda target: None)
+
+
+class _NoChrome:
+    """Stands in for Google Chrome: a test that reaches for the real browser is told no."""
+
+    def __getattr__(self, name: str):
+        from civiccast_brief.citybuild.fetch import FetchError
+
+        def refuse(*_args, **_kwargs):
+            raise FetchError("no Chrome in tests")
+
+        return refuse
+
+
+@pytest.fixture(autouse=True)
+def no_real_chrome():
+    """No test opens the installed Chrome; a test that needs a browser gives a fake one."""
+    from civiccast_brief.citybuild import browser
+
+    browser.use(_NoChrome())  # type: ignore[arg-type]
+    yield
+    browser.use(None)

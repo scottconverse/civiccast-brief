@@ -19,6 +19,8 @@ from civiccast_brief.record.video.youtube.readiness import readiness, readiness_
 SOURCE_DATA_API = "data_api"
 #: Spec 8.1 step 2: the channel's public feed.
 SOURCE_RSS = "rss"
+#: Spec 8.1 step 3: the channel's tabs read as ordinary pages.
+SOURCE_CHANNEL_TAB = "tab"
 #: Spec 8.1 step 4: yt-dlp reading the channel's tabs.
 SOURCE_YTDLP = "ytdlp"
 
@@ -26,6 +28,7 @@ SOURCE_YTDLP = "ytdlp"
 SOURCE_LABELS: dict[str, str] = {
     SOURCE_DATA_API: "Read YouTube with the official API",
     SOURCE_RSS: "Read the public feed instead",
+    SOURCE_CHANNEL_TAB: "Read the channel's own page",
     SOURCE_YTDLP: "Read the public channel listing with yt-dlp",
 }
 

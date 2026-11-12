@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--base-url",
         required=True,
-        help="public address of the site, such as https://longmont.civiccast.org",
+        help="public address of the site, such as https://longmont.civiccastbrief.org",
     )
     home = commands.add_parser("home", help="write the civiccastbrief.org home page")
     home.add_argument(

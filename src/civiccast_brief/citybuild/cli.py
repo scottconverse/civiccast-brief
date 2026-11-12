@@ -16,7 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.citybuild import browser
+from civiccast_brief.citybuild import boards, browser
 from civiccast_brief.citybuild.build import build_city
 from civiccast_brief.citybuild.fetch import Fetcher
 from civiccast_brief.citybuild.read import Proof, read_latest
@@ -121,6 +121,35 @@ def _check(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     return 0 if proofs and read == len(proofs) else 1
 
 
+def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
+    folder: Path = args.city
+    try:
+        sources = load_sources(folder)
+    except SourceError as exc:
+        print(f"city rosters: {exc}", file=sys.stderr)
+        return 1
+    try:
+        roster = json.loads((folder / "roster.json").read_text(encoding="utf-8"))
+        city = json.loads((folder / "city.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(
+            f"city rosters: {folder} has no readable city.json and roster.json: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    name, state, today = str(city.get("name", "")), str(roster.get("state", "")), date.today()
+    fetcher = fetcher or Fetcher()
+    lines: list[str] = []
+    for source in sources:
+        if source.kind == "primegov":
+            lines += boards.write_primegov_rosters(folder, source, name, state, fetcher, today)
+    lines += boards.write_page_rosters(folder, sources, name, state, fetcher, today)
+    lines += boards.copy_shared_rosters(folder, sources)
+    for line in lines or [f"{folder}: no board has a member list this can read"]:
+        print(line)
+    return 0
+
+
 def add_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     city = commands.add_parser("city", help="find a city's meeting sources, or check them")
     sub = city.add_subparsers(dest="city_command", required=True)
@@ -145,3 +174,8 @@ def add_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[
         "--captions", action="store_true", help="also fetch YouTube captions (paced, slow)"
     )
     cmd.set_defaults(run=_check)
+    cmd = sub.add_parser(
+        "rosters", help="write each board's roster from its PrimeGov member list or its own page"
+    )
+    cmd.add_argument("--city", type=Path, required=True, help="the city folder")
+    cmd.set_defaults(run=_rosters)

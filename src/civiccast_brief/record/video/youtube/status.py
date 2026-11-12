@@ -18,10 +18,10 @@ status into a word, plus a plain sentence naming what was asked and what each
 ask answered. Nothing here writes to the database: the caller writes the answer
 on the row, so the next run reads it instead of asking again.
 
-Two of the three steps are deliberately not built: no setting holds a Data API
-key yet, and the player endpoint is a network call this reader does not make.
-Both say so in their own sentence rather than passing over in silence, the way
-the listing ladder of spec 8.1 names its own missing step.
+A step with no reader given says so in its own sentence rather than passing
+over in silence: no setting holds a Data API key yet, and the player status is
+read from the public watch page only when a page reader is given
+(:class:`~civiccast_brief.record.video.youtube.page.WatchPage`).
 
 yt-dlp is run as an argument list with an allow-listed environment and no shell
 (spec 8.3, PROJECT-BRIEF rule E), under a time limit, and the runner is
@@ -39,6 +39,7 @@ from typing import Any
 
 from civiccast_brief.record import pacing, proc
 from civiccast_brief.record.runtime.javascript import FALLBACK_RUNTIME, resolve
+from civiccast_brief.record.video.youtube import page
 from civiccast_brief.record.video.youtube.listing import SOURCE_DATA_API, SOURCE_YTDLP
 from civiccast_brief.record.video.youtube.readiness import (
     READINESS_FINISHED,
@@ -66,7 +67,7 @@ API_NOT_CONFIGURED = "no API key was given"
 
 #: Why the middle step said nothing. It is named rather than skipped, so the
 #: answer never reads as though the spec's own middle step had been tried.
-PLAYER_NOT_BUILT = "not built here"
+PLAYER_NOT_CONFIGURED = "no watch page reader was given"
 
 #: The module, not the script: the private runtime is asked for it by name.
 YTDLP_MODULE = "yt_dlp"
@@ -201,6 +202,7 @@ class StatusAsker:
         timeout_s: float = STATUS_TIMEOUT_S,
         js_runtime: str | None = None,
         api: Any = None,
+        player: Any = None,
     ) -> None:
         self.runner = runner
         #: Spec 8.9: the Python that runs TownRecord is the Python that runs yt-dlp.
@@ -218,6 +220,9 @@ class StatusAsker:
         #: and no setting holds a key, so this step says so and the next one is
         #: asked instead.
         self.api = api
+        #: The reader for spec 8.2's middle step, or None: a duck whose
+        #: ``player_response(video_id)`` answers the watch page's player response.
+        self.player = player
 
     def ask(self, *, video_id: str, url: str) -> ReadinessAnswer:
         """Ask, in the spec's order, and answer with the first definite word."""
@@ -260,13 +265,20 @@ class StatusAsker:
         )
 
     def _ask_player(self, video_id: str, url: str) -> StatusAsk:
-        """Spec 8.2 step 2: the player endpoint, which is not built here."""
-        # TODO(unit D): the player endpoint status, where LIVE_STREAM_OFFLINE
-        # means upcoming, is not this unit's work and nothing here pretends to
-        # read it.
-        return StatusAsk(
-            method=SOURCE_PLAYER, label=ASK_LABELS[SOURCE_PLAYER], reason=PLAYER_NOT_BUILT
-        )
+        """Spec 8.2 step 2: the player status on the public watch page.
+
+        ``LIVE_STREAM_OFFLINE`` means upcoming (:func:`page.player_readiness`).
+        The page read takes its turn in the process pace itself.
+        """
+        method, label = SOURCE_PLAYER, ASK_LABELS[SOURCE_PLAYER]
+        if self.player is None:
+            return StatusAsk(method=method, label=label, reason=PLAYER_NOT_CONFIGURED)
+        try:
+            response = self.player.player_response(video_id)
+        except Exception as exc:  # a reader that raises is a step that answered nothing
+            return StatusAsk(method=method, label=label, reason=f"the page read failed: {exc}")
+        word, reason = page.player_readiness(response)
+        return StatusAsk(method=method, label=label, readiness=word, reason=reason)
 
     def _ask_ytdlp(self, video_id: str, url: str) -> StatusAsk:
         """Spec 8.2 step 3: yt-dlp's own info dict and its ``live_status``."""

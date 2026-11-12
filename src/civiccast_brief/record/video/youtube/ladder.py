@@ -1,10 +1,10 @@
 """The listing ladder: try each way of reading a channel, in order (spec 8.1).
 
-Four ways, two of which are built here plus one more in a later unit:
+Four ways:
 
 1. the official Data API (a key, and ten thousand units a day);
 2. the channel's public feed (no key, no quota, no status);
-3. the channel tab HTML (``/streams`` as a page, for a reader with no tooling);
+3. the channel tab HTML (``/streams`` and ``/videos`` as pages, for a reader with no tooling);
 4. yt-dlp reading the tabs (no key, no quota, needs node).
 
 Each step is a method of its own, so each can be tested alone, and every one
@@ -24,6 +24,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from civiccast_brief.record.video.youtube.listing import (
+    SOURCE_CHANNEL_TAB,
     SOURCE_DATA_API,
     SOURCE_RSS,
     SOURCE_YTDLP,
@@ -72,10 +73,12 @@ class ListingLadder:
         *,
         data_api: object | None = None,
         rss: object | None = None,
+        channel_tab: object | None = None,
         ytdlp: object | None = None,
     ) -> None:
         self.data_api = data_api
         self.rss = rss
+        self.channel_tab = channel_tab
         self.ytdlp = ytdlp
 
     # -- the steps, each usable on its own -----------------------------------
@@ -112,9 +115,14 @@ class ListingLadder:
         videos = self.ytdlp.list_videos(channel_url)  # type: ignore[attr-defined]
         return _require_videos(videos, "yt-dlp")
 
-    # TODO(unit D): spec 8.1 step 3, the channel tab HTML, goes between the
-    # feed and yt-dlp, as from_channel_html(channel_url). It is not this
-    # unit's work and nothing here pretends to read a page.
+    def from_channel_html(self, channel_id: str | None) -> list[VideoListing]:
+        """Spec 8.1 step 3: the channel's /streams and /videos pages, which need its id."""
+        if self.channel_tab is None:
+            raise ListingFailed("the tab reader is not configured")
+        if not channel_id:
+            raise ListingFailed("the channel tabs need a channel id, which is not known yet")
+        videos = self.channel_tab.list_videos(channel_id)  # type: ignore[attr-defined]
+        return _require_videos(videos, "the channel tabs")
 
     # -- the ladder ----------------------------------------------------------
 
@@ -136,6 +144,7 @@ class ListingLadder:
         steps = (
             (SOURCE_DATA_API, lambda: self.from_data_api(channel_id, handle, username)),
             (SOURCE_RSS, lambda: self.from_rss(channel_id)),
+            (SOURCE_CHANNEL_TAB, lambda: self.from_channel_html(channel_id)),
             (SOURCE_YTDLP, lambda: self.from_ytdlp_flat(url)),
         )
 

@@ -68,6 +68,7 @@ from civiccast_brief.record.video.watch import (
 from civiccast_brief.record.video.youtube.classify import MeetingClassifier
 from civiccast_brief.record.video.youtube.ladder import ListingLadder
 from civiccast_brief.record.video.youtube.listing import (
+    SOURCE_CHANNEL_TAB,
     SOURCE_DATA_API,
     SOURCE_RSS,
     SOURCE_YTDLP,
@@ -587,6 +588,7 @@ def test_a_listing_that_finds_nothing_names_every_method_it_tried(
     assert [row["method"] for row in checkpoint["methods_tried"]] == [
         SOURCE_DATA_API,
         SOURCE_RSS,
+        SOURCE_CHANNEL_TAB,
         SOURCE_YTDLP,
     ]
     assert all(row["reason"] for row in checkpoint["methods_tried"])
@@ -1016,6 +1018,15 @@ def test_a_title_day_is_read_with_dashes_as_boulder_writes_it() -> None:
     assert title_day("11-09-26 Police Oversight Panel Meeting") == date(2026, 11, 9)
     assert title_day("11/02/26 City Council Meeting") == date(2026, 11, 2)
     assert title_day("2026-11-04 to 11-09-26") is None  # two days name no one sitting
+
+
+def test_a_title_day_is_read_with_a_short_month_as_longmont_writes_it() -> None:
+    # Longmont's channel, 2026-10-21: the weekly run passed this meeting over.
+    assert title_day("Sustainability Advisory Board Meeting Oct. 21, 2026") == date(2026, 10, 21)
+    assert title_day("Board Meeting Sept 9, 2026") == date(2026, 9, 9)
+    assert title_day("Board Meeting Sep. 9, 2026") == date(2026, 9, 9)
+    assert title_day("Board Meeting 4 Dec 2026") == date(2026, 12, 4)
+    assert title_day("Marching Band Concert 21, 2026") is None
 
 
 def test_yt_dlps_own_date_spelling_is_read() -> None:
