@@ -3,7 +3,8 @@
 ``city.json`` is written only when the folder has none; in a file already there only the email
 addresses an earlier build left blank are set. ``roster.json`` is filled from the members page on the city's own site, read by rule
 (:mod:`civiccast_brief.citybuild.members`), when the folder has none or has only the empty
-template; a roster with members is never changed. ``sources.json`` gains the found sources, and a source already listed gains the
+template; a roster with members is never changed. Each board a PrimeGov portal lists
+members for gets ``rosters/<body>.json`` (:mod:`civiccast_brief.citybuild.boards`). ``sources.json`` gains the found sources, and a source already listed gains the
 bodies it lacked. ``city-search.json`` keeps the whole search, so the editor can see how each
 source was found and what was found but not saved.
 """
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Final
 
 from civiccast_brief.city import CITY_FILE, ROSTER_FILE, city_settings, roster_template
+from civiccast_brief.citybuild import boards
 from civiccast_brief.citybuild import members as members_page
 from civiccast_brief.citybuild.fetch import Fetcher, Page
 from civiccast_brief.citybuild.search import Search
@@ -187,6 +189,12 @@ def build_city(
     built.notice.insert(0, _sources_notice(picked, before))
     built.lines += [f"sources: {change}" for change in changes] or ["sources: nothing new"]
     built.lines.append(f"saved {path}")
+    if fetcher is not None:
+        for source in load_sources(folder):
+            if source.kind == "primegov":
+                built.lines += boards.write_primegov_rosters(
+                    folder, source, found.name, found.state, fetcher, today or date.today()
+                )
     report = folder / REPORT_FILE
     report.write_text(
         json.dumps(found.to_json(), indent=2, ensure_ascii=False) + "\n",
