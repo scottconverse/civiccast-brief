@@ -28,7 +28,7 @@ The goal is every open item in the 22-item list above. Work does not stop until 
 | 16 | YouTube key limited to this app; GPU box (old item 26) | open | |
 | 17 | Apple Podcasts and Spotify submission | open | |
 | 18 | Brevo account and a live sign-up end to end | open | |
-| 19 | Runs on other machines: installer (old item 27) | open | |
+| 19 | Runs on other machines: installer (old item 27) | done | #48, merge b5eefb0. `install.ps1` / `install.cmd`: code, uv, Python 3.12 packages, ffmpeg, yt-dlp (through the program's own `tools` step); checks Chrome and Ollama; writes `desk.cmd`. No separate TownRecord install. Fresh windows-latest runner (Installer workflow): uv and ffmpeg installed from none, desk answered HTTP 200; yt-dlp's caption test failed there, most likely YouTube refusing GitHub's servers (not checked), and the installer listed it as still to do. Download path on this PC 2026-11-12: every step ok, yt-dlp 2026.10.26 passed, desk answered, `city find` Longmont ok. Windows Sandbox was in use by another session. The voice engine is not covered (item 2) |
 | 20 | Someone else sets up a city (old item 28) | open | |
 | 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | done | #40 (6e4e702). Live 2026-11-11: the transcript panel read 1,144 lines of unNcPhKJ45o with yt-dlp made to fail; BVSD's channel tabs listed 60 videos; the player status said upcoming for y-xlQWT-Y6E and finished for sxB7gqQltMg with no yt-dlp call |
 | 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | done | Rows 13, 15, 16, 17 below set to live from the 2026-11-11 curl checks |
