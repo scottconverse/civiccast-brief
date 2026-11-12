@@ -6,9 +6,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' {{ analytics.script_origin }}; style-src 'self'; img-src 'self' https: data:; connect-src 'self' {{ analytics.connect_origin }}; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="color-scheme" content="light dark">
-<title>CivicCast Brief</title>
+<title>{% if not_found %}Page not found | {% endif %}CivicCast Brief</title>
 <meta name="description" content="Short, cited news stories and a podcast for every public meeting. Each sentence links to the moment in the meeting video it came from.">
-<link rel="canonical" href="{{ canonical }}">
+{% if not_found %}<meta name="robots" content="noindex">
+{% endif %}<link rel="canonical" href="{{ canonical }}">
 <link rel="icon" href="{{ favicon_svg }}" type="image/svg+xml">
 <link rel="icon" href="{{ favicon_png }}" type="image/png" sizes="180x180">
 <link rel="apple-touch-icon" href="{{ favicon_png }}">
@@ -32,8 +33,13 @@
 </header>
 <main id="main" class="page home" tabindex="-1">
   <section class="home-hero" aria-labelledby="hero-title">
+    {% if not_found %}
+    <h1 id="hero-title">Page not found</h1>
+    <p class="dek">There is no page at this address on CivicCast Brief. Pick a city below, or go to the <a href="{{ href('/') }}">home page</a>.</p>
+    {% else %}
     <h1 id="hero-title">What did your local government just do?</h1>
     <p class="dek">Short, cited news stories and a podcast for every public meeting. Each sentence links to the moment in the meeting video it came from.</p>
+    {% endif %}
   </section>
   <section aria-labelledby="cities-title">
     <h2 id="cities-title" class="month">Cities</h2>
