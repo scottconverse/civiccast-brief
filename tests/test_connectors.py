@@ -482,6 +482,20 @@ def test_configured_native_write_approval_readback_receipt_and_cli(tmp_path, mon
     assert client.commit(**approval, approved=True).status == "completed"
     assert network.calls.count("POST") == 1
     assert "synthetic-only" not in json.dumps(done.public_dict())
+    with ReviewStore(tmp_path / "review.db") as store:
+        app = make_desk_app(store, city_dir=tmp_path, connector_factory=lambda path: client)
+        desk = TestClient(app, base_url="http://127.0.0.1")
+        assert (
+            desk.post("/connectors/receipt", data={"plan_id": approval["plan_id"]}).status_code
+            == 403
+        )
+        response = desk.post(
+            "/connectors/receipt",
+            data={"token": app.state.desk.token, "plan_id": approval["plan_id"]},
+        )
+        assert response.status_code == 200, response.text
+        assert approval["plan_id"] in response.text and "NOT_RUN" in response.text
+        assert store.list_items() == []
     monkeypatch.setattr(connectors, "CivicSources", lambda *args, **kwargs: client)
     assert (
         connectors.main(

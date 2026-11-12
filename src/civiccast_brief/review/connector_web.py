@@ -89,9 +89,7 @@ def install_routes(app, state, read_form, bad_token, *, factory=None):
                 return page(result=result.public_dict())
             if action == "receipt":
                 return page(
-                    result=client.engine.receipt(
-                        {"plan_id": form["plan_id"]}, context=client.context
-                    ).public_dict()
+                    result=(await run_in_threadpool(client.receipt, form["plan_id"])).public_dict()
                 )
             sources = [
                 s
