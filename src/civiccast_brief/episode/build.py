@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +107,19 @@ def _iso_date(long_date: str) -> str:
     return datetime.strptime(last, "%B %d, %Y").date().isoformat()
 
 
+def _date_range(long_dates: str) -> str:
+    """A roundup's dates ("A and B and C") as a range: "September 22 to November 3, 2026"."""
+    days = [datetime.strptime(d.strip(), "%B %d, %Y").date() for d in long_dates.split(" and ")]
+    first, last = min(days), max(days)
+
+    def long(day: date, year: bool) -> str:
+        return f"{day:%B} {day.day}, {day.year}" if year else f"{day:%B} {day.day}"
+
+    if first == last:
+        return long(last, True)
+    return f"{long(first, first.year != last.year)} to {long(last, True)}"
+
+
 def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
     """The written title from title.json when there is one and it passes, else the dated one."""
     path = meeting_dir / "title.json"
@@ -117,7 +130,7 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
             raise EpisodeError(f"{path} fails the check: {render_issues(issues)}")
         return title.text
     if roundup:
-        return f"{recap.city} weekly roundup: {recap.meeting_date}"
+        return f"{recap.city} weekly roundup: {_date_range(recap.meeting_date)}"
     return f"{recap.city} {recap.body}, {recap.meeting_date}"
 
 

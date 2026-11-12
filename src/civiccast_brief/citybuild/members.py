@@ -126,6 +126,9 @@ _NOT_NAME: Final = frozenset(
         "tem",
     ]
 )
+_UP: Final = r"[A-ZÀ-ÖØ-Þ]"
+_LOW: Final = r"[a-zß-öø-ÿ]"
+_ANY: Final = r"[A-Za-zÀ-ÖØ-öø-ÿ'’.-]"
 _ROLE_RE: Final = re.compile(rf"^{_ROLE}$", re.IGNORECASE)
 _TITLE_THEN_NAME: Final = re.compile(rf"^(?P<role>{_ROLE})\s*:?\s+(?P<name>.+?)$", re.IGNORECASE)
 _NAME_THEN_TITLE: Final = re.compile(
@@ -215,7 +218,8 @@ def _word_ok(word: str) -> bool:
         return True
     if word.casefold() in _SUFFIXES:
         return True
-    if not re.fullmatch(r"[A-Z][A-Za-z'’.-]*[a-z][A-Za-z'’.-]*|[A-Z][a-z]*['’][A-Z][a-z]+", word):
+    # Letters past A-Z count too: "Jorge Chávez" (Boulder Valley's board, 2026-11-11).
+    if not re.fullmatch(rf"{_UP}{_ANY}*{_LOW}{_ANY}*|{_UP}{_LOW}*['’]{_UP}{_LOW}+", word):
         return False
     return word.casefold().strip(".") not in _NOT_NAME
 

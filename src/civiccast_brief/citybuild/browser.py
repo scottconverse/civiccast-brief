@@ -2,7 +2,8 @@
 
 Some city record sites answer a plain HTTP client with 403 but open for anyone in a browser
 (Louisville's Laserfiche WebLink, checked on 2026-11-11). This opens the Google Chrome installed
-on this computer, in a window you can see, as it is: no stealth patches, no changed browser name,
+on this computer, as it is (its window starts minimized, on the taskbar, so it does not
+pop up over your work): no stealth patches, no changed browser name,
 no answering of challenges. It opens pages and downloads files the way a person's browser does. If
 a site still stops Chrome, the read fails and says so.
 
@@ -40,6 +41,24 @@ _POST_JS: Final = """async ([url, data, headers]) => {
     headers: Object.assign({'Content-Type': 'application/json'}, headers),
     body: JSON.stringify(data)});
   return {status: r.status, type: r.headers.get('content-type') || '', text: await r.text()};
+}"""
+
+
+#: A line of YouTube's transcript panel: the 2026 markup, then the older one.
+_PANEL_LINE: Final = "transcript-segment-view-model, ytd-transcript-segment-renderer"
+_PANEL_JS: Final = """() => {
+  const rows = [];
+  for (const el of document.querySelectorAll('transcript-segment-view-model')) {
+    const stamp = el.querySelector('[aria-hidden="true"]'), text = el.querySelector('[role="text"]');
+    if (stamp && text) rows.push([stamp.innerText.trim(), text.innerText]);
+  }
+  for (const el of document.querySelectorAll('ytd-transcript-segment-renderer')) {
+    const stamp = el.querySelector('.segment-timestamp'), text = el.querySelector('.segment-text');
+    if (stamp && text) rows.push([stamp.innerText.trim(), text.innerText]);
+  }
+  const player = window.ytInitialPlayerResponse;
+  const length = player && player.videoDetails ? Number(player.videoDetails.lengthSeconds) : null;
+  return {rows, length: length || null};
 }"""
 
 
@@ -82,6 +101,19 @@ def kind_of_file(content: bytes) -> str:
     return "application/octet-stream"
 
 
+def _minimize(page: Any, log: Any) -> None:
+    """Minimize the page's window, so reads do not pop a window up over the user's work. It is
+    still the same headed Chrome. If Chrome will not minimize, the window stays open."""
+    try:
+        cdp = page.context.new_cdp_session(page)
+        window = cdp.send("Browser.getWindowForTarget")["windowId"]
+        cdp.send(
+            "Browser.setWindowBounds", {"windowId": window, "bounds": {"windowState": "minimized"}}
+        )
+    except Exception as exc:  # noqa: BLE001 - a window left open is not a failed read
+        log(f"Chrome's window could not be minimized, so it stays open: {exc}")
+
+
 class Chrome:
     """The installed Google Chrome, opened on first use and closed by :meth:`close`."""
 
@@ -111,6 +143,7 @@ class Chrome:
             raise FetchError(f"Google Chrome could not be opened: {exc}") from exc
         self._page = self._browser.new_page()
         self._page.set_default_timeout(TIMEOUT_MS)
+        _minimize(self._page, self._log)
         self._log("opened Google Chrome to read pages that open only in a browser")
         return self._page
 
@@ -203,6 +236,34 @@ class Chrome:
         return Page(
             url=page.url, status=200, content=text.encode("utf-8"), content_type="text/html"
         )
+
+    def transcript_panel(self, url: str) -> dict[str, Any]:
+        """Open a YouTube watch page, press "Show transcript" and return the panel's lines."""
+        from playwright.sync_api import Error
+
+        page = self._open()
+        self._wait_turn()
+        try:
+            page.goto(url, wait_until="load")
+            expand = page.locator("#description-inline-expander #expand:visible").first
+            try:
+                expand.wait_for(state="visible", timeout=15_000)
+                expand.click()
+            except Error:
+                pass  # a short description has no "more" to press; the button may still be there
+            # The page holds a second, hidden copy of the button; the visible one is pressed.
+            button = page.locator(
+                "ytd-video-description-transcript-section-renderer button:visible"
+            )
+            try:
+                button.first.wait_for(state="visible", timeout=15_000)
+            except Error as exc:
+                raise FetchError(f"{url}: the page has no Show transcript button") from exc
+            button.first.click()
+            page.wait_for_selector(_PANEL_LINE, timeout=TIMEOUT_MS)
+            return dict(page.evaluate(_PANEL_JS))
+        except Error as exc:
+            raise FetchError(f"{url}: the transcript panel did not open in Chrome: {exc}") from exc
 
     def close(self) -> None:
         # Closing must not hide the run's own result, so a failure to close is only logged.

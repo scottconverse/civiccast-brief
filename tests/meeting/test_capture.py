@@ -154,3 +154,54 @@ def test_a_relative_work_folder_finds_the_captions_yt_dlp_wrote(tmp_path, monkey
     )
     assert result.caption_file == tmp_path / "runs" / "m" / "raw" / "abc123XYZ_-.en-orig.srv3"
     assert result.segments == [{"start_ms": 0, "end_ms": 1000, "text": ">> hello"}]
+
+
+# ----- The "Show transcript" panel (spec 8.4.2) -------------------------------------------------
+
+
+class PanelBrowser:
+    """The watch page's transcript panel, as Chrome reads it (Longmont P&Z, 21 Oct 2026)."""
+
+    def __init__(self):
+        self.asked = []
+
+    def transcript_panel(self, url):
+        self.asked.append(url)
+        rows = [
+            ["0:09", "pleasure of calling the meeting to order"],
+            ["0:01", "Hello guys, good evening folks."],
+            ["1:02:03", "  the public hearing\nis open  "],
+            ["2:28:34", "And we are in adjournment."],
+        ]
+        return {"rows": rows, "length": 8926}
+
+
+def test_when_ytdlp_gets_no_captions_the_transcript_panel_is_read(tmp_path):
+    runner = FakeRunner(
+        tmp_path, returncode=1, stderr="ERROR: Sign in to confirm you're not a bot", write=False
+    )
+    chrome = PanelBrowser()
+    result = C.capture_captions("abc123XYZ_-", tmp_path, python="py", runner=runner, browser=chrome)
+    assert chrome.asked == ["https://www.youtube.com/watch?v=abc123XYZ_-"]
+    assert result.segments == [
+        {"start_ms": 1000, "end_ms": 9000, "text": "Hello guys, good evening folks."},
+        {"start_ms": 9000, "end_ms": 3723000, "text": "pleasure of calling the meeting to order"},
+        {"start_ms": 3723000, "end_ms": 8914000, "text": "the public hearing is open"},
+        {"start_ms": 8914000, "end_ms": 8926000, "text": "And we are in adjournment."},
+    ]
+    assert C.caption_origin(tmp_path, "abc123XYZ_-") == {"kind": "youtube_transcript_panel"}
+
+    # The next run reads the kept panel file and asks neither yt-dlp nor Chrome.
+    def no_call(*a, **k):
+        pytest.fail("yt-dlp was called")
+
+    again = C.capture_captions("abc123XYZ_-", tmp_path, runner=no_call, browser=None)
+    assert again.caption_reused is True and again.segments == result.segments
+
+
+def test_when_the_panel_fails_too_both_reasons_are_given(tmp_path):
+    runner = FakeRunner(tmp_path, write=False)
+    with pytest.raises(C.CaptureError) as raised:
+        C.capture_captions("abc123XYZ_-", tmp_path, python="py", runner=runner)
+    assert "wrote no caption file" in str(raised.value)
+    assert "Show transcript panel: no Chrome in tests" in str(raised.value)

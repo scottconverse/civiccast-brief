@@ -275,7 +275,7 @@ def _card(urls: Urls, episode: Episode) -> dict[str, Any]:
         "href": urls.href(episode_path(urls, episode)),
         "board": episode.board,
         "board_href": urls.href(board_path(urls, episode.board)),
-        "meeting_title": episode.meeting_title,
+        "meeting_title": episode.meeting_name,
         "meeting_date": date_long(episode.meeting_date),
         "iso_date": episode.meeting_date.isoformat(),
         "short_date": short_date(episode.meeting_date),
@@ -444,15 +444,15 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
                 city,
                 urls,
                 path=episode_path(urls, episode, "transcript"),
-                title=f"Transcript: {episode.meeting_title}, {date_long(episode.meeting_date)} | {city.site_title}",
-                description=f"Speaker-labelled transcript of the {episode.meeting_title} on {date_long(episode.meeting_date)}, with timestamps linked to the meeting video.",
+                title=f"Transcript: {episode.meeting_name}, {date_long(episode.meeting_date)} | {city.site_title}",
+                description=f"Speaker-labelled transcript of the {episode.meeting_name} on {date_long(episode.meeting_date)}, with timestamps linked to the meeting video.",
             )
             transcript["page"]["nav"] = "episode"
             transcript["episode"] = {
                 "id": episode.id,
                 "headline": episode.display_headline,
                 "href": urls.href(episode_path(urls, episode)),
-                "meeting_title": episode.meeting_title,
+                "meeting_title": episode.meeting_name,
                 "meeting_date": date_long(episode.meeting_date),
                 "video_url": episode.video_url,
             }
