@@ -231,9 +231,9 @@ def docs(browser: Browser, url: str, body: str, today: date) -> tuple[list[Doc],
     return listed, notes
 
 
-def scanned_text(browser: Browser, url: str) -> Page:
-    """The text of a scanned document's first pages, asked from its viewer the way the viewer
-    asks. Raises FetchError when the viewer has no text for them."""
+def scanned_text(browser: Browser, url: str, pages: int = PDF_PAGES) -> Page:
+    """The text of a scanned document's first ``pages`` pages, asked from its viewer the way the
+    viewer asks. Raises FetchError when the viewer has no text for them."""
     parts = urlsplit(url)
     query = {k.casefold(): v for k, v in parse_qs(parts.query).items()}
     doc = (query.get("id") or [""])[0]
@@ -247,7 +247,7 @@ def scanned_text(browser: Browser, url: str) -> Page:
     if not isinstance(count, int) or count < 1:
         raise FetchError(f"{url}: the viewer lists no pages")
     texts = []
-    for number in range(1, min(count, PDF_PAGES) + 1):
+    for number in range(1, min(count, pages) + 1):
         ask = {
             "repoName": repo,
             "documentId": int(doc),
@@ -262,7 +262,8 @@ def scanned_text(browser: Browser, url: str) -> Page:
             texts.append(html.unescape(_TAG.sub("", text)))
     if not any(t.strip() for t in texts):
         raise FetchError(f"{url} has no text to read (a scan without text?)")
-    content = "\n".join(texts).encode()
+    # A form feed between pages keeps them apart for a reader that wants each page.
+    content = "\f".join(texts).encode()
     return Page(url=url, status=200, content=content, content_type="text/plain")
 
 
@@ -270,8 +271,10 @@ class Reader:
     """The browser, reading a folder's documents: an electronic file is downloaded, a scanned
     one is read from its viewer's page text."""
 
-    def __init__(self, browser: Browser) -> None:
+    def __init__(self, browser: Browser, pages: int = PDF_PAGES) -> None:
         self.browser = browser
+        #: How many pages of a scanned document are read.
+        self.pages = pages
 
     def open_and_catch(self, url: str, part: str) -> Any:
         return self.browser.open_and_catch(url, part)
@@ -281,5 +284,5 @@ class Reader:
 
     def get(self, url: str) -> Page:
         if urlsplit(url).path.casefold().endswith("/docview.aspx"):
-            return scanned_text(self.browser, url)
+            return scanned_text(self.browser, url, self.pages)
         return self.browser.get(url)

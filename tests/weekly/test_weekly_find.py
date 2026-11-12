@@ -181,3 +181,53 @@ def test_a_source_kind_with_no_lister_is_named_not_a_crash():
     found, problems = find_meetings([clerk], FIRST, LAST, Listers())
     assert found == []
     assert problems == ["civicclerk:erieco: no reader for civicclerk sources"]
+
+
+def _doc(body, day, title, url, what="agenda"):
+    return NS(body=body, day=day, title=title, url=url, what=what)
+
+
+def test_listed_documents_go_with_the_same_day_video_or_stand_alone():
+    from civiccast_brief.sources import make_source
+
+    no_video = "only the meeting's documents are listed; no source lists its video"
+    clerk = make_source("civicclerk", {"tenant": "erieco", "bodies": "City Council"})
+    folder = make_source("laserfiche", {"url": "https://lf.test/WebLink/Browse.aspx?id=1&dbid=0&repo=Town", "bodies": "City Council"})  # fmt: skip
+    video = NS(video_id="oWZpzjzjwnE", title="City Council Regular Session", published="2026-11-03T20:00:00-07:00")  # fmt: skip
+    rows = {
+        clerk.id: [
+            _doc(COUNCIL, date(2026, 11, 3), "Regular Meeting", "https://clerk.test/2197"),
+            _doc(
+                COUNCIL, date(2026, 11, 3), "Regular Meeting", "https://clerk.test/2198", "packet"
+            ),
+            _doc(COUNCIL, date(2026, 11, 10), "Study Session", "https://clerk.test/2210"),
+        ],
+        folder.id: [_doc(COUNCIL, date(2026, 11, 3), "Minutes", "https://lf.test/77", "minutes")],
+    }
+    read = []
+
+    def read_documents(docs):
+        read.append([d.url for d in docs])
+        return {"format": 1, "documents": [{"url": d.url} for d in docs]}, [d.url for d in docs]
+
+    listers = Listers(
+        youtube=lambda cid: [video],
+        documents=lambda source, first, last: rows[source.id],
+        read_documents=read_documents,
+    )
+    found, problems = find_meetings([clerk, CHANNEL, folder], FIRST, LAST, listers)
+
+    assert problems == []
+    assert [(m.day, m.video, m.reason) for m in found] == [
+        (date(2026, 11, 3), "oWZpzjzjwnE", ""),
+        (date(2026, 11, 10), "", no_video),
+    ]
+    assert read == []  # nothing is fetched until the run gets to the meeting
+    data, lines = found[0].documents()
+    assert [d["url"] for d in data["documents"]] == [
+        "https://clerk.test/2197",
+        "https://clerk.test/2198",
+        "https://lf.test/77",
+    ]
+    assert lines == [d["url"] for d in data["documents"]]
+    assert found[1].documents()[0]["documents"] == [{"url": "https://clerk.test/2210"}]
