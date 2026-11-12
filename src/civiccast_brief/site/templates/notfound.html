@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="listing prose" aria-labelledby="notfound-title">
+  <h1 id="notfound-title">Page not found</h1>
+  <p class="dek">There is no page at this address on {{ city.site_title }}.</p>
+  <p><a href="{{ href('/') }}">See the latest meetings</a> or <a href="{{ href('/search/') }}">search every meeting</a>.</p>
+</article>
+{% endblock %}

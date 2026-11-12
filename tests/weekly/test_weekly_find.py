@@ -248,3 +248,19 @@ def test_listed_documents_go_with_the_same_day_video_or_stand_alone():
     ]
     assert lines == [d["url"] for d in data["documents"]]
     assert found[1].documents()[0]["documents"] == [{"url": "https://clerk.test/2210"}]
+
+
+def test_a_channel_video_of_a_body_another_city_source_lists_is_that_bodys():
+    """Longmont's channel source named only the bodies in its newest titles at setup; its
+    21 October 2026 Planning and Zoning Commission video was passed over."""
+    videos = [
+        NS(video_id="unNcPhKJ45o", title="Planning and Zoning Commission 10/21/26", published="2026-10-22T16:00:00Z"),
+        NS(video_id="GGGGGGGGGGG", title="Golf Course Advisory Board Meeting", published="2026-11-04T00:00:00Z"),
+    ]  # fmt: skip
+    listers = Listers(youtube=lambda cid: videos, primegov=lambda url, first, last: [])
+    found, _ = find_meetings([CHANNEL, PORTAL], date(2026, 10, 21), LAST, listers)
+    by_video = {m.video: m for m in found}
+    assert (by_video["unNcPhKJ45o"].body, by_video["unNcPhKJ45o"].reason) == (PZ, "")
+    # A body no source of the city lists is still not run, with the reason.
+    assert by_video["GGGGGGGGGGG"].body == ""
+    assert by_video["GGGGGGGGGGG"].reason.startswith("the title names no body this source covers")

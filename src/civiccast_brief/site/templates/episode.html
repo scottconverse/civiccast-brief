@@ -9,7 +9,7 @@
     <p class="kicker"><a href="{{ board_href }}">{{ episode.board }}</a> · {{ meeting_date }}</p>
     <h1 id="episode-title">{{ headline }}</h1>
     {% if dek %}<p class="dek">{{ dek }}</p>{% endif %}
-    <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_title }}, {{ meeting_date }}{% if article and article.uses_documents %}, and from the meeting documents{% endif %}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
+    <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_name }}, {{ meeting_date }}{% if article and article.uses_documents %}, and from the meeting documents{% endif %}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
 
     {% if article %}
     {% for section in article.sections %}

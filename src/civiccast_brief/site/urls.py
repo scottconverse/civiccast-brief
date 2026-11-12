@@ -1,6 +1,6 @@
 """URLs for one site build.
 
-The build takes a base URL such as https://longmont.civiccast.org. The base may carry a path
+The build takes a base URL such as https://longmont.civiccastbrief.org. The base may carry a path
 (https://example.org/brief), so every internal link is prefixed with that path. Feeds, the sitemap,
 canonical links and share metadata always use the absolute form.
 """
@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 @dataclass(frozen=True)
 class Urls:
     base: str
-    """Absolute base with no trailing slash, for example https://longmont.civiccast.org."""
+    """Absolute base with no trailing slash, for example https://longmont.civiccastbrief.org."""
 
     @classmethod
     def from_base(cls, base_url: str) -> Urls:
