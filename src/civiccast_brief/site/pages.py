@@ -19,6 +19,9 @@ from civiccast_brief.site.urls import Urls, timestamp_link
 
 PAGE_HOW = "/how-this-is-made/"
 PAGE_ABOUT = "/about/"
+#: Cloudflare Pages answers an unknown address with this page and a 404 status. Without it,
+#: Pages serves the front page with a 200.
+PAGE_NOT_FOUND = "/404.html"
 PAGE_SEARCH = "/search/"
 PAGE_PODCAST = "/podcast/"
 PAGE_BOARDS = "/boards/"
@@ -120,6 +123,7 @@ def _base(city: City, urls: Urls, *, path: str, title: str, description: str) ->
             "json_ld": [],
             "nav": "",
             "published": None,
+            "noindex": False,
         },
         "feed_href": urls.href(FEED_PATH),
         "feed_url": urls.absolute(FEED_PATH),
@@ -271,7 +275,7 @@ def _card(urls: Urls, episode: Episode) -> dict[str, Any]:
         "href": urls.href(episode_path(urls, episode)),
         "board": episode.board,
         "board_href": urls.href(board_path(urls, episode.board)),
-        "meeting_title": episode.meeting_title,
+        "meeting_title": episode.meeting_name,
         "meeting_date": date_long(episode.meeting_date),
         "iso_date": episode.meeting_date.isoformat(),
         "short_date": short_date(episode.meeting_date),
@@ -440,15 +444,15 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
                 city,
                 urls,
                 path=episode_path(urls, episode, "transcript"),
-                title=f"Transcript: {episode.meeting_title}, {date_long(episode.meeting_date)} | {city.site_title}",
-                description=f"Speaker-labelled transcript of the {episode.meeting_title} on {date_long(episode.meeting_date)}, with timestamps linked to the meeting video.",
+                title=f"Transcript: {episode.meeting_name}, {date_long(episode.meeting_date)} | {city.site_title}",
+                description=f"Speaker-labelled transcript of the {episode.meeting_name} on {date_long(episode.meeting_date)}, with timestamps linked to the meeting video.",
             )
             transcript["page"]["nav"] = "episode"
             transcript["episode"] = {
                 "id": episode.id,
                 "headline": episode.display_headline,
                 "href": urls.href(episode_path(urls, episode)),
-                "meeting_title": episode.meeting_title,
+                "meeting_title": episode.meeting_name,
                 "meeting_date": date_long(episode.meeting_date),
                 "video_url": episode.video_url,
             }
@@ -614,4 +618,14 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
     pages.append(PageSpec(PAGE_ABOUT, "about.html", about))
 
     sitemap_paths = [page.path for page in pages]
+
+    missing = _base(
+        city,
+        urls,
+        path=PAGE_NOT_FOUND,
+        title=f"Page not found | {city.site_title}",
+        description=f"There is no page at this address on {city.site_title}.",
+    )
+    missing["page"]["noindex"] = True
+    pages.append(PageSpec(PAGE_NOT_FOUND, "notfound.html", missing))
     return pages, sitemap_paths

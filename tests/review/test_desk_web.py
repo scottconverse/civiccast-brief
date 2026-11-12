@@ -238,7 +238,13 @@ def test_sources_add_edit_remove_and_errors_name_the_field(store, city):
     removed = client.post(
         "/sources/remove", data={"token": t, "source_id": "primegov:longmont.primegov.com"}
     )
-    assert removed.status_code == 200 and "Removed primegov:longmont.primegov.com" in removed.text
+    # The notice names the source as the page lists it, not by its internal id.
+    assert removed.status_code == 200
+    assert (
+        "Removed https://longmont.primegov.com for City Council, Planning Commission"
+        in removed.text
+    )
+    assert "primegov:longmont.primegov.com" not in removed.text
     assert sources.load_sources(city) == []
     gone = client.post(
         "/sources/remove", data={"token": t, "source_id": "primegov:longmont.primegov.com"}

@@ -420,7 +420,8 @@ def _check_line(
         return
     if line.text.strip() == DISCLAIMER:
         return
-    if _DIGIT_RE.search(line.text):
+    # A chapter title is shown on screen and never spoken, so it may use digits.
+    if not line.is_chapter and _DIGIT_RE.search(line.text):
         issues.append(
             Issue(number, "error", "digits", "digits in spoken text; spell the number in words")
         )

@@ -333,3 +333,23 @@ def test_a_paragraph_that_cites_document_pages_links_each_page(tmp_path: Path) -
         load_site_input(episodes)
     problems = " ".join(caught.value.problems)
     assert "pages[1].url must be the https address of the document" in problems
+
+
+def test_the_byline_and_transcript_title_do_not_repeat_the_meeting_date(tmp_path: Path) -> None:
+    """A YouTube title ends with the date: "City Council Regular Session - 20 October 2026"."""
+    episodes = tmp_path / "episodes"
+    shutil.copytree(FIXTURES, episodes)
+    path = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["meeting_title"] = "City Council Regular Session - 20 October 2026"
+    data["chapters"][1]["title"] = "public hearing"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+    page = _text(out, COUNCIL)
+    assert "video of the City Council Regular Session, October 20, 2026." in page
+    assert "20 October 2026" not in page
+    assert "Public hearing" in page and "public hearing<" not in page
+    transcript = _text(out, TRANSCRIPT)
+    assert "Transcript: City Council Regular Session</h1>" in transcript
+    assert "20 October 2026" not in transcript

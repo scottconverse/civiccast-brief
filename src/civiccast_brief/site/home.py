@@ -89,6 +89,7 @@ def load_cities(path: Path) -> tuple[HomeCity, ...]:
 def home_context(cities: tuple[HomeCity, ...], urls: Urls) -> dict[str, Any]:
     return {
         "cities": [city for city in cities if city.live],
+        "not_found": False,
         "canonical": urls.absolute("/"),
         "og_image": urls.absolute(SHARE_PATH),
         "favicon_svg": urls.href(FAVICON_SVG),
@@ -112,9 +113,13 @@ def build_home(cities_file: Path, out_dir: Path, base_url: str) -> HomeReport:
     build.write_file(out_dir, SHARE_PATH, images.share_png())
     env = make_environment(urls)
     build.write_file(out_dir, "index.html", render(env, "landing.html", context))
+    # Cloudflare Pages answers an unknown address with 404.html and a 404 status; without it,
+    # Pages serves the home page with a 200.
+    missing = {**context, "not_found": True}
+    build.write_file(out_dir, "404.html", render(env, "landing.html", missing))
     build.write_file(out_dir, build.HEADERS_PATH, HOME_HEADERS_FILE)
     return HomeReport(
         out_dir=out_dir,
         cities=tuple(city.name for city in context["cities"]),
-        files_written=files + 3,
+        files_written=files + 4,
     )

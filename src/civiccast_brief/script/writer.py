@@ -8,6 +8,7 @@ JSON keeps them so the checker can map each line to its claims.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,11 +54,11 @@ claim_ids lists every claim the line relies on. Use an empty list only for a sho
 STRUCTURE, in this order:
 1. Maya (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
 2. Theo (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
-3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name in 45 characters or fewer, such as "Art in Public Places mural" or "Setback appeal". Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
+3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name in 45 characters or fewer, such as "Art in Public Places mural", "Setback appeal" or "Ordinance 2026-75 hearing". A chapter title is shown on screen and never spoken: start it with a capital letter and write its numbers in digits. Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
 4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Main Street", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
-No digits anywhere in the text. Say an initialism letter by letter with hyphens, such as R-T-D or H-O-A. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.
+No digits anywhere in the spoken text (S1 and S2 lines). Say an initialism letter by letter with hyphens, such as R-T-D or H-O-A. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.
 
 SOUND LIKE TWO PEOPLE TALKING, NOT A LIST:
 - Never repeat a sentence, and never say the same fact twice. Skip a claim that adds nothing new (a second "the vote carried" for the same item).
@@ -70,7 +71,7 @@ LENGTH: 850 to 1000 spoken words in total.
 
 
 ROUNDUP_ID = "roundup"
-ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October twentieth meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's {video_place}."""
+ROUNDUP_NOTE = """THIS IS A WEEKLY ROUNDUP of several meetings, not one meeting. Each claim's text starts with the date of its meeting in brackets. The intro names the meeting dates from the header. Start a CHAPTER for each meeting, titled with its date, such as "October 20 meeting", then cover that meeting's main items in the order of its claims. Pick the items with votes and outcomes first; you do not need every claim. The last line points listeners to the meeting videos on the city's {video_place}."""
 
 
 #: A redraft from the desk: the editor's note and the script it is about.
@@ -160,6 +161,30 @@ def render_txt(lines: list[ScriptLine]) -> str:
         else:
             out.append(f"[{line.speaker}] {line.text}")
     return "\n".join(out) + "\n"
+
+
+_TXT_CHAPTER = re.compile(r"\[CHAPTER\s+(.+?)\]")
+_TXT_LINE = re.compile(r"\[(S1|S2)\]\s*(.+)")
+
+
+def parse_txt(text: str) -> list[ScriptLine]:
+    """The lines of a spoken script (:func:`render_txt`'s format), as the desk keeps it.
+
+    The desk keeps only the words, so the lines carry no claim ids."""
+    lines: list[ScriptLine] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if chapter := _TXT_CHAPTER.fullmatch(line):
+            lines.append(ScriptLine(CHAPTER, chapter[1].strip()))
+        elif spoken := _TXT_LINE.fullmatch(line):
+            lines.append(ScriptLine(spoken[1], spoken[2].strip()))
+        else:
+            raise ScriptFormatError(f"not a script line: {line[:120]!r}")
+    if not lines:
+        raise ScriptFormatError("the script has no lines")
+    return lines
 
 
 def script_to_dict(lines: list[ScriptLine]) -> list[dict[str, Any]]:

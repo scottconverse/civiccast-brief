@@ -99,6 +99,8 @@ class Fake:
         for name, meta in self.exported.items():
             (out / name).mkdir(parents=True, exist_ok=True)
             (out / name / "item.json").write_text(json.dumps(meta), encoding="utf-8")
+            if "script" in meta:  # the real export writes the desk's script.txt
+                (out / name / "script.txt").write_text(meta["script"], encoding="utf-8")
         return 0
 
     def audio(self, argv):
@@ -297,6 +299,44 @@ def test_publish_builds_each_published_episode_once_with_its_story(tmp_path):
     rerun.exported = fake.exported
     run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
     assert rerun.names() == [("review", "export"), ("site", "build")]
+
+
+def test_a_redrafted_episode_is_built_again_with_audio_from_the_desks_script(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    settings = _settings(tmp_path, site=site)
+    item = {"kind": "episode", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    fake = Fake()
+    fake.exported = {"0001-episode": {**item, "content_hash": "a" * 64, "script": "[S1] hi\n"}}
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    first_audio = next(argv for step, argv in fake.calls if step == "audio")
+
+    # The editor redrafts the script on the desk and publishes it again.
+    redrafted = "[CHAPTER Budget]\n[S1] The council passed the budget.\n[S2] Seven to zero.\n"
+    again = Fake()
+    again.exported = {"0001-episode": {**item, "content_hash": "b" * 64, "script": redrafted}}
+    report = run_week(settings, [COUNCIL_MEETING], LAST, again.steps())
+
+    assert "oWZpzjzjwnE: built episode ep-oWZpzjzjwnE" in report.lines
+    audio = next(argv for step, argv in again.calls if step == "audio")
+    assert Path(audio[0]).read_text(encoding="utf-8") == redrafted
+    assert _opt(audio, "--out") != _opt(first_audio, "--out"), "not the old audio folder"
+    assemble = next(
+        argv for step, argv in again.calls if step == "episode" and argv[0] == "assemble"
+    )
+    assert _opt(assemble, "--audio") == _opt(audio, "--out")
+    script = json.loads(Path(_opt(assemble, "--script")).read_text(encoding="utf-8"))
+    assert [(line["speaker"], line["text"]) for line in script] == [
+        ("CHAPTER", "Budget"),
+        ("S1", "The council passed the budget."),
+        ("S2", "Seven to zero."),
+    ]
 
 
 def test_the_meetings_documents_are_written_passed_to_the_story_and_reported(tmp_path):

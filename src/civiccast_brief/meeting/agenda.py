@@ -22,6 +22,10 @@ GENERIC_WORDS = frozenset(
         "Council", "Mayor", "Member", "Members", "Pro", "Tem", "Ward", "Representative",
         "Staff", "Resident", "Residents", "Speaker", "Chair", "City", "County", "State",
         "Public", "The", "A", "An", "I",
+        # Days and months are dates, not names a caption could mishear.
+        "January", "February", "March", "April", "May", "June", "July", "August",
+        "September", "October", "November", "December",
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
     }
 )  # fmt: skip
 
