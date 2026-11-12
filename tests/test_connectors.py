@@ -395,3 +395,108 @@ def test_supplied_recording_bytes_survive_review_reopen_and_export(tmp_path):
     assert recording in files and capture in files
     assert not (folder / "transcript.json").exists()
     assert not export_published(tmp_path / "review.db", tmp_path / "published").exported
+
+
+def test_configured_native_write_approval_readback_receipt_and_cli(tmp_path, monkeypatch, capsys):
+    from urllib.parse import parse_qs, urlsplit
+
+    from civic_data_connectors.write_adapters import default_adapters
+    from civic_data_connectors.write_transport import WriteResponse
+
+    from civiccast_brief import connectors
+
+    class NativeNetwork:
+        mock = True
+
+        def __init__(self):
+            self.rows = {}
+            self.calls = []
+
+        def send(self, url, *, method, body, headers, byte_limit, deadline_seconds):
+            parsed = urlsplit(url)
+            assert parsed.hostname == "webapi.legistar.com"
+            assert parsed.path.startswith("/v1/fixture-city/Events")
+            assert parse_qs(parsed.query)["token"] == ["synthetic-only"]
+            assert deadline_seconds > 0
+            self.calls.append(method)
+            if method == "POST":
+                row = json.loads(body)
+                row.update(EventId=101, EventRowVersion="AQ==")
+                self.rows["101"] = row
+            else:
+                assert method == "GET"
+                row = self.rows[parsed.path.rsplit("/", 1)[-1]]
+            return WriteResponse(200, json.dumps(row).encode())
+
+    namespace = "//webapi.legistar.com/v1/fixture-city"
+    network = NativeNetwork()
+    engine = create_engine(
+        storage=SQLiteStorage(tmp_path / "state.db"),
+        write_adapters=default_adapters(network),
+    )
+    client = CivicSources(
+        tmp_path,
+        engine=engine,
+        credentials={
+            "legistar": {
+                "namespace": namespace,
+                "token": "synthetic-only",
+                "permissions": ["event:create"],
+            }
+        },
+        writes=True,
+    )
+    config = make_source(
+        "connector",
+        {
+            "provider": "legistar",
+            "url": "https://webapi.legistar.com/v1/fixture-city/events",
+            "namespace": namespace,
+            "bodies": "Council",
+        },
+    )
+    planned = client.plan(
+        config,
+        [
+            {
+                "key": "event-1",
+                "entity": "event",
+                "operation": "create",
+                "fields": {"EventDate": "2026-11-11T00:00:00", "EventBodyId": 4},
+            }
+        ],
+    )
+    assert planned.status == "completed", planned.public_dict()
+    approval = {key: planned.data[key] for key in ("plan_id", "plan_hash")}
+    assert not network.calls
+    with pytest.raises(PermissionError):
+        client.commit(**approval, approved=False)
+    assert client.commit(approval["plan_id"], "0" * 64, approved=True).status == "failed"
+    assert not network.calls
+    done = client.commit(**approval, approved=True)
+    assert done.status == "completed", done.public_dict()
+    assert done.data["mock"] is True
+    assert done.data["live_acceptance"] == "NOT_RUN"
+    assert done.data["items"][0]["readback"]["EventBodyId"] == 4
+    assert client.receipt(approval["plan_id"]).data == done.data
+    assert client.commit(**approval, approved=True).status == "completed"
+    assert network.calls.count("POST") == 1
+    assert "synthetic-only" not in json.dumps(done.public_dict())
+    monkeypatch.setattr(connectors, "CivicSources", lambda *args, **kwargs: client)
+    assert (
+        connectors.main(
+            [
+                "receipt",
+                "--city",
+                str(tmp_path),
+                "--enable-writes",
+                "--plan-id",
+                approval["plan_id"],
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["data"] == done.data
+    client.writes = False
+    with pytest.raises(PermissionError):
+        client.receipt(approval["plan_id"])

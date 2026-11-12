@@ -482,6 +482,12 @@ class CivicSources:
             {"plan_id": plan_id, "plan_hash": plan_hash}, context=context
         )
 
+    def receipt(self, plan_id: str):
+        if not self.writes:
+            raise PermissionError("Provider writes are not explicitly configured.")
+        context = replace(self.context, authorization=frozenset({"write:receipt"}))
+        return self.engine.receipt({"plan_id": plan_id}, context=context)
+
 
 def main(argv=None) -> int:
     """Local source operations, separate from the episode/publication CLI."""
@@ -538,7 +544,7 @@ def main(argv=None) -> int:
         elif args.operation == "search":
             result = client.search(args.phrase)
         elif args.operation == "receipt":
-            result = client.engine.receipt({"plan_id": args.plan_id}, context=client.context)
+            result = client.receipt(args.plan_id)
         elif args.operation == "commit":
             result = client.commit(
                 args.plan_id,
