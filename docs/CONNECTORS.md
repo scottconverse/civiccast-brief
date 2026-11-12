@@ -1,6 +1,6 @@
 # QuorumRelay in CivicCast Brief
 
-The candidate pins `quorumrelay==0.1.0.dev7` to the included wheel, SHA-256 `6b39f51174b2988a4240e1b7beb9d5c41dc731cc0826dbbaf0042827e410a44c`, built from core commit `de6204e1861e27af366cdc9973cf52ce53276add`. The lockfile records that exact hash. The package retains 31 provider families and 34 baseline source/input pairs; those counts are parsing coverage, not a claim that every provider has complete live discovery, native search, export or writes.
+The candidate pins `quorumrelay==0.1.0.dev8` to the included wheel, SHA-256 `bcfe691b4d1eb0de162f5f94985d0242a97b5d3d89bd5eeb9306d1ef28caf692`, built from core commit `3862e5f4ad7064aee722e09bb438899c3566477f`. The lockfile records that exact hash. The package retains 31 provider families and 34 baseline source/input pairs; those counts are parsing coverage, not a claim that every provider has complete live discovery, native search, export or writes.
 
 ## Account read fields and limits
 
@@ -30,4 +30,6 @@ The connector CLI supports discover/search/export/plan/commit/receipt; account f
 
 Provider writes are disabled unless the operator explicitly enables the separate controls (`--connector-writes` on the desk or `--enable-writes` on the connector CLI) with suitable private server policy. Planning does not mutate; commit requires the exact reviewed plan hash, and ingestion does not call commit. Receipt retrieval uses the same explicitly enabled write controls and current provider credential authorization. A configured synthetic native-adapter check covers plan, producer/hash guards, commit/readback, duplicate suppression and receipt retrieval; live test-tenant acceptance remains not run. Source evidence enters review with checks incomplete; approval and existing publication flows are unchanged.
 
-The dev7 package retains the original formats and adds bounded current public layouts/search forms, with 28 additive parser hooks. These apply to evidenced source routes and preserve partial coverage, unknown fields and mixed record kinds; they do not establish complete upstream catalogs or live vendor write acceptance. The unchanged application review, durable record, restart and export workflows retain their earlier acceptance evidence; the exact dev7 installed checks are recorded separately.
+The dev8 package retains the original formats and adds bounded current public layouts/search forms, with 28 additive parser hooks. These apply to evidenced source routes and preserve partial coverage, unknown fields and mixed record kinds; they do not establish complete upstream catalogs or live vendor write acceptance. The unchanged application review, durable record, restart and export workflows retain their earlier acceptance evidence; the exact dev8 installed checks are recorded separately.
+
+Dev8 corrects stale implementation labels for already-implemented routes. Executable SDK modules equal dev7 except the version label and capability data; existing dev7 application-workflow evidence is reused with targeted installed version/capability checks. This metadata correction does not promote complete catalog or live write acceptance.
