@@ -107,7 +107,7 @@ _WORD = re.compile(r"[A-Za-z']+")
 
 #: The words that introduce an agenda item number in speech (spec 10.2).
 _AFTER_ITEM_MARKER = re.compile(
-    r"\b(?:agenda\s+)?items?\s+(?P<reference>[^\s]+(?:\s+[^\s]+){0,2})",
+    r"\b(?:(?:agenda\s+)?items?|agenda\s+is\s+number)\s+(?P<reference>[^\s]+(?:\s+[^\s]+){0,2})",
     re.IGNORECASE,
 )
 

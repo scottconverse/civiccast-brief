@@ -93,12 +93,16 @@ _RULE_TITLE = 3
 #: captioner breaks across lines counts only after one of these, because the
 #: chair reading the rules names item titles across lines too ("speak during
 #: first call public invited / to be heard") without reaching any item.
+#: Longmont's boards also say "up next is", "moving on." and "I will open up
+#: the public invited to be heard" (Oct 21 and Nov 5, 2026).
 _TRANSITION_CUE = re.compile(
     r"\b(?:(?:now|move|moving|go|going|turn|turning)\s+on\s+to|"
     r"(?:move|moving|go|going|turn|turning)\s+to|"
+    r"moving\s+on|"
+    r"open(?:ing)?\s+up|"
     r"(?:first|next)\s+item(?:\s+(?:for|of)\s+(?:discussion|business))?"
     r"(?:\s+(?:will\s+be|is))?|"
-    r"next\s+up(?:\s+is)?)\b",
+    r"(?:next\s+up|up\s+next)(?:\s+is)?)\b",
     re.IGNORECASE,
 )
 
@@ -437,7 +441,29 @@ def _announced_title_candidates(
             if next_cue is not None:
                 break
         said: set[str] = set().union(*(words for _, words, _ in stretch))
+        # "Next up on the agenda is number / eight": the number ends the cue's
+        # line and is said on the next. Only a number that starts on the cue's
+        # own line counts; a later line's "item A" is found on that line.
+        first_line = len(stretch[0][2])
+        references = [
+            reference
+            for reference in find_item_references(" ".join(text for _, _, text in stretch))
+            if reference.start < first_line
+        ]
         for item in items:
+            if (item.index, segment.start_ms) not in already and any(
+                _matches_reference(item, reference) for reference in references
+            ):
+                named = next(ref for ref in references if _matches_reference(item, ref))
+                found.append(
+                    _Boundary(
+                        item_index=item.index,
+                        start_ms=segment.start_ms,
+                        matched_text=named.text,
+                        rule=_RULE_ITEM_NUMBER,
+                    )
+                )
+                continue
             reading = item.announced_reading(said, settings)
             if reading is None:
                 continue

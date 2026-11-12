@@ -617,3 +617,70 @@ def test_an_announced_title_starts_where_its_words_start_and_stops_at_the_next_c
 
     assert _item(result, "7.").start_ms == 215_200
     assert _item(result, "8.").start_ms == 219_280
+
+
+# -- The Longmont boards' own wording, Oct 21 and Nov 5, 2026 (live-m1i) ---------
+#
+# Each was announced aloud and left unplaced before these cues were known. The
+# captions are verbatim from the boards' YouTube videos.
+
+
+def test_up_next_is_a_cue_as_well_as_next_up() -> None:
+    """Sustainability Advisory Board, Oct 21, 2026 (nYT8LOdpskY), 4227.4 s."""
+    items = [_fixture_item("12.b", "November Agenda Review", video_s=7200)]
+    transcript = (
+        segment(4224.72, ">> Thank you. Thank you."),
+        segment(4227.36, ">> Um and then up next is the uh November"),
+        segment(4230.76, "agenda review?"),
+    )
+    result = _align(items, transcript, duration_ms=TWO_HOURS_MS)
+
+    assert _item(result, "12.b").method == SPOKEN_TRANSITIONS
+    assert _item(result, "12.b").start_ms == 4_227_360
+
+
+def test_moving_on_without_to_is_a_cue() -> None:
+    """Planning and Zoning Commission, Oct 21, 2026, 8809.4 s."""
+    items = [_fixture_item("11.", "Items from the Council Representative", video_s=10800)]
+    transcript = (
+        segment(8807.6, "talk about?"),
+        segment(8809.439, "Okay, moving on. Um items from council"),
+        segment(8812.56, "representative Popkins is not here. So,"),
+    )
+    result = _align(items, transcript, duration_ms=10_800_000)
+
+    assert _item(result, "11.").start_ms == 8_809_439
+
+
+def test_opening_up_an_item_is_a_cue() -> None:
+    """Historic Preservation Commission, Nov 5, 2026, 588.2 s."""
+    items = [
+        _fixture_item("6.", "Public Invited to be Heard – for topics other than public hearings"),
+    ]
+    transcript = (
+        segment(585.997, "Um"),
+        segment(588.197, "I will open up the public invited to be"),
+        segment(590.497, "heard."),
+        segment(591.797, "And seeing no one in the audience, um"),
+    )
+    result = _align(items, transcript)
+
+    assert _item(result, "6.").start_ms == 588_197
+
+
+def test_the_agenda_is_number_eight_names_item_eight_across_two_lines() -> None:
+    """Planning and Zoning Commission, Oct 21, 2026, 535.3 s: the number ends one line."""
+    items = [
+        _fixture_item("7.", "Agenda Revisions"),
+        _fixture_item("8.", "Public Hearings The following are public hearing items:"),
+    ]
+    transcript = (
+        segment(533.44, ">> Thank you."),
+        segment(535.279, "Okay. Next up on the agenda is number"),
+        segment(538.72, "eight, public hearings. This is public"),
+        segment(541.12, "hearing item 8A, a citizen initiated"),
+    )
+    result = _align(items, transcript)
+
+    assert _item(result, "8.").method == SPOKEN_TRANSITIONS
+    assert _item(result, "8.").start_ms == 535_279
