@@ -194,6 +194,12 @@ class Episode:
     article: Article | None = None
 
     @property
+    def meeting_name(self) -> str:
+        """The meeting title without a trailing date that repeats the meeting day:
+        "City Council Regular Session - 03 November 2026" is "City Council Regular Session"."""
+        return _without_day(self.meeting_title, self.meeting_date)
+
+    @property
     def display_headline(self) -> str:
         """The story headline (the article's when there is one), with a SAMPLE label on test renders."""
         headline = self.article.headline if self.article is not None else self.headline
@@ -633,6 +639,31 @@ def _audio(check: _Checker, data: dict[str, Any]) -> Audio | None:
     return Audio(url=url, duration_s=duration, bytes=int(size), type=kind)
 
 
+#: What can sit between a meeting's name and the date after it: "Session - 03 November 2026",
+#: "City Council on 2026-10-06 3:30 PM".
+_DAY_SEPARATOR = re.compile(r"\s+(?:[-\u2013\u2014|:]|on)\s+|,\s+", re.IGNORECASE)
+_CLOCK = re.compile(r"\s+\d{1,2}:\d{2}\s*[AP]M\s*$", re.IGNORECASE)
+_DAY_FORMATS = ("%d %B %Y", "%B %d %Y", "%B %d, %Y", "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y")
+
+
+def _is_day(text: str, day: date) -> bool:
+    text = _CLOCK.sub("", text).strip()
+    for form in _DAY_FORMATS:
+        try:
+            if datetime.strptime(text, form).date() == day:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _without_day(title: str, day: date) -> str:
+    for separator in _DAY_SEPARATOR.finditer(title):
+        if separator.start() > 0 and _is_day(title[separator.end() :], day):
+            return title[: separator.start()].rstrip()
+    return title
+
+
 def _chapters(check: _Checker, data: dict[str, Any]) -> tuple[Chapter, ...]:
     raw = data.get("chapters", [])
     if not isinstance(raw, list):
@@ -647,7 +678,8 @@ def _chapters(check: _Checker, data: dict[str, Any]) -> tuple[Chapter, ...]:
         start = check.seconds(item, "start", where_label=f"{label}.start")
         title = check.text(item, "title", limit=160)
         if start is not None and title:
-            chapters.append(Chapter(start=start, title=title))
+            # Titles written before 2026-11-11 can start in lower case ("public comment").
+            chapters.append(Chapter(start=start, title=title[0].upper() + title[1:]))
     return tuple(chapters)
 
 

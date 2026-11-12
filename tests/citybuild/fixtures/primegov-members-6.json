@@ -1,0 +1,128 @@
+[
+ {
+  "id": 814,
+  "serviceStart": "2025-01-01T00:00:00",
+  "serviceEnd": "2029-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - 1",
+  "positionSubtitle": "",
+  "person": {
+   "firstName": "Amy",
+   "middleName": "",
+   "lastName": "Saunders",
+   "fullName": "Amy Saunders",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 813,
+  "serviceStart": "2024-12-18T00:00:00",
+  "serviceEnd": "2027-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - 4",
+  "positionSubtitle": "Vice Chair",
+  "person": {
+   "firstName": " Harrison",
+   "middleName": null,
+   "lastName": "Earl",
+   "fullName": " Harrison Earl",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 542,
+  "serviceStart": "2022-01-01T00:00:00",
+  "serviceEnd": "2026-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - 6",
+  "positionSubtitle": "Chair",
+  "person": {
+   "firstName": " Michael",
+   "middleName": null,
+   "lastName": "Polan",
+   "fullName": " Michael Polan",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 867,
+  "serviceStart": "2025-12-17T00:00:00",
+  "serviceEnd": "2026-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - Alt 1",
+  "positionSubtitle": "Alternate Board Member",
+  "person": {
+   "firstName": "Ryan",
+   "middleName": "",
+   "lastName": "Forbes",
+   "fullName": "Ryan Forbes",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 817,
+  "serviceStart": "2025-01-01T00:00:00",
+  "serviceEnd": "2026-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - Alt 3",
+  "positionSubtitle": "Alternate Board Member",
+  "person": {
+   "firstName": "Liang \"Warren\"<br>",
+   "middleName": "",
+   "lastName": "Wang",
+   "fullName": "Liang \"Warren\"<br> Wang",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 900,
+  "serviceStart": "2019-01-01T00:00:00",
+  "serviceEnd": "2024-12-31T00:00:00",
+  "vacated": false,
+  "vacatedPosition": false,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - 8",
+  "positionSubtitle": "",
+  "person": {
+   "firstName": "Pat",
+   "middleName": "",
+   "lastName": "Former",
+   "fullName": "Pat Former",
+   "email": "member@example.org"
+  }
+ },
+ {
+  "id": 901,
+  "serviceStart": "2025-01-01T00:00:00",
+  "serviceEnd": "2029-12-31T00:00:00",
+  "vacated": true,
+  "vacatedPosition": true,
+  "committeeId": 6,
+  "committeeName": "Planning and Zoning Commission",
+  "positionName": "Board Member - 9",
+  "positionSubtitle": "",
+  "person": {
+   "firstName": "",
+   "middleName": "",
+   "lastName": "",
+   "fullName": " ",
+   "email": "member@example.org"
+  }
+ }
+]

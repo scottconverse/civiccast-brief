@@ -2,7 +2,8 @@
 
 Some city record sites answer a plain HTTP client with 403 but open for anyone in a browser
 (Louisville's Laserfiche WebLink, checked on 2026-11-11). This opens the Google Chrome installed
-on this computer, in a window you can see, as it is: no stealth patches, no changed browser name,
+on this computer, as it is (its window starts minimized, on the taskbar, so it does not
+pop up over your work): no stealth patches, no changed browser name,
 no answering of challenges. It opens pages and downloads files the way a person's browser does. If
 a site still stops Chrome, the read fails and says so.
 
@@ -100,6 +101,19 @@ def kind_of_file(content: bytes) -> str:
     return "application/octet-stream"
 
 
+def _minimize(page: Any, log: Any) -> None:
+    """Minimize the page's window, so reads do not pop a window up over the user's work. It is
+    still the same headed Chrome. If Chrome will not minimize, the window stays open."""
+    try:
+        cdp = page.context.new_cdp_session(page)
+        window = cdp.send("Browser.getWindowForTarget")["windowId"]
+        cdp.send(
+            "Browser.setWindowBounds", {"windowId": window, "bounds": {"windowState": "minimized"}}
+        )
+    except Exception as exc:  # noqa: BLE001 - a window left open is not a failed read
+        log(f"Chrome's window could not be minimized, so it stays open: {exc}")
+
+
 class Chrome:
     """The installed Google Chrome, opened on first use and closed by :meth:`close`."""
 
@@ -129,6 +143,7 @@ class Chrome:
             raise FetchError(f"Google Chrome could not be opened: {exc}") from exc
         self._page = self._browser.new_page()
         self._page.set_default_timeout(TIMEOUT_MS)
+        _minimize(self._page, self._log)
         self._log("opened Google Chrome to read pages that open only in a browser")
         return self._page
 

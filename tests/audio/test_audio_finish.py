@@ -212,3 +212,9 @@ def test_silent_program_cannot_be_normalised(tmp_path: Path) -> None:
     run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "2", str(silent)])
     with pytest.raises(FinishError, match="silent"):
         normalize_loudness(silent, tmp_path / "out.wav")
+
+
+def test_a_chapter_mark_title_starts_with_a_capital_letter() -> None:
+    """The model sometimes writes a chapter title in lower case; the title is shown, not spoken."""
+    script = Script((Line(1, "S1", "a"),), (Chapter("public comment", 0),))
+    assert [mark.title for mark in chapter_marks(script, [0.0])] == ["Public comment"]
