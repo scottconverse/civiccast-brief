@@ -93,17 +93,31 @@ _RULE_TITLE = 3
 #: captioner breaks across lines counts only after one of these, because the
 #: chair reading the rules names item titles across lines too ("speak during
 #: first call public invited / to be heard") without reaching any item.
+#: Longmont's boards also say "up next is", "moving on." and "I will open up
+#: the public invited to be heard" (Oct 21 and Nov 5, 2026).
 _TRANSITION_CUE = re.compile(
     r"\b(?:(?:now|move|moving|go|going|turn|turning)\s+on\s+to|"
     r"(?:move|moving|go|going|turn|turning)\s+to|"
+    r"moving\s+on|"
+    r"open(?:ing)?\s+up|"
+    r"start(?:ing)?\s+with|"
+    r"turn(?:ing)?\s+it\s+over\s+to|"
     r"(?:first|next)\s+item(?:\s+(?:for|of)\s+(?:discussion|business))?"
     r"(?:\s+(?:will\s+be|is))?|"
-    r"next\s+up(?:\s+is)?)\b",
+    r"(?:next\s+up|up\s+next)(?:\s+is)?)\b",
     re.IGNORECASE,
 )
 
 #: The agenda's notes in brackets, which a chair does not read out.
 _BRACKETED_NOTE = re.compile(r"\([^)]*\)")
+
+#: The speaking-time note some agendas print after a title without brackets,
+#: such as "Public Comment Comments are limited to 5 minutes per speaker"
+#: (Longmont boards, 2026). The chair does not read it out either.
+_TIME_LIMIT_NOTE = re.compile(
+    r"\b(?:comments?\s+(?:are\s+)?)?limited\s+to\s+\S+\s+minutes?(?:\s+per\s+speaker)?",
+    re.IGNORECASE,
+)
 
 #: A dash between two parts of a title: a hyphen with spaces round it, or an
 #: en or em dash, which the Longmont agendas use.
@@ -143,6 +157,7 @@ class AlignmentSettings:
     title_min_words: int = 2
     identifier_kind_window_words: int = 4
     title_window_s: float = 15.0
+    short_title_reach_words: int = 8
 
 
 @dataclass(frozen=True)
@@ -236,6 +251,7 @@ class _Item:
     parts: tuple[str, ...]
     title_words: tuple[str, ...]
     announced_titles: tuple[tuple[str, ...], ...]
+    short_titles: tuple[tuple[str, ...], ...]
     identifiers: dict[tuple[int, int], str | None]
     agenda_seconds: int | None
     video_time_status: str
@@ -305,14 +321,39 @@ def _announced_titles(title: str) -> tuple[tuple[str, ...], ...]:
     "Public Invited to be Heard - for topics other than public hearings", is
     announced by either side, so each side is offered on its own as well.
     """
-    plain = _BRACKETED_NOTE.sub(" ", title)
-    readings: dict[tuple[str, ...], None] = {significant_words(plain): None}
-    for side in _TITLE_DASH.split(plain):
+    readings: dict[tuple[str, ...], None] = {}
+    for side in _title_sides(title):
         readings.setdefault(significant_words(side), None)
     return tuple(words for words in readings if words)
 
 
-def _build_item(index: int, item: AgendaItem) -> _Item:
+def _title_sides(title: str) -> tuple[str, ...]:
+    """The title without the notes a chair skips, then each side of its dash."""
+    plain = _TIME_LIMIT_NOTE.sub(" ", _BRACKETED_NOTE.sub(" ", title))
+    return (plain, *_TITLE_DASH.split(plain))
+
+
+def _short_titles(title: str, settings: AlignmentSettings) -> tuple[tuple[str, ...], ...]:
+    """Titles too short for the word rule, such as "Roll Call" or "New Business", as phrases.
+
+    Spec 10.2 counts only words over four letters, so "Roll Call" has none and
+    "Final Call" has one. Such a title is kept as its whole run of words, and
+    it only counts when the chair says that run, in order, right after a
+    transition cue ("start with the roll call", "move on to new business").
+    """
+    phrases: dict[tuple[str, ...], None] = {}
+    for side in _title_sides(title):
+        if len(significant_words(side, min_length=settings.title_min_word_length)) >= (
+            settings.title_min_words
+        ):
+            continue
+        phrase = words_of(side)
+        if len(phrase) >= 2:
+            phrases.setdefault(phrase, None)
+    return tuple(phrases)
+
+
+def _build_item(index: int, item: AgendaItem, settings: AlignmentSettings) -> _Item:
     """Work out an agenda item's number parts, title words and identifiers once."""
     identifiers: dict[tuple[int, int], str | None] = {}
     for identifier in find_identifiers(item.title):
@@ -324,6 +365,7 @@ def _build_item(index: int, item: AgendaItem) -> _Item:
         parts=_item_parts(item.number),
         title_words=significant_words(item.title),
         announced_titles=_announced_titles(item.title),
+        short_titles=_short_titles(item.title, settings),
         identifiers=identifiers,
         agenda_seconds=item.video_seconds,
         video_time_status=item.video_time_status,
@@ -437,9 +479,48 @@ def _announced_title_candidates(
             if next_cue is not None:
                 break
         said: set[str] = set().union(*(words for _, words, _ in stretch))
+        # Every word from the cue on, in order, with the line it was said on.
+        spoken = [
+            (line, word) for line, (_, _, text) in enumerate(stretch) for word in words_of(text)
+        ]
+        # "Next up on the agenda is number / eight": the number ends the cue's
+        # line and is said on the next. Only a number that starts on the cue's
+        # own line counts; a later line's "item A" is found on that line.
+        first_line = len(stretch[0][2])
+        references = [
+            reference
+            for reference in find_item_references(" ".join(text for _, _, text in stretch))
+            if reference.start < first_line
+        ]
         for item in items:
+            if (item.index, segment.start_ms) not in already and any(
+                _matches_reference(item, reference) for reference in references
+            ):
+                named = next(ref for ref in references if _matches_reference(item, ref))
+                found.append(
+                    _Boundary(
+                        item_index=item.index,
+                        start_ms=segment.start_ms,
+                        matched_text=named.text,
+                        rule=_RULE_ITEM_NUMBER,
+                    )
+                )
+                continue
             reading = item.announced_reading(said, settings)
             if reading is None:
+                first_short = _short_title_line(item, spoken, settings)
+                if first_short is None:
+                    continue
+                start_ms = stretch[first_short][0]
+                if (item.index, start_ms) not in already:
+                    found.append(
+                        _Boundary(
+                            item_index=item.index,
+                            start_ms=start_ms,
+                            matched_text=" ".join(t.strip() for _, _, t in stretch[first_short:]),
+                            rule=_RULE_TITLE,
+                        )
+                    )
                 continue
             first = next(i for i, (_, words, _) in enumerate(stretch) if words & set(reading))
             start_ms = stretch[first][0]
@@ -455,6 +536,25 @@ def _announced_title_candidates(
                 )
             )
     return found
+
+
+def _short_title_line(
+    item: _Item, spoken: Sequence[tuple[int, str]], settings: AlignmentSettings
+) -> int | None:
+    """The line a short title starts on, if the chair says it right after the cue.
+
+    ``spoken`` starts with the cue's own words. The title's words must be said
+    in order, with nothing between them, and start within
+    ``short_title_reach_words`` words of the cue, so "turn it over to Jean for
+    roll call" counts and a "roll call" said later in the stretch does not.
+    """
+    words = [word for _, word in spoken]
+    for phrase in item.short_titles:
+        size = len(phrase)
+        for start in range(min(settings.short_title_reach_words, len(words) - size + 1)):
+            if tuple(words[start : start + size]) == phrase:
+                return spoken[start][0]
+    return None
 
 
 @dataclass(frozen=True)
@@ -750,7 +850,7 @@ def align_agenda_with_transcript(
         start and carries a plain reason.
     """
     active = settings or AlignmentSettings()
-    items = [_build_item(index, item) for index, item in enumerate(agenda_items)]
+    items = [_build_item(index, item, active) for index, item in enumerate(agenda_items)]
     transcript = list(segments)
 
     taken, dropped = _spoken_boundaries(items, transcript, active)
