@@ -747,11 +747,18 @@ _MONTH_NUMBERS = {
         start=1,
     )
 }
+#: "Oct. 21, 2026", as Longmont's channel titles its boards' meetings.
+_MONTH_NUMBERS |= {
+    short: _MONTH_NUMBERS[name]
+    for name in list(_MONTH_NUMBERS)
+    for short in (("sept", "sep") if name == "september" else (name[:3],))
+    if short != name
+}
 _MONTH = "|".join(_MONTH_NUMBERS)
 #: "November 3, 2026" and "3 November 2026", the two spellings the Longmont
 #: channels title a sitting with, and "11/3/26" from the portal's own titles.
-_MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
-_DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\s+(\d{{4}})\b", re.IGNORECASE)
+_MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\.?\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
+_DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\.?\s+(\d{{4}})\b", re.IGNORECASE)
 #: "11/3/26", and "11-09-26" as Boulder's channel titles its boards' meetings.
 _SLASH_DATE = re.compile(r"\b(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})\b")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")

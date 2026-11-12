@@ -53,6 +53,9 @@ def test_seconds_of_rejects_other_forms():
         ("City Council Regular Session 06/23/26", "June 23, 2026"),
         ("City Council Regular Session - 08/25/2026", "August 25, 2026"),
         ("Planning and Zoning Commission 9/16/26", "September 16, 2026"),
+        # Longmont's two channels, 2026-10-21: the weekly run found these and this step stopped.
+        ("Sustainability Advisory Board Meeting Oct. 21, 2026", "October 21, 2026"),
+        ("Sustainability Advisory Board - October 21, 2026", "October 21, 2026"),
         ("Town Hall about parking", None),
     ],
 )

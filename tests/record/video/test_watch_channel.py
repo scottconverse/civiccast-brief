@@ -1018,6 +1018,15 @@ def test_a_title_day_is_read_with_dashes_as_boulder_writes_it() -> None:
     assert title_day("2026-11-04 to 11-09-26") is None  # two days name no one sitting
 
 
+def test_a_title_day_is_read_with_a_short_month_as_longmont_writes_it() -> None:
+    # Longmont's channel, 2026-10-21: the weekly run passed this meeting over.
+    assert title_day("Sustainability Advisory Board Meeting Oct. 21, 2026") == date(2026, 10, 21)
+    assert title_day("Board Meeting Sept 9, 2026") == date(2026, 9, 9)
+    assert title_day("Board Meeting Sep. 9, 2026") == date(2026, 9, 9)
+    assert title_day("Board Meeting 4 Dec 2026") == date(2026, 12, 4)
+    assert title_day("Marching Band Concert 21, 2026") is None
+
+
 def test_yt_dlps_own_date_spelling_is_read() -> None:
     """yt-dlp spells an upload date ``20261103``; that is a day, not "unreadable"."""
     assert published_day("20261103") == date(2026, 11, 3)

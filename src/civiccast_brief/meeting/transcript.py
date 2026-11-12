@@ -111,28 +111,21 @@ def from_json(data: dict[str, Any]) -> list[Segment]:
     ]
 
 
-_MONTHS = {
-    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6, "july": 7,
-    "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
-}  # fmt: skip
+_MONTH_NAMES = (
+    "January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December",
+)  # fmt: skip
 
 
 def meeting_date_from_title(title: str) -> str | None:
     """Read the date out of a city meeting title, e.g. "City Council Regular Session - 20 October
-    2026" or "City Council Regular Session 06/23/26". Returns "October 20, 2026" or None."""
-    match = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", title)
-    if match and match.group(2).lower() in _MONTHS:
-        day, month, year = int(match.group(1)), _MONTHS[match.group(2).lower()], int(match.group(3))
-        return _long_date(year, month, day)
-    match = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", title)
-    if match:
-        month, day, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        if year < 100:
-            year += 2000
-        return _long_date(year, month, day)
-    return None
+    2026", "Sustainability Advisory Board Meeting Oct. 21, 2026" or "City Council Regular Session
+    06/23/26". Returns "October 20, 2026" or None.
 
+    The same reader the channel watch dates a video with, so a video the weekly run finds is a
+    video this step can date.
+    """
+    from civiccast_brief.record.video.watch import title_day
 
-def _long_date(year: int, month: int, day: int) -> str:
-    names = [name for name, number in _MONTHS.items() if number == month]
-    return f"{names[0].capitalize()} {day}, {year}"
+    day = title_day(title)
+    return None if day is None else f"{_MONTH_NAMES[day.month - 1]} {day.day}, {day.year}"
