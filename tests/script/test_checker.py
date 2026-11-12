@@ -101,6 +101,15 @@ def test_digits_in_spoken_text_fail():
     assert (4, "digits") in errors_by_code(lines)
 
 
+def test_a_chapter_title_is_shown_not_spoken_so_it_may_use_digits():
+    lines = good_script()
+    lines[2] = ScriptLine("CHAPTER", "Ordinance 2026-69", ("c02",))
+    assert check_script(RECAP, lines).passed
+    # Its numbers must still be in the cited claim.
+    lines[2] = ScriptLine("CHAPTER", "Ordinance 2026-70", ("c02",))
+    assert (3, "number") in errors_by_code(lines)
+
+
 def test_unknown_claim_id_fails():
     lines = good_script()
     lines[3] = ScriptLine(
