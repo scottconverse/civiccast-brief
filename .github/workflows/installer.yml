@@ -1,0 +1,54 @@
+name: Installer
+
+# Runs install.ps1 on a fresh Windows machine, then starts the editor desk it set up.
+# Only changes that can break the install start it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install.ps1'
+      - 'install.cmd'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/installer.yml'
+  pull_request:
+    paths:
+      - 'install.ps1'
+      - 'install.cmd'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/installer.yml'
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: What the machine has before
+        shell: powershell
+        run: |
+          foreach ($t in 'uv', 'python', 'ffmpeg', 'ffprobe', 'winget') {
+            $c = Get-Command $t -ErrorAction SilentlyContinue
+            "${t}: $(if ($c) { $c.Source } else { 'none' })"
+          }
+          $PSVersionTable.PSVersion.ToString()
+      - name: Install (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+      - name: The desk starts, and a new shell finds the tools
+        shell: powershell
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          foreach ($t in 'uv', 'ffmpeg', 'ffprobe') { if (-not (Get-Command $t -ErrorAction SilentlyContinue)) { throw "$t is not on PATH" } }
+          if (-not (Test-Path desk.cmd)) { throw 'desk.cmd was not written' }
+          $py = Join-Path $PWD '.venv\Scripts\python.exe'
+          $desk = Start-Process -PassThru -FilePath $py -ArgumentList '-m', 'civiccast_brief.review', 'serve', '--db', "$env:RUNNER_TEMP\desk.db"
+          $ok = $false
+          for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
+            Start-Sleep 2
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/; $ok = $r.StatusCode -eq 200 } catch { }
+          }
+          Stop-Process -Id $desk.Id -Force
+          if (-not $ok) { throw 'the editor desk did not answer on 127.0.0.1:8765' }
+          "desk: HTTP 200"

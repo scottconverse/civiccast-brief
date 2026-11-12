@@ -72,6 +72,13 @@ Four related projects by the same author sit alongside this one:
 
 Full test fleet and GPU notes are in [PLAN.md](PLAN.md).
 
+## Install
+
+On Windows, double-click `install.cmd`, or run
+`powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"`.
+It installs the program and the tools it runs, then says what is still missing (Chrome, Ollama).
+See [Install](docs/set-up-a-city.md#install).
+
 ## Build order
 
 The build runs in eleven phases. Each phase is listed in [PLAN.md](PLAN.md) with its done-when check.
