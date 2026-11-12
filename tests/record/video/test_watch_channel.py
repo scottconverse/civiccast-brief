@@ -63,6 +63,7 @@ from civiccast_brief.record.video.watch import (
     ZERO_VIDEOS_NOTE,
     published_day,
     register,
+    title_day,
 )
 from civiccast_brief.record.video.youtube.classify import MeetingClassifier
 from civiccast_brief.record.video.youtube.ladder import ListingLadder
@@ -990,6 +991,31 @@ def test_an_undated_channel_video_is_linked_by_the_date_in_its_title(
 
     assert watch.row("jhsFsEz0P5A").meeting_id == meeting
     assert watch.row("CWsUv1L4vAU").meeting_id != meeting, "the study session is its own sitting"
+
+
+def test_a_video_posted_after_its_meeting_day_is_linked_by_the_day_its_title_names(
+    db_path: Path, conn: sqlite3.Connection, world: World
+) -> None:
+    """A meeting's video goes up the next day (in UTC) or weeks later; its title names the day."""
+    meeting = world.meeting(world.body_id, "2026-09-22T19:00:00", "City Council Regular Session")
+    earlier = world.meeting(world.body_id, "2026-09-08T19:00:00", "City Council Regular Session")
+    source = world.channel()
+    videos = [
+        listed("jhsFsEz0P5A", "City Council Regular Session - September 22, 2026", "2026-09-23T05:56:35Z"),
+        listed("CWsUv1L4vAU", "09-08-26 City Council Regular Session", "2026-09-29T19:59:30Z"),
+    ]  # fmt: skip
+    watch = Watch(db_path, conn, ladder=ListingLadder(rss=StubLister(videos)))
+
+    watch.watch(source, from_date="2026-09-01")
+
+    assert watch.row("jhsFsEz0P5A").meeting_id == meeting
+    assert watch.row("CWsUv1L4vAU").meeting_id == earlier
+
+
+def test_a_title_day_is_read_with_dashes_as_boulder_writes_it() -> None:
+    assert title_day("11-09-26 Police Oversight Panel Meeting") == date(2026, 11, 9)
+    assert title_day("11/02/26 City Council Meeting") == date(2026, 11, 2)
+    assert title_day("2026-11-04 to 11-09-26") is None  # two days name no one sitting
 
 
 def test_yt_dlps_own_date_spelling_is_read() -> None:
