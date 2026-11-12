@@ -18,7 +18,12 @@ from pathlib import Path
 
 from civiccast_brief import models
 from civiccast_brief.script import llm
-from civiccast_brief.script.checker import check_script, drop_unsupported, model_check
+from civiccast_brief.script.checker import (
+    check_script,
+    drop_empty_chapters,
+    drop_unsupported,
+    model_check,
+)
 from civiccast_brief.script.recap import load_recap, save_recap
 from civiccast_brief.script.roundup import RoundupError, combine
 from civiccast_brief.script.writer import (
@@ -72,6 +77,9 @@ def _write(args: argparse.Namespace) -> int:
     ) as exc:
         print(f"write failed: {exc}", file=sys.stderr)
         return 1
+    lines, marks = drop_empty_chapters(lines)
+    for mark in marks:
+        print(f"dropped empty chapter: {mark.text}")
     json_path = args.out.with_suffix(".json")
     save_script(lines, args.out, json_path)
     report = check_script(recap, lines)

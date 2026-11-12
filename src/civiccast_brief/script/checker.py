@@ -485,6 +485,11 @@ def _check_structure(
                     f"the last line must be Theo's closing line pointing to the city's {video_place}",
                 )
             )
+    for number, line in enumerate(lines, 1):
+        if line.is_chapter and (number == len(lines) or lines[number].is_chapter):
+            issues.append(
+                Issue(number, "error", "empty_chapter", "a chapter with no spoken line in it")
+            )
     previous = None
     for number, line in enumerate(lines, 1):
         if line.is_chapter:
@@ -499,6 +504,23 @@ def _check_structure(
 
 
 _DROPPABLE = frozenset({"uncited", "number", "name", "digits", "unknown_claim"})
+
+
+def drop_empty_chapters(lines: list[ScriptLine]) -> tuple[list[ScriptLine], list[ScriptLine]]:
+    """Remove each chapter mark with no spoken line before the next chapter or the end.
+
+    The audio cannot place such a mark (it starts at no line). A roundup is asked for a chapter
+    per meeting and per item, so its writer often puts two marks together. Only marks go, so no
+    spoken word changes. Returns (kept lines, dropped marks)."""
+    kept: list[ScriptLine] = []
+    dropped: list[ScriptLine] = []
+    for index, line in enumerate(lines):
+        following = lines[index + 1] if index + 1 < len(lines) else None
+        if line.is_chapter and (following is None or following.is_chapter):
+            dropped.append(line)
+        else:
+            kept.append(line)
+    return kept, dropped
 
 
 def drop_unsupported(
