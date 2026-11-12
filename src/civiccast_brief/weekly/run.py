@@ -34,7 +34,6 @@ from pathlib import Path
 from typing import Any
 
 from civiccast_brief.review.store import ReviewStore
-from civiccast_brief.script.checker import drop_empty_chapters
 from civiccast_brief.script.writer import (
     ROUNDUP_ID,
     ScriptFormatError,
@@ -382,9 +381,6 @@ def _desk_script(
         lines = parse_txt(words)
     except ScriptFormatError as exc:
         raise StepFailed(f"the desk's script cannot be spoken: {exc}") from exc
-    # A chapter mark with no line in it cannot be placed in the audio (seen in the
-    # 3 November 2026 roundup); dropping it changes no spoken word.
-    lines, _ = drop_empty_chapters(lines)
     save_script(lines, desk / "script.txt", desk / "script.json")
     return desk / "script.txt", desk / "script.json", desk / "audio"
 
