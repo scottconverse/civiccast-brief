@@ -28,7 +28,7 @@ The list is fixed at 22 items. An item is done only when it is shown, not claime
 | 19 | Runs on other machines: installer (old item 27) | open | |
 | 20 | Someone else sets up a city (old item 28) | open | |
 | 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | open | |
-| 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | open | |
+| 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | done | Rows 13, 15, 16, 17 below set to live from the 2026-11-11 curl checks |
 
 # Goal: finish CivicCast Brief, 28 items A to F (set by Scott, 2026-11-09)
 
@@ -62,11 +62,11 @@ Scott's decisions, 2026-11-09:
 | 10 | Model picker per task (Claude `claude -p` for Council, DeepSeek for boards) | merged, not shown live for boards | #4 and #9. models.json: Claude for City Council, DeepSeek for other bodies. Council runs used claude -p live; no live board run yet |
 | 11 | Editor desk: review, edit, redraft, hold, kill, publish; auto-publish allowed | merged, partly shown | #4. One story walked staged to Publish in the desk UI (#7). Hold, kill, redraft and auto-publish tested with stand-ins only |
 | 12 | Add-source screen (part of the in-program city setup) | merged, not walked | #4 (Sources page) and #10 (Find a city's sources). Tests only; the screen has not been walked |
-| 13 | Site pages; Corrections page and link removed | merged, not live | #6, merge ddec5ca. Waits on item 18 |
+| 13 | Site pages; Corrections page and link removed | live | #6, merge ddec5ca. Live check 2026-11-11: no Corrections link on longmont.civiccastbrief.org; /corrections/ shows the home page (the missing-page fix is new item 5) |
 | 14 | Written roundup titles | done | #7. Real roundup title passed the check on the first try: "Longmont council weighs Ordinance 2026-63 and residential metropolitan districts" |
-| 15 | civiccastbrief.org home page listing live cities | merged, not live | #6. Waits on item 18 |
-| 16 | Logo A and the new look everywhere, self-hosted fonts | merged, not live | #6. Waits on item 18 |
-| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | merged, not live | #6. Waits on item 18 |
+| 15 | civiccastbrief.org home page listing live cities | live | #6. Live check 2026-11-11: civiccastbrief.org answers 200 and links https://longmont.civiccastbrief.org/ |
+| 16 | Logo A and the new look everywhere, self-hosted fonts | live | #6. Live check 2026-11-11: Logo A on civiccastbrief.org, /about/ and longmont.civiccastbrief.org |
+| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | live | #6. Live check 2026-11-11: the Web Analytics beacon is on civiccastbrief.org, /about/ and longmont.civiccastbrief.org |
 | 18 | Deploy and walk the live site at desktop and phone widths | open | |
 | **C** | **Phase Two** | | |
 | 19 | All Longmont boards and commissions | done | #10, merge 4863890; #27, merge adc29b4 (PrimeGov looks back to 2015 for a board's last meeting). Live `city check` 2026-11-11: 28 of 29 PrimeGov committees read. The one not read, the Technology Policy Advisory Board, was created by Council on 2026-09-22 and has held no meeting yet |
