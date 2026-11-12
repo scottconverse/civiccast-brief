@@ -509,7 +509,7 @@ requires-dist = [
     { name = "pyannote-audio", marker = "extra == 'diarize'", specifier = ">=4.0" },
     { name = "pypdf", specifier = ">=6.19.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "quorumrelay", path = "vendor/quorumrelay-0.1.0.dev6-py3-none-any.whl" },
+    { name = "quorumrelay", path = "vendor/quorumrelay-0.1.0.dev7-py3-none-any.whl" },
     { name = "soundfile", marker = "extra == 'diarize'", specifier = ">=0.13" },
     { name = "tzdata", specifier = ">=2025.1" },
     { name = "uvicorn", specifier = ">=0.30" },
@@ -2951,13 +2951,13 @@ wheels = [
 
 [[package]]
 name = "quorumrelay"
-version = "0.1.0.dev6"
-source = { path = "vendor/quorumrelay-0.1.0.dev6-py3-none-any.whl" }
+version = "0.1.0.dev7"
+source = { path = "vendor/quorumrelay-0.1.0.dev7-py3-none-any.whl" }
 dependencies = [
     { name = "pdfplumber" },
 ]
 wheels = [
-    { filename = "quorumrelay-0.1.0.dev6-py3-none-any.whl", hash = "sha256:ec1e6c55dc29338dcf3033a1f8bba92bec1975f0108cbb92e2e2e18a4ec19ee1" },
+    { filename = "quorumrelay-0.1.0.dev7-py3-none-any.whl", hash = "sha256:6b39f51174b2988a4240e1b7beb9d5c41dc731cc0826dbbaf0042827e410a44c" },
 ]
 
 [package.metadata]
