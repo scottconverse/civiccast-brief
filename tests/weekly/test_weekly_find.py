@@ -84,6 +84,23 @@ def test_channel_videos_must_be_meetings_in_the_window():
     assert found[1].reason.startswith("the title names no body this source covers")
 
 
+def test_a_channel_video_is_on_the_day_its_title_names_not_the_day_it_went_up():
+    """Lafayette's 2 November 2026 workshop went up at 05:56 UTC on 3 November; Boulder's
+    13 October zoning board video went up on 3 November."""
+    videos = [
+        NS(video_id="DDDDDDDDDDD", title="City Council Workshop - November 2, 2026", published="2026-11-03T05:56:35Z"),
+        NS(video_id="EEEEEEEEEEE", title="10-13-26 City Council Meeting", published="2026-11-03T19:59:30Z"),
+        NS(video_id="FFFFFFFFFFF", title="City Council Regular Session", published="2026-11-04T02:10:00Z"),
+    ]  # fmt: skip
+    found, _ = find_meetings([CHANNEL], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    days = {m.video: m.day for m in found}
+    assert days["DDDDDDDDDDD"] == date(2026, 11, 2)
+    # Posted inside the days, of a meeting before them: listed, on its own day.
+    assert days["EEEEEEEEEEE"] == date(2026, 10, 13)
+    # No day in the title: the day it went up.
+    assert days["FFFFFFFFFFF"] == date(2026, 11, 4)
+
+
 def test_the_same_video_from_portal_and_channel_is_one_meeting_with_the_agenda():
     agenda = Agenda("https://longmont.primegov.com/agenda/1", ("1. Call to order",))
     council = _meeting(
@@ -181,3 +198,53 @@ def test_a_source_kind_with_no_lister_is_named_not_a_crash():
     found, problems = find_meetings([clerk], FIRST, LAST, Listers())
     assert found == []
     assert problems == ["civicclerk:erieco: no reader for civicclerk sources"]
+
+
+def _doc(body, day, title, url, what="agenda"):
+    return NS(body=body, day=day, title=title, url=url, what=what)
+
+
+def test_listed_documents_go_with_the_same_day_video_or_stand_alone():
+    from civiccast_brief.sources import make_source
+
+    no_video = "only the meeting's documents are listed; no source lists its video"
+    clerk = make_source("civicclerk", {"tenant": "erieco", "bodies": "City Council"})
+    folder = make_source("laserfiche", {"url": "https://lf.test/WebLink/Browse.aspx?id=1&dbid=0&repo=Town", "bodies": "City Council"})  # fmt: skip
+    video = NS(video_id="oWZpzjzjwnE", title="City Council Regular Session", published="2026-11-03T20:00:00-07:00")  # fmt: skip
+    rows = {
+        clerk.id: [
+            _doc(COUNCIL, date(2026, 11, 3), "Regular Meeting", "https://clerk.test/2197"),
+            _doc(
+                COUNCIL, date(2026, 11, 3), "Regular Meeting", "https://clerk.test/2198", "packet"
+            ),
+            _doc(COUNCIL, date(2026, 11, 10), "Study Session", "https://clerk.test/2210"),
+        ],
+        folder.id: [_doc(COUNCIL, date(2026, 11, 3), "Minutes", "https://lf.test/77", "minutes")],
+    }
+    read = []
+
+    def read_documents(docs):
+        read.append([d.url for d in docs])
+        return {"format": 1, "documents": [{"url": d.url} for d in docs]}, [d.url for d in docs]
+
+    listers = Listers(
+        youtube=lambda cid: [video],
+        documents=lambda source, first, last: rows[source.id],
+        read_documents=read_documents,
+    )
+    found, problems = find_meetings([clerk, CHANNEL, folder], FIRST, LAST, listers)
+
+    assert problems == []
+    assert [(m.day, m.video, m.reason) for m in found] == [
+        (date(2026, 11, 3), "oWZpzjzjwnE", ""),
+        (date(2026, 11, 10), "", no_video),
+    ]
+    assert read == []  # nothing is fetched until the run gets to the meeting
+    data, lines = found[0].documents()
+    assert [d["url"] for d in data["documents"]] == [
+        "https://clerk.test/2197",
+        "https://clerk.test/2198",
+        "https://lf.test/77",
+    ]
+    assert lines == [d["url"] for d in data["documents"]]
+    assert found[1].documents()[0]["documents"] == [{"url": "https://clerk.test/2210"}]

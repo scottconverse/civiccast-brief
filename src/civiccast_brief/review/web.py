@@ -656,6 +656,7 @@ def make_desk_app(
 
     @app.post("/sources/find/save")
     async def find_save(request: Request) -> Response:
+        from civiccast_brief.citybuild import browser
         from civiccast_brief.citybuild.build import build_city
 
         raw = await request.form()
@@ -691,9 +692,18 @@ def make_desk_app(
                 error="Nothing was added: check at least one source.",
             )
         try:
-            built = await run_in_threadpool(build_city, state.city_dir, found, chosen=chosen)
+            built = await run_in_threadpool(
+                build_city,
+                state.city_dir,
+                found,
+                chosen=chosen,
+                fetcher=state.make_fetcher(),
+                open_in_browser=browser.open_page,
+            )
         except (OSError, city_sources.SourceError) as exc:
             return state.sources_page(error=f"Not saved: {exc}", status=400)
+        finally:
+            browser.close_shared()
         state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
         return _redirect("/sources?" + urlencode({"done": "found"}))
 

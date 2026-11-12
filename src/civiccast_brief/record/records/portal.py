@@ -188,6 +188,10 @@ _MONTHS = (
 #: Authority (LURA) 5/5/26").
 _TRAILING_DATE = re.compile(r"[\s(]*\d{1,2}/\d{1,2}/\d{2,4}\)?\s*$")
 
+#: A date a channel puts in front of a name ("11/02/26 City Council Meeting" at Louisville,
+#: "11-09-26 Water Resources Advisory Board Meeting" at Boulder).
+_LEADING_DATE = re.compile(r"^\s*\d{1,2}([/-])\d{1,2}\1\d{2,4}\s+")
+
 #: A month a portal hangs off the end of a name.
 _TRAILING_MONTH = re.compile(rf"\s+({'|'.join(_MONTHS)})\s*$", re.IGNORECASE)
 
@@ -703,6 +707,7 @@ def _clean_name(text: str) -> str:
     Renewal Authority (LURA)"). What a marker leaves behind once its word has
     been read out is tidied away with them.
     """
+    text = _LEADING_DATE.sub("", text)
     text = _TRAILING_DATE.sub("", text)
     text = _TRAILING_MONTH.sub("", text)
     text = _without_repeating_acronym(text)

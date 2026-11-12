@@ -1,3 +1,35 @@
+# Goal: the 22-item finish list (set by Scott, 2026-11-11)
+
+Scott: "Then do everyone of the items on the list. ... Make this your goal."
+Scott chose option 1 for newsletter replies (forward brief@ to his Gmail).
+This OKs the scope calls the list named: new weekly readers (item 1), a weekly schedule (item 3) and naming more speakers (item 6).
+The list is fixed at 22 items. An item is done only when it is shown, not claimed. FAILED, BLOCKED or SKIPPED never count as done.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | Weekly run reads Laserfiche, CivicPlus, CivicClerk, eScribe, web pages and Google Drive, not only PrimeGov, YouTube and Granicus | open | |
+| 2 | One full live weekly run with documents, stories and auto-publish (old item 9) | open | |
+| 3 | The weekly run on a schedule | open | |
+| 4 | Newsletter replies do not bounce | open (rule set) | Routing rule cc2010b5992944efba28e04496c2e00d: brief@civiccastbrief.org forwards to Scott's Gmail, 2026-11-11. Not yet shown with a test message |
+| 5 | Walk the live site at desktop and phone widths; missing pages show "not found" (old item 18) | open | |
+| 6 | Name more speakers (old item 7) | open | |
+| 7 | Bugs: redraft keeps old audio; name check flags capitalised words; YouTube publish dates | open | |
+| 8 | Captions for the Sustainability Board, Oct 21 (old item 1) | open | |
+| 9 | Say why each unaligned item did not align (old item 2) | open | |
+| 10 | Rosters for boards and schools; check Boulder after the election; check Superior's 5 | open | |
+| 11 | Hold, kill, redraft and auto-publish walked in the live desk (old item 11) | open | |
+| 12 | Walk the Add-source screen (old item 12) | open | |
+| 13 | A board story written live with DeepSeek (old item 10) | open | |
+| 14 | Bugs: Remove notice shows an id; Chrome window pops up during reads; help text says longmont.civiccast.org | open | |
+| 15 | Check each town's capture platform (all default to YouTube) | open | |
+| 16 | YouTube key limited to this app; GPU box (old item 26) | open | |
+| 17 | Apple Podcasts and Spotify submission | open | |
+| 18 | Brevo account and a live sign-up end to end | open | |
+| 19 | Runs on other machines: installer (old item 27) | open | |
+| 20 | Someone else sets up a city (old item 28) | open | |
+| 21 | Code steps: "Show transcript" fallback, YouTube channel tab, player status | open | |
+| 22 | GOAL.md rows for items 13, 15, 16, 17 brought up to date | done | Rows 13, 15, 16, 17 below set to live from the 2026-11-11 curl checks |
+
 # Goal: finish CivicCast Brief, 28 items A to F (set by Scott, 2026-11-09)
 
 Scott: "merge PR #30 and do the P&Z rule first. Then implement ALL 28 items, phased by letter (A through F). ... Make this your goal."
@@ -30,11 +62,11 @@ Scott's decisions, 2026-11-09:
 | 10 | Model picker per task (Claude `claude -p` for Council, DeepSeek for boards) | merged, not shown live for boards | #4 and #9. models.json: Claude for City Council, DeepSeek for other bodies. Council runs used claude -p live; no live board run yet |
 | 11 | Editor desk: review, edit, redraft, hold, kill, publish; auto-publish allowed | merged, partly shown | #4. One story walked staged to Publish in the desk UI (#7). Hold, kill, redraft and auto-publish tested with stand-ins only |
 | 12 | Add-source screen (part of the in-program city setup) | merged, not walked | #4 (Sources page) and #10 (Find a city's sources). Tests only; the screen has not been walked |
-| 13 | Site pages; Corrections page and link removed | merged, not live | #6, merge ddec5ca. Waits on item 18 |
+| 13 | Site pages; Corrections page and link removed | live | #6, merge ddec5ca. Live check 2026-11-11: no Corrections link on longmont.civiccastbrief.org; /corrections/ shows the home page (the missing-page fix is new item 5) |
 | 14 | Written roundup titles | done | #7. Real roundup title passed the check on the first try: "Longmont council weighs Ordinance 2026-63 and residential metropolitan districts" |
-| 15 | civiccastbrief.org home page listing live cities | merged, not live | #6. Waits on item 18 |
-| 16 | Logo A and the new look everywhere, self-hosted fonts | merged, not live | #6. Waits on item 18 |
-| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | merged, not live | #6. Waits on item 18 |
+| 15 | civiccastbrief.org home page listing live cities | live | #6. Live check 2026-11-11: civiccastbrief.org answers 200 and links https://longmont.civiccastbrief.org/ |
+| 16 | Logo A and the new look everywhere, self-hosted fonts | live | #6. Live check 2026-11-11: Logo A on civiccastbrief.org, /about/ and longmont.civiccastbrief.org |
+| 17 | Cloudflare Web Analytics on every page; About, footer, README, docs | live | #6. Live check 2026-11-11: the Web Analytics beacon is on civiccastbrief.org, /about/ and longmont.civiccastbrief.org |
 | 18 | Deploy and walk the live site at desktop and phone widths | open | |
 | **C** | **Phase Two** | | |
 | 19 | All Longmont boards and commissions | done | #10, merge 4863890; #27, merge adc29b4 (PrimeGov looks back to 2015 for a board's last meeting). Live `city check` 2026-11-11: 28 of 29 PrimeGov committees read. The one not read, the Technology Policy Advisory Board, was created by Council on 2026-09-22 and has held no meeting yet |
@@ -42,7 +74,7 @@ Scott's decisions, 2026-11-09:
 | 21 | Charter school boards, if any | done | #10. Flagstaff Academy, SVCM and TPCA read live (TPCA through its Drive folder; its page answers 403) |
 | 22 | In-program search-and-build step for a new city, no AI needed | done (Longmont) | #10. `city find` / `city check` use plain web requests, no model; Longmont 34 of 38 body sources read (37 of 38 after #27). Other towns are item 23 |
 | **D** | **Phase Three** | | |
-| 23 | All 10 Boulder County towns and cities plus the County Commissioners, each with council, boards and schools, set up with step 22 | done, one gap: Ward's town board posts no records online | Readers added: #22 and #23 (Laserfiche in the installed Chrome), #24 (documents to 150 MB), #25 (CivicClerk next pages), #26 (OneDrive shares and Word files), #27 (PrimeGov look-back). Live `city check` on main adc29b4, 2026-11-11, body sources read: County Commissioners 5/5, Boulder 22/22, Erie 11/11, Lafayette 21/21, Louisville 19/19, Lyons 16/16, Nederland 3/3, Superior 4/4, Jamestown 2/2, Longmont 37/38 (TPAB has not met yet), Ward 1/1 (Board of Education only). Ward has no town website: the old ward-co.org lapsed in 2022 (last minutes 2018-01-08) and Boulder County lists only a phone number and a Gmail address. Jamestown's Board of Trustees minutes are read from its OneDrive shares; no other Jamestown board posts records online. Louisville read 17/19 in three runs from 02:10 to 02:31 (first two Laserfiche folders timed out in Chrome), then 19/19 in two runs; cause not found. Rosters are filled for Longmont only |
+| 23 | All 10 Boulder County towns and cities plus the County Commissioners, each with council, boards and schools, set up with step 22 | done (Ward's town board posts no records online; 2026-11-11 Scott chose to leave it as a recorded gap, no email to the town) | Readers added: #22 and #23 (Laserfiche in the installed Chrome), #24 (documents to 150 MB), #25 (CivicClerk next pages), #26 (OneDrive shares and Word files), #27 (PrimeGov look-back). Live `city check` on main adc29b4, 2026-11-11, body sources read: County Commissioners 5/5, Boulder 22/22, Erie 11/11, Lafayette 21/21, Louisville 19/19, Lyons 16/16, Nederland 3/3, Superior 4/4, Jamestown 2/2, Longmont 37/38 (TPAB has not met yet), Ward 1/1 (Board of Education only). Ward has no town website: the old ward-co.org lapsed in 2022 (last minutes 2018-01-08) and Boulder County lists only a phone number and a Gmail address. Jamestown's Board of Trustees minutes are read from its OneDrive shares; no other Jamestown board posts records online. Louisville read 17/19 in three runs from 02:10 to 02:31 (first two Laserfiche folders timed out in Chrome), then 19/19 in two runs; cause not found. Rosters are filled for Longmont only Rosters filled by rule (no model) from each town's members page, #28 merge 9a4a542, 2026-11-11: Boulder 8, County 3, Erie 7, Jamestown 7, Lafayette 7, Louisville 7, Lyons 7, Nederland 6, Superior 5; Longmont's 7 kept; Ward has no website. |
 | **E** | **Older open items** | | |
 | 24 | Apple Podcasts and Spotify: feed meets both formats, settings documented, tested with stand-ins | done | scottconverse/civiccast-brief#2, merge 2891490. Live feed rebuilt and deployed 2026-11-10: no `<h2>`; Apple and Spotify stand-ins report no problems on the live feed. Branch podcast-and-brevo-formats: build checks in site/directories.py; tests/site/test_directories.py (24 pass locally). Live Longmont feed through the stand-ins: Spotify no problems; Apple flagged only the `<h2>` in episode notes, which this change removes (live site needs a rebuild). docs/podcast-directories.md. Not submitted to either service. Three live chapter titles are 59 to 62 characters; Apple's guide asks for 45 or fewer (not in Apple's submission checks) |
 | 25 | Email through Brevo's API format, settings documented, tested with a stand-in; clear the `nobody@example.com` row | done | scottconverse/civiccast-brief#2, merge 2891490. Row sub-f5391f814da11cfbb8154536 deleted from live D1 2026-11-10 (1 change; Scott's confirmed row kept). worker/signup/src/brevo.ts, used when the BREVO_API_KEY secret is set; test/brevo.test.ts (13 pass locally, and fail when the api-key header or the header filter is broken). Setup steps in docs/email-signup.md. No real Brevo account used |

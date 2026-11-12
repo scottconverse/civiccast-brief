@@ -64,6 +64,17 @@ def real_listers(client: Any) -> Listers:
             fetchers[url] = Fetcher(adapter(url))
         return read_documents(fetchers[url], meeting, body)
 
+    from civiccast_brief.citybuild.fetch import Fetcher as PageFetcher
+    from civiccast_brief.weekly import listed
+
+    pages = PageFetcher(client)
+
+    def documents(source: Any, first: date, last: date) -> list[Any]:
+        return listed.list_docs(source, first, last, pages)
+
+    def read_listed(docs: Any) -> tuple[dict[str, Any], list[str]]:
+        return listed.read_all(docs, pages)
+
     channel = channel_lister(client)
     return Listers(
         primegov=primegov,
@@ -71,6 +82,8 @@ def real_listers(client: Any) -> Listers:
         primegov_documents=primegov_documents,
         youtube=channel.list_videos,
         granicus=granicus.list_clips,
+        documents=documents,
+        read_documents=read_listed,
     )
 
 

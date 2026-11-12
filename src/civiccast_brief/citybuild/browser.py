@@ -59,6 +59,14 @@ class Browser(Protocol):
         ...
 
 
+def open_page(url: str) -> Page:
+    """``url`` opened in the shared Chrome, as the page's HTML after its scripts ran."""
+    reader = shared()
+    if not isinstance(reader, Chrome):
+        raise FetchError(f"{url}: the browser given cannot open pages")
+    return reader.page(url)
+
+
 def challenged(status: int, text: str) -> bool:
     """A challenge page ("Just a moment...") in place of the page or file asked for."""
     lowered = text[:2000].casefold()
@@ -175,6 +183,26 @@ class Chrome:
         if kind == "text/html" and challenged(403, content.decode("utf-8", errors="replace")):
             raise FetchError(f"{url}: the site stopped Chrome with a challenge page")
         return Page(url=url, status=200, content=content, content_type=kind)
+
+    def page(self, url: str) -> Page:
+        """Open ``url`` as a person would and return the page's HTML once it has loaded."""
+        from playwright.sync_api import Error
+
+        page = self._open()
+        self._wait_turn()
+        try:
+            response = page.goto(url, wait_until="load")
+            status = response.status if response is not None else 0
+            text = page.content()
+        except Error as exc:
+            raise FetchError(f"{url} did not open in Chrome: {exc}") from exc
+        if challenged(status, text):
+            raise FetchError(f"{url}: the site stopped Chrome with a challenge page")
+        if status != 200:
+            raise FetchError(f"{url} answered {status} in Chrome")
+        return Page(
+            url=page.url, status=200, content=text.encode("utf-8"), content_type="text/html"
+        )
 
     def close(self) -> None:
         # Closing must not hide the run's own result, so a failure to close is only logged.
