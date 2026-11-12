@@ -95,6 +95,7 @@ def _run(args: argparse.Namespace) -> int:
             diarize=args.diarize,
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
+            supplied_capture=args.supplied_capture,
         )
     except (
         capture_mod.CaptureError,
@@ -130,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")
+    run_cmd.add_argument(
+        "--supplied-capture",
+        type=Path,
+        help="provider-supplied timed captions with source identity/provenance",
+    )
     run_cmd.add_argument(
         "--documents",
         type=Path,

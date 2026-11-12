@@ -4,6 +4,8 @@ This guide takes one city from nothing to a built site. Each step names the comm
 writes. Run the commands from the repository folder with the project's Python
 (`uv sync`, then `.venv\Scripts\python.exe`, shown below as `python`).
 
+For standalone shared civic sources, account configuration, captured evidence and provider limits, see [QuorumRelay connectors](CONNECTORS.md). The existing source and publication choices remain explicit.
+
 ## What you need first
 
 | Need | Used by | Notes |

@@ -66,9 +66,15 @@ class Found:
     )
     #: Why this meeting cannot be run; empty when it can.
     reason: str = ""
+    connector_key: str = ""
+    connector_revision: str = ""
+    connector_capture: str = ""
+    connector_prepare: Callable | None = field(default=None, compare=False, repr=False)
 
     @property
     def key(self) -> str:
+        if self.connector_key:
+            return f"connector:{self.connector_key}"
         if self.granicus_host:
             return f"granicus:{self.granicus_host}/{self.video}"
         if self.video:
@@ -95,6 +101,7 @@ class Listers:
     #: (one meeting's listed.Doc rows) -> (documents.json data, report lines); fetched when called
     read_documents: Callable[[Sequence[Any]], tuple[dict[str, Any], list[str]]] | None = None
     classifier: MeetingClassifier = field(default_factory=MeetingClassifier)
+    connector: Callable | None = None
 
 
 def _fold(text: str) -> str:
@@ -282,13 +289,23 @@ def find_meetings(
     listed: list[Found] = []
     city_bodies = sorted({b for s in sources for b in s.bodies})
     for source in sources:
-        reader = _listed if source.kind in LISTED_KINDS else READERS.get(source.kind)
+        reader = (
+            listers.connector
+            if source.kind == "connector"
+            else _listed
+            if source.kind in LISTED_KINDS
+            else READERS.get(source.kind)
+        )
         lister = "documents" if source.kind in LISTED_KINDS else source.kind
         if reader is None or getattr(listers, lister, None) is None:
             problems.append(f"{source.id}: no reader for {source.kind} sources")
             continue
         try:
-            meetings = reader(source, first, last, listers)
+            if source.kind == "connector":
+                meetings, errors = listers.connector(source, first, last)
+                problems.extend(errors)
+            else:
+                meetings = reader(source, first, last, listers)
         except Exception as exc:  # noqa: BLE001 - one broken source must not stop the others
             problems.append(f"{source.id}: {exc}")
             continue

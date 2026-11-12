@@ -1,17 +1,11 @@
 # CivicCast Brief
 
 
-## Published Townlight shared importer
+## Shared civic sources
 
-[Townlight Windows 1.8.1.1](https://github.com/townlight/townlight/releases/tag/townlight-windows-v1.8.1.1)
-ships the shared reader inside Townlight Runtime. The [full import guide](https://townlight.github.io/manuals/meeting-imports.html)
-lists all 31 supported source families, 34 source/format pairs, required saved-response formats,
-module handoffs, the CLI/Python/native HTTP contracts, and source-specific limits.
-Configure the existing opt-in adapter with a Python executable containing that runtime;
-selecting a source alone does not provision a separate server or standalone library.
+Brief now uses the standalone QuorumRelay development package for shared source parsing, bounded discovery, captured evidence, search, export and separately approved provider writes. Its source picker retains all 31 provider families and 34 baseline input formats. Supported live operations and required access vary by provider; selecting a source does not establish complete discovery or provision credentials.
 
-Brief opts into its existing PrimeGov and Granicus discovery paths with `TOWNLIGHT_IMPORT_PYTHON`; it does not expose all31 sources in a new menu. Existing document/media/caption processing remains the consuming workflow.
-
+The connector screen feeds existing document, supplied-caption, meeting and producer review workflows. Capture does not publish content. See [connector setup and limits](docs/CONNECTORS.md) for source configuration, account reads, private credentials, evidence and the exact development wheel pin.
 
 CivicCast Brief is a lite, self-hosted tool that answers one question: what did my local government just do?
 It takes a city meeting video and produces a speaker-named transcript, a short written recap with every
@@ -24,11 +18,7 @@ Status: in development. The pipeline runs end to end on real meetings; the defau
 
 To set up your own city, follow [docs/set-up-a-city.md](docs/set-up-a-city.md).
 
-For shared Townlight discovery, set `TOWNLIGHT_IMPORT_PYTHON` to the Python
-executable containing `townlight_runtime.meeting_imports`. CivicCast Brief
-then uses that importer for PrimeGov meeting lists and Granicus ViewPublisher
-archives. Brief continues to process the source documents, recordings and
-captions through its existing paths.
+Existing PrimeGov and Granicus discovery handoffs use the shared package in process. A separate Townlight Runtime installation or `TOWNLIGHT_IMPORT_PYTHON` is no longer required. Existing source choices and producer approval remain in place.
 
 ## What it does
 

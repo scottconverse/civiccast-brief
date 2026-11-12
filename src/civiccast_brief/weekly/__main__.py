@@ -126,8 +126,16 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
     import httpx
 
     # One client for the whole run: the documents step fetches packets inside run_week.
-    with httpx.Client(timeout=60, follow_redirects=True) as client:
-        return _week(city.name, sources, first, last, real_listers(client), settings)
+    from civiccast_brief.connectors import CivicSources
+
+    connectors = CivicSources(args.city)
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            readers = real_listers(client)
+            readers.connector = connectors.found
+            return _week(city.name, sources, first, last, readers, settings)
+    finally:
+        connectors.close()
 
 
 def _week(

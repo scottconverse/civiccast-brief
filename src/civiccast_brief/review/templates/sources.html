@@ -50,6 +50,39 @@
         {% endfor %}
       </select></p>
     {{ field_error("kind") }}
+    <div data-kind="connector">
+      <p><label for="provider">Standalone provider (all 31 source families)</label><br>
+        <select id="provider" name="provider">
+          {% for provider in providers %}
+          <option value="{{ provider.provider }}" {% if form.get("provider") == provider.provider %}selected{% endif %}>{{ provider.provider }}</option>
+          {% endfor %}
+        </select></p>
+      {{ field_error("provider") }}
+      <p><label for="connector_url">Durable configured source URL</label><br>
+        <input class="wide" id="connector_url" name="connector_url" value="{{ form.get('connector_url', form.get('url', '')) }}"></p>
+      {{ field_error("connector_url") }}
+      <p><label for="namespace">Exact source namespace (optional)</label><br>
+        <input class="wide" id="namespace" name="namespace" value="{{ form.get('namespace', '') }}"></p>
+      <p>Account access requires separately configured, namespace-bound credentials. Never put credentials in source options.</p>
+      <p><label for="input_format">Saved format (leave empty for native discovery)</label><br>
+        <select id="input_format" name="input_format">
+          <option value="">Native discovery</option>
+          {% for provider in providers %}{% for format in provider.formats %}
+          <option value="{{ format.input_format }}" {% if form.get("input_format") == format.input_format %}selected{% endif %}>{{ provider.provider }} / {{ format.input_format }}</option>
+          {% endfor %}{% endfor %}
+          {% for provider in providers %}{% for format in provider.additional_formats %}
+          <option value="{{ format }}" {% if form.get("input_format") == format %}selected{% endif %}>{{ provider.provider }} / {{ format }}</option>
+          {% endfor %}{% endfor %}
+        </select></p>
+      {{ field_error("input_format") }}
+      <p><label for="capture">Saved capture, optional (relative to city folder)</label><br>
+        <input class="wide" id="capture" name="capture" value="{{ form.get('capture', '') }}"></p>
+      {{ field_error("capture") }}
+      <p><label for="options">Documented provider options JSON (never credentials)</label><br>
+        <textarea id="options" name="options">{{ form.get("options", "{}") }}</textarea></p>
+      {{ field_error("options") }}
+      <p><a href="/connectors">Discover, review, search and export evidence</a>. Provider capabilities and access limits are shown there. No recording or readable text means no transcription success.</p>
+    </div>
     <div data-kind="primegov">
       <p><label for="url">PrimeGov portal address</label><br>
         <input class="wide" id="url" type="text" name="url" value="{{ form.get("url", "") }}"

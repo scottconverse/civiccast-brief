@@ -104,6 +104,30 @@ def read_latest(
 ) -> Proof:
     today = today or date.today()
     proof = Proof(body=body, kind=source.kind, address=source.address)
+    if source.kind == "connector":
+        from civiccast_brief.connectors import CivicSources
+
+        if work_dir is None:
+            proof.problem = "Standalone checks need the city-owned work folder."
+            return proof
+        client = CivicSources(work_dir.parent)
+        try:
+            meetings, problems = client.found(source, today - timedelta(days=120), today)
+            selected = [m for m in meetings if m.body.casefold() == body.casefold()]
+            if not selected:
+                proof.problem = "; ".join(problems) or "No bounded meeting found."
+                return proof
+            meeting = max(selected, key=lambda m: m.day)
+            evidence = meeting.connector_prepare(work_dir / meeting.connector_key)
+            proof.meeting_date, proof.title = meeting.day, meeting.title
+            proof.document = source.address
+            proof.what = "source evidence (not transcription)"
+            proof.lines = [p["text"][:160] for d in evidence["documents"] for p in d["pages"]]
+            proof.ok = not problems and not evidence["failures"] and bool(proof.lines)
+            proof.problem = "; ".join(problems + evidence["limitations"])
+            return proof
+        finally:
+            client.close()
     readers: dict[str, Callable[..., None]] = {
         "primegov": _primegov,
         "youtube": _youtube,
