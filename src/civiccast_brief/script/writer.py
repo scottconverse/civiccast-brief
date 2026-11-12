@@ -8,6 +8,7 @@ JSON keeps them so the checker can map each line to its claims.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -160,6 +161,30 @@ def render_txt(lines: list[ScriptLine]) -> str:
         else:
             out.append(f"[{line.speaker}] {line.text}")
     return "\n".join(out) + "\n"
+
+
+_TXT_CHAPTER = re.compile(r"\[CHAPTER\s+(.+?)\]")
+_TXT_LINE = re.compile(r"\[(S1|S2)\]\s*(.+)")
+
+
+def parse_txt(text: str) -> list[ScriptLine]:
+    """The lines of a spoken script (:func:`render_txt`'s format), as the desk keeps it.
+
+    The desk keeps only the words, so the lines carry no claim ids."""
+    lines: list[ScriptLine] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if chapter := _TXT_CHAPTER.fullmatch(line):
+            lines.append(ScriptLine(CHAPTER, chapter[1].strip()))
+        elif spoken := _TXT_LINE.fullmatch(line):
+            lines.append(ScriptLine(spoken[1], spoken[2].strip()))
+        else:
+            raise ScriptFormatError(f"not a script line: {line[:120]!r}")
+    if not lines:
+        raise ScriptFormatError("the script has no lines")
+    return lines
 
 
 def script_to_dict(lines: list[ScriptLine]) -> list[dict[str, Any]]:
