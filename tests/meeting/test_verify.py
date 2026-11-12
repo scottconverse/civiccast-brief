@@ -255,3 +255,25 @@ def test_the_speaker_labels_name_is_not_allowed_on_someone_elses_line():
     assert report["dropped_items"][0]["reason"] == (
         "term not in the official agenda or roster: Doyle"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "quote", "stamp"),
+    [
+        # Seen dropped in real runs: a date, and a possessive of an allowed name.
+        ("The board meets again on a Tuesday in November.", "Okay, we are adjourned.", "0:03:20"),
+        ("The roll call reached Council member Popkin's name.", "Council member Popkin", "0:00:12"),
+        ("The Golf Course Advisory Board's item was heard.", "Okay, we are adjourned.", "0:03:20"),
+    ],
+)
+def test_a_date_or_a_possessive_of_an_allowed_word_is_not_an_unknown_term(text, quote, stamp):
+    claims, report = check([item(text, quote, stamp)])
+    assert [c.text for c in claims] == [text], report["dropped_items"]
+
+
+def test_a_possessive_of_a_word_nothing_backs_is_still_dropped():
+    claims, report = check(
+        [item("The Calcoffer's item was heard.", "Okay, we are adjourned.", "0:03:20")]
+    )
+    assert claims == []
+    assert report["dropped_items"][0]["reason"].endswith(": Calcoffer's")
