@@ -11,7 +11,7 @@ import json
 import pytest
 
 from civiccast_brief.citybuild import members
-from civiccast_brief.citybuild.build import PUBLISHER_EMAIL, build_city
+from civiccast_brief.citybuild.build import CONTACT_EMAIL, PUBLISHER_EMAIL, build_city
 from civiccast_brief.citybuild.fetch import FetchError, Page
 from civiccast_brief.citybuild.members import find_members, governing_body, read_members
 from civiccast_brief.citybuild.search import Search
@@ -225,6 +225,7 @@ def test_city_find_fills_the_roster_and_the_podcast_address(web, tmp_path, monke
     assert len(load_roster(tmp_path / "roster.json").members) == 7  # the meeting run can load it
     city = json.loads((tmp_path / "city.json").read_text(encoding="utf-8"))
     assert city["podcast"]["owner_email"] == PUBLISHER_EMAIL
+    assert city["contact_email"] == CONTACT_EMAIL
     assert built.to_fill == []
 
 
@@ -237,13 +238,20 @@ def test_an_empty_roster_from_an_earlier_build_is_filled_and_a_full_one_kept(
         json.dumps({"city": "Erie", "body": "City Council", "members": []}), encoding="utf-8"
     )
     (tmp_path / "city.json").write_text(
-        json.dumps({"name": "Erie", "edited": True, "podcast": {"owner_email": ""}}),
+        json.dumps(
+            {"name": "Erie", "edited": True, "contact_email": "", "podcast": {"owner_email": ""}}
+        ),
         encoding="utf-8",
     )
     build_city(tmp_path, _search(), fetcher=web.fetcher())
     assert len(json.loads((tmp_path / "roster.json").read_text(encoding="utf-8"))["members"]) == 7
     city = json.loads((tmp_path / "city.json").read_text(encoding="utf-8"))
-    assert city == {"name": "Erie", "edited": True, "podcast": {"owner_email": PUBLISHER_EMAIL}}
+    assert city == {
+        "name": "Erie",
+        "edited": True,
+        "contact_email": CONTACT_EMAIL,
+        "podcast": {"owner_email": PUBLISHER_EMAIL},
+    }
 
     kept = {"city": "Erie", "body": "Town Council", "members": [{"name": "Only Editor"}]}
     (tmp_path / "roster.json").write_text(json.dumps(kept), encoding="utf-8")
