@@ -89,8 +89,3 @@ def test_script_json_round_trips(tmp_path):
     save_script(lines, txt, js)
     assert txt.read_text(encoding="utf-8") == "[S1] Hi there.\n[CHAPTER Minutes]\n"
     assert load_script(js) == lines
-
-
-def test_a_chapter_title_starts_with_a_capital_letter():
-    answer = ANSWER.replace('"text": "Minutes"', '"text": "public comment"')
-    assert parse_script(answer)[2].text == "Public comment"

@@ -136,8 +136,6 @@ def _line_from_dict(obj: dict[str, Any], bad: list[str], raw: str) -> ScriptLine
     if speaker not in _VALID_SPEAKERS or not text or not isinstance(claim_ids, list):
         bad.append(raw[:120])
         return ScriptLine(speaker=speaker, text=text, claim_ids=())
-    if speaker == CHAPTER:
-        text = text[0].upper() + text[1:]  # a title, shown on screen
     return ScriptLine(speaker=speaker, text=text, claim_ids=tuple(str(c) for c in claim_ids))
 
 
