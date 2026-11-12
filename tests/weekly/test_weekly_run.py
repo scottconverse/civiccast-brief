@@ -523,3 +523,35 @@ def test_a_story_already_on_the_desk_is_not_written_again(tmp_path):
 
     assert report.failed == 0, report.lines
     assert rerun.names() == []
+
+
+def test_a_desk_script_with_two_chapter_marks_together_is_spoken_without_the_empty_one(tmp_path):
+    # The 3 November 2026 roundup was published with a meeting chapter straight before an item
+    # chapter; the audio refused it ("has no spoken line before the next chapter").
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    settings = _settings(tmp_path, site=site)
+    item = {"kind": "episode", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    fake = Fake()
+    fake.exported = {"0001-episode": {**item, "content_hash": "a" * 64, "script": "[S1] hi\n"}}
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    stacked = (
+        "[S1] Hello.\n[CHAPTER October 27 meeting]\n[CHAPTER Composting]\n"
+        "[S1] Composting came up.\n[S2] Goodbye.\n"
+    )
+    again = Fake()
+    again.exported = {"0001-episode": {**item, "content_hash": "b" * 64, "script": stacked}}
+    run_week(settings, [COUNCIL_MEETING], LAST, again.steps())
+
+    audio = next(argv for step, argv in again.calls if step == "audio")
+    spoken = Path(audio[0]).read_text(encoding="utf-8")
+    assert "October 27 meeting" not in spoken
+    from civiccast_brief.audio.lines import parse_script as parse_audio
+
+    assert [c.title for c in parse_audio(spoken).chapters] == ["Composting"]
