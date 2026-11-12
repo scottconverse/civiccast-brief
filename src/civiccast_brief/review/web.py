@@ -152,6 +152,8 @@ class DeskApp:
         self.searches: dict[str, Any] = {}
         #: What the last Add from a search did, shown once on the Sources page.
         self.found_lines: list[str] = []
+        #: What the last removed source was ("https://... for City Council"), for its notice.
+        self.removed: dict[str, str] = {}
         self.templates.filters["localtime"] = local_time
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
@@ -584,7 +586,8 @@ def make_desk_app(
             lines, state.found_lines = state.found_lines, []
             return " ".join(line.rstrip(".") + "." for line in lines)
         if done == "removed" and match is None and _SOURCE_ID.match(source_id):
-            return f"Removed {source_id}. Saved to {where}."
+            what = state.removed.pop(source_id, "") or source_id
+            return f"Removed {what}. Saved to {where}."
         return ""
 
     @app.get("/sources/find", response_class=HTMLResponse)
@@ -721,7 +724,13 @@ def make_desk_app(
         source_id = form.get("source_id", "")
         try:
             if action == "remove":
+                old = next(
+                    (s for s in city_sources.load_sources(state.city_dir) if s.id == source_id),
+                    None,
+                )
                 city_sources.remove_source(state.city_dir, source_id)
+                if old is not None:
+                    state.removed[source_id] = f"{old.address} for {', '.join(old.bodies)}"
                 done, new_id = "removed", source_id
             else:
                 source = city_sources.make_source(form.get("kind", ""), form)

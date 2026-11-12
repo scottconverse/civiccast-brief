@@ -23,6 +23,7 @@ the last one stopped: a finished meeting is not run again, a failed one is tried
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -33,7 +34,12 @@ from pathlib import Path
 from typing import Any
 
 from civiccast_brief.review.store import ReviewStore
-from civiccast_brief.script.writer import ROUNDUP_ID
+from civiccast_brief.script.writer import (
+    ROUNDUP_ID,
+    ScriptFormatError,
+    parse_txt,
+    save_script,
+)
 from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
@@ -384,6 +390,31 @@ def _run_folders(state: State) -> dict[str, dict[str, Any]]:
     return by_id
 
 
+def _desk_script(
+    folder: Path, entry: dict[str, Any], item: Path, meta: dict[str, Any]
+) -> tuple[Path, Path, Path]:
+    """The script to speak, its JSON and the audio folder for a published episode.
+
+    The desk's script is the one published. When a redraft or an edit changed it from the run's,
+    it is written to its own folder and spoken from there, so the old audio is not used."""
+    run_txt, run_json = Path(entry["script_txt"]), Path(entry["script_json"])
+    desk_txt = item / "script.txt"
+    if not desk_txt.is_file():
+        return run_txt, run_json, folder / "audio"
+    words = desk_txt.read_text(encoding="utf-8")
+    if words.split() == run_txt.read_text(encoding="utf-8").split():
+        return run_txt, run_json, folder / "audio"
+    key = str(meta.get("content_hash") or hashlib.sha256(words.encode()).hexdigest())[:12]
+    desk = folder / f"desk-{key}"
+    desk.mkdir(exist_ok=True)
+    try:
+        lines = parse_txt(words)
+    except ScriptFormatError as exc:
+        raise StepFailed(f"the desk's script cannot be spoken: {exc}") from exc
+    save_script(lines, desk / "script.txt", desk / "script.json")
+    return desk / "script.txt", desk / "script.json", desk / "audio"
+
+
 def publish(
     steps: Steps, settings: Settings, state: State, published: str
 ) -> list[tuple[str, bool]]:
@@ -405,28 +436,32 @@ def publish(
     }
     runs = _run_folders(state)
     built: dict[str, str] = state.data.setdefault("built", {})
+    #: The desk content each built episode was built from, so a redraft is built again.
+    built_from: dict[str, str | None] = state.data.setdefault("built_from", {})
     site.episodes.mkdir(parents=True, exist_ok=True)
     site.media.mkdir(parents=True, exist_ok=True)
     for path, meta in items:
         meeting_id = str(meta.get("meeting_id"))
-        if meta.get("kind") != "episode" or meeting_id in built:
+        if meta.get("kind") != "episode":
+            continue
+        if meeting_id in built and built_from.get(meeting_id) == meta.get("content_hash"):
             continue
         entry = runs.get(meeting_id)
         if entry is None:
             log.append((f"{meeting_id}: published, but no run of it is in this work folder", False))
             continue
         folder = Path(entry["folder"])
-        audio = folder / "audio"
         try:
+            script_txt, script_json, audio = _desk_script(folder, entry, path, meta)
             if not (audio / "episode.mp3").is_file():
                 engine = ["--engine", site.audio_engine] if site.audio_engine else []
-                _call(steps.audio, [entry["script_txt"], "--out", str(audio), *engine], "audio")
+                _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
             out = folder / "episode.json"
             argv = [
                 "assemble",
                 "--item", str(path),
                 "--meeting", str(folder),
-                "--script", entry["script_json"],
+                "--script", str(script_json),
                 "--audio", str(audio),
                 "--media-base-url", site.media_base_url,
                 "--city", site.slug,
@@ -449,6 +484,7 @@ def publish(
         ):
             shutil.copyfile(audio / source, site.media / target)
         built[meeting_id] = name
+        built_from[meeting_id] = meta.get("content_hash")
         state.save()
         log.append((f"{meeting_id}: built episode {name}", False))
     if not any(p.name not in (CITY_FILE, ROSTER_FILE) for p in site.episodes.glob("*.json")):

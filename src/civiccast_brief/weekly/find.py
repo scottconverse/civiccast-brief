@@ -4,7 +4,8 @@
   YouTube carries that link, an HTML agenda becomes the run's ``agenda.txt``, and its packet
   and minutes become ``documents.json`` (fetched when the run gets to them).
 - A **YouTube** channel's public feed lists its newest videos. A title must read as a meeting
-  and name one of the source's bodies.
+  and name one of the source's bodies, or another body the city's sources list: a city's channel
+  carries all its bodies' meetings, and setup names only the bodies its newest titles showed.
 - A **Granicus** archive lists its clips with their names and dates.
 - A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **web page** or **Google Drive**
   source lists a body's agendas, packets and minutes by date, and no video
@@ -270,6 +271,14 @@ READERS = {"primegov": _primegov, "youtube": _youtube, "granicus": _granicus}
 LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "webpage", "gdrive")
 
 
+def _city_body(meeting: Found, city_bodies: Sequence[str]) -> Found:
+    """A channel video whose title names a body another of the city's sources lists."""
+    if meeting.body:
+        return meeting
+    body = match_body(meeting.title, city_bodies)
+    return replace(meeting, body=body, reason="") if body else meeting
+
+
 def find_meetings(
     sources: Sequence[Source], first: date, last: date, listers: Listers
 ) -> tuple[list[Found], list[str]]:
@@ -278,6 +287,7 @@ def find_meetings(
     by_key: dict[str, Found] = {}
     problems: list[str] = []
     listed: list[Found] = []
+    city_bodies = sorted({b for s in sources for b in s.bodies})
     for source in sources:
         reader = (
             listers.connector
@@ -302,6 +312,8 @@ def find_meetings(
         if reader is _listed:
             listed += meetings
             continue
+        if source.kind == "youtube":
+            meetings = [_city_body(m, city_bodies) for m in meetings]
         for meeting in meetings:
             held = by_key.get(meeting.key)
             if held is None:

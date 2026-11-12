@@ -187,7 +187,8 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
     episode = _assemble(item_dir, meeting_dir, audio)
 
     assert episode["id"] == "2026-10-20-example-weekly-roundup"
-    assert episode["headline"] == "Longmont weekly roundup: October 6, 2026 and October 20, 2026"
+    # The dates are a range, not every date strung together.
+    assert episode["headline"] == "Longmont weekly roundup: October 6 to October 20, 2026"
     assert episode["video_url"] is None and episode["transcript"] is None
 
 
