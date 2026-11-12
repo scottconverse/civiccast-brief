@@ -288,8 +288,9 @@ def test_a_guessed_address_that_answers_with_another_boards_page_gets_no_roster(
 
 
 def test_a_board_name_that_sounds_like_the_index_is_not_the_index(tmp_path, web, monkeypatch):
-    # "Older Adults Advisory Board" is a board, not the town's list of boards.
-    folder = _town(tmp_path, web, ["Town Council", "Older Adults Advisory Board"])
+    # "Older Adults Advisory Board" is a board, not the town's list of boards, so no other
+    # board's page is guessed under its address (Lafayette's answers every such address).
+    folder = _town(tmp_path, web, ["Town Council", "Cemetery Subcommittee"])
     web.add(
         SITE + "/",
         _page(
@@ -299,8 +300,8 @@ def test_a_board_name_that_sounds_like_the_index_is_not_the_index(tmp_path, web,
         ),
     )
     _run(folder, web, monkeypatch)
-    assert SITE + "/12/Older-Adults-Advisory-Board/older-adults-advisory-board/" not in web.asked
-    assert roster_for(folder, "Older Adults Advisory Board") is not None
+    assert SITE + "/12/Older-Adults-Advisory-Board/cemetery-subcommittee/" not in web.asked
+    assert SITE + "/10/Boards-Commissions/cemetery-subcommittee/" in web.asked
 
 
 def test_a_board_with_members_already_is_not_changed(tmp_path, web, monkeypatch):
