@@ -4,6 +4,23 @@ This guide takes one city from nothing to a built site. Each step names the comm
 writes. Run the commands from the repository folder with the project's Python
 (`uv sync`, then `.venv\Scripts\python.exe`, shown below as `python`).
 
+## Install
+
+On Windows, `install.ps1` sets up everything below except Chrome, Ollama and the voice engine,
+for the signed-in user, with no administrator rights. Double-click `install.cmd` in a copy of the
+code, or, with no copy yet, run this in PowerShell:
+
+```
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
+```
+
+That puts the code in `%LOCALAPPDATA%\CivicCastBrief\app`. The script installs uv, the Python
+packages (uv brings Python 3.12 when the machine has none), ffmpeg (with winget, or the gyan.dev
+build checked against its SHA-256) and yt-dlp. It then checks for Chrome and for Ollama with the
+writer model, lists what is still missing, and writes `desk.cmd`, which starts the editor desk with
+its data in `Documents\CivicCast Brief`. TownRecord and the speech code are part of CivicCast
+Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization (large).
+
 ## What you need first
 
 | Need | Used by | Notes |

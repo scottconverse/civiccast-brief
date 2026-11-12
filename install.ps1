@@ -90,8 +90,10 @@ Step $steps[0]
 $here = $PSScriptRoot
 if ($here -and (Test-Path (Join-Path $here 'pyproject.toml'))) {
     $AppDir = $here
+    $fromCopy = $true
     Ok "using the copy in $AppDir"
 } else {
+    $fromCopy = $false
     $zip = Join-Path $env:TEMP "civiccast-brief-$Ref.zip"
     $unpack = Join-Path $env:TEMP "civiccast-brief-$Ref"
     Note "downloading $Repo ($Ref)"
@@ -134,6 +136,8 @@ Step $steps[2]
 Push-Location $AppDir
 try {
     $sync = @('sync', '--frozen', '--python', '3.12', '--extra', 'browser')
+    # A downloaded install leaves out the developer tools; a copy of the code keeps them.
+    if (-not $fromCopy) { $sync += '--no-dev' }
     if ($Diarize) { $sync += @('--extra', 'diarize') }
     Invoke-Checked 'uv sync' { uv @sync }
 } finally { Pop-Location }
@@ -203,7 +207,8 @@ $lines = @(
     'set "WORK=%USERPROFILE%\Documents\CivicCast Brief"',
     'if not exist "%WORK%" mkdir "%WORK%"',
     'set PYTHONIOENCODING=utf-8',
-    'start "" http://127.0.0.1:8765/',
+    'rem The browser opens a few seconds later, once the desk answers.',
+    'start "" /min powershell -NoProfile -Command "Start-Sleep 4; Start-Process http://127.0.0.1:8765/"',
     "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`""
 )
 Set-Content -Path $launcher -Value $lines -Encoding ascii
