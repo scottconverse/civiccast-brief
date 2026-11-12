@@ -684,3 +684,71 @@ def test_the_agenda_is_number_eight_names_item_eight_across_two_lines() -> None:
 
     assert _item(result, "8.").method == SPOKEN_TRANSITIONS
     assert _item(result, "8.").start_ms == 535_279
+
+
+def test_start_with_the_roll_call_places_a_short_title() -> None:
+    """Sustainability Advisory Board, Oct 21, 2026, 6.2 s: "Roll Call" has no word over four letters."""
+    items = [_fixture_item("2.", "ROLL CALL")]
+    transcript = (
+        segment(4.04, "Advisory Board meeting to order. Could"),
+        segment(6.16, "we please start with the roll call?"),
+        segment(8.24, ">> I'm Robert DeVinney."),
+    )
+    result = _align(items, transcript, duration_ms=TWO_HOURS_MS)
+
+    assert _item(result, "2.").method == SPOKEN_TRANSITIONS
+    assert _item(result, "2.").start_ms == 6_160
+
+
+def test_turn_it_over_to_names_roll_call_on_the_next_line() -> None:
+    """Planning and Zoning Commission, Oct 21, 2026, 19.6 s."""
+    items = [_fixture_item("2.", "Roll Call")]
+    transcript = (
+        segment(16.24, "the planning and zoning commission. With"),
+        segment(18.0, "that, I will turn it over to Jean for"),
+        segment(19.6, "roll call."),
+        segment(21.119, ">> Commissioner Edgley Wells"),
+    )
+    result = _align(items, transcript, duration_ms=10_800_000)
+
+    assert _item(result, "2.").start_ms == 19_600
+
+
+def test_the_speaking_time_note_after_a_title_is_not_read_out() -> None:
+    """Planning and Zoning Commission, Oct 21, 2026, 152.2 s."""
+    items = [_fixture_item("6.", "Public Comment Comments are limited to 5 minutes per speaker")]
+    transcript = (
+        segment(150.4, ">> Okay. Thank you."),
+        segment(152.239, "Uh, next up on the agenda, public"),
+        segment(154.0, "comment. We will open the public"),
+        segment(156.239, "comments for anyone wishing to speak"),
+    )
+    result = _align(items, transcript, duration_ms=10_800_000)
+
+    assert _item(result, "6.").start_ms == 152_239
+
+
+def test_final_call_is_matched_as_a_phrase_after_the_cue() -> None:
+    """Planning and Zoning Commission, Oct 21, 2026, 8700.2 s."""
+    items = [_fixture_item("9.", "Final Call Comments are limited to 5 minutes per speaker")]
+    transcript = (
+        segment(8697.52, "concluded. And next up on the agenda,"),
+        segment(8700.24, "final call public comments. We will open"),
+    )
+    result = _align(items, transcript, duration_ms=10_800_000)
+
+    assert _item(result, "9.").start_ms == 8_700_240
+
+
+def test_move_on_to_new_business_places_new_business() -> None:
+    """Historic Preservation Commission, Nov 5, 2026, 600.2 s."""
+    items = [_fixture_item("8.", "New Business")]
+    transcript = (
+        segment(596.797, "We do not have any public hearings this"),
+        segment(598.997, "evening."),
+        segment(600.197, "So we'll move on to new business which"),
+        segment(604.497, "is involves a discussion about accessory"),
+    )
+    result = _align(items, transcript, duration_ms=TWO_HOURS_MS)
+
+    assert _item(result, "8.").start_ms == 600_197
