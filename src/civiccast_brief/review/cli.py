@@ -15,6 +15,8 @@ skipped item and the reason.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sqlite3
 import sys
 from collections.abc import Sequence
@@ -54,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--port", type=_port, default=DEFAULT_PORT, help=f"port (default {DEFAULT_PORT})"
     )
+    run.add_argument(
+        "--connector-writes",
+        action="store_true",
+        help="enable separate, explicitly approved provider write controls (never ingestion)",
+    )
+    run.add_argument(
+        "--connector-credentials-env",
+        help="name of an environment variable holding private SDK credential JSON",
+    )
 
     export = commands.add_parser("export", help="write published items to a folder")
     export.add_argument("--db", required=True, type=Path, help="SQLite desk database")
@@ -66,11 +77,28 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "serve":
+        if args.connector_writes or args.connector_credentials_env:
+            return _serve(
+                args.db,
+                args.city,
+                args.port,
+                args.work,
+                connector_writes=args.connector_writes,
+                credentials_env=args.connector_credentials_env,
+            )
         return _serve(args.db, args.city, args.port, args.work)
     return _export(args.db, args.out)
 
 
-def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> int:
+def _serve(
+    db: Path,
+    city: Path | None,
+    port: int,
+    work: Path | None = None,
+    *,
+    connector_writes: bool = False,
+    credentials_env: str | None = None,
+) -> int:
     if city is not None and not city.is_dir():
         print(f"error: the city folder {city} does not exist", file=sys.stderr)
         return 1
@@ -82,13 +110,29 @@ def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> 
         return 1
     writer = desk_writer(work, city) if work is not None else None
     try:
+        factory = None
+        if connector_writes or credentials_env:
+            from functools import partial
+
+            from civiccast_brief.connectors import CivicSources
+
+            credentials = (
+                json.loads(os.environ.get(credentials_env, "{}")) if credentials_env else {}
+            )
+            if not isinstance(credentials, dict):
+                raise ValueError("Invalid private connector credential configuration.")
+            factory = partial(CivicSources, writes=connector_writes, credentials=credentials)
         with ReviewStore(db) as store:
             if store.migrated:
                 print(f"moved {store.migrated} items from the old review screen to the desk")
-            app = make_desk_app(store, city_dir=city, writer=writer)
+            app = (
+                make_desk_app(store, city_dir=city, writer=writer, connector_factory=factory)
+                if factory
+                else make_desk_app(store, city_dir=city, writer=writer)
+            )
             print(f"editor desk: http://{BIND_HOST}:{port}/  (Ctrl+C to stop)", flush=True)
             serve(app, port)
-    except (ReviewError, OSError, sqlite3.Error) as exc:
+    except (ReviewError, OSError, sqlite3.Error, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

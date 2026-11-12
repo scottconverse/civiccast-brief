@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,7 @@ def run(
     complete: Complete | None = None,
     judge_complete: Complete | None = None,
     log: Callable[[str], None] = print,
+    supplied_capture: Path | None = None,
 ) -> dict[str, Any]:
     """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id.
 
@@ -99,7 +101,35 @@ def run(
     raw_dir = out / "raw"
 
     fetch_audio: Callable[[Path], Path]
-    if granicus_host:
+    if supplied_capture is not None:
+        captured = json.loads(Path(supplied_capture).read_text(encoding="utf-8"))
+        items = captured.get("items")
+        if (
+            not isinstance(items, list)
+            or not items
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("text"), str)
+                or type(item.get("start_ms")) is not int
+                or type(item.get("end_ms")) is not int
+                or item["start_ms"] < 0
+                or item["end_ms"] < item["start_ms"]
+                for item in items
+            )
+        ):
+            raise PipelineError("The supplied capture has no usable timed caption segments.")
+        if captured.get("video_id") != video_id or not captured.get("source"):
+            raise PipelineError("The supplied capture identity/provenance does not match.")
+        title = str(captured["title"])
+        when = date.fromisoformat(captured["meeting_date"])
+        meeting_date = f"{when:%B} {when.day}, {when.year}"
+        caption_kind = "provider_supplied_captions"
+        source = captured["source"]
+
+        def fetch_audio(audio_dir: Path) -> Path:
+            raise PipelineError("Diarization is unavailable for this supplied-caption capture.")
+
+    elif granicus_host:
         if granicus_view_id is None:
             raise PipelineError("a Granicus run needs the publisher view id")
         log(f"[{video_id}] capture: Granicus {granicus_host} clip {video_id}")
@@ -250,7 +280,13 @@ def run(
         meeting_date=meeting_date,
         video_id=video_id,
         claims=tuple(claims),
-        video_place=GRANICUS_VIDEO_PLACE if granicus_host else DEFAULT_VIDEO_PLACE,
+        video_place=(
+            source["video_url"]
+            if supplied_capture
+            else GRANICUS_VIDEO_PLACE
+            if granicus_host
+            else DEFAULT_VIDEO_PLACE
+        ),
     )
     save_recap(recap, out / "recap.json")
     verify_report["agenda_source"] = agenda.source if agenda else None

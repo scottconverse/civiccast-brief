@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Connector evidence</h2>
+<p>Evidence export does not publish an episode or change a provider. Source excerpts remain in producer review. Missing media/text and partial discovery stay explicit.</p>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if city_dir %}
+<form method="post" action="/connectors/discover">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Source <select name="source_id">{% for s in connector_sources %}<option value="{{ s.id }}">{{ s.provider }}: {{ s.address }}</option>{% endfor %}</select></label>
+  <label>First day (inclusive) <input type="date" name="first" required></label>
+  <label>Last day (inclusive) <input type="date" name="last" required></label>
+  <button type="submit">Discover and capture for review</button>
+</form>
+<details><summary>Authorized account fetch</summary>
+  <p>Requires separately configured, namespace-bound operator credentials. Ordinary date and body filters do not apply; use only documented fetch fields and never enter credentials here.</p>
+  <form method="post" action="/connectors/fetch">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>Source <select name="source_id">{% for s in connector_sources %}<option value="{{ s.id }}">{{ s.provider }}: {{ s.address }}</option>{% endfor %}</select></label>
+    <label>Provider fetch fields JSON<textarea name="fetch_fields">{}</textarea></label>
+    <button type="submit">Fetch evidence for review</button>
+  </form>
+</details>
+<form method="post" action="/connectors/search">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Exact phrase <input name="phrase" required></label>
+  <button type="submit">Search saved evidence</button>
+</form>
+<form method="post" action="/connectors/export">
+  <input type="hidden" name="token" value="{{ token }}">
+  <select name="format">{% for format in ["zip","json","jsonl","csv-meetings","csv-items","ics"] %}<option>{{ format }}</option>{% endfor %}</select>
+  <label><input type="checkbox" name="include_attachments" value="yes">Include captured attachments (ZIP)</label>
+  <button type="submit">Export evidence, not publication</button>
+</form>
+<h3>Provider write (separate approval)</h3>
+<p>Disabled unless the operator explicitly enables provider writes with private credentials. No discovery, capture or publication action calls this.</p>
+<form method="post" action="/connectors/plan">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Source <select name="source_id">{% for s in connector_sources %}<option value="{{ s.id }}">{{ s.provider }}: {{ s.address }}</option>{% endfor %}</select></label>
+  <label>Documented native changes JSON (no credentials)<textarea name="changes" required>[]</textarea></label>
+  <button type="submit">Plan provider change</button>
+</form>
+<form method="post" action="/connectors/commit">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Plan ID <input name="plan_id" required></label>
+  <label>Exact plan hash <input name="plan_hash" required></label>
+  <label>Approve by repeating that exact hash <input name="approved_plan_hash" required></label>
+  <button type="submit">Commit this approved provider plan</button>
+</form>
+<form method="post" action="/connectors/receipt">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>Plan ID <input name="plan_id" required></label><button type="submit">Read receipt</button>
+</form>
+{% endif %}
+{% if result %}<h3>Result and coverage</h3><pre>{{ result }}</pre><p><a href="/">Open producer review items</a></p>{% endif %}
+<h3>Shared capabilities (31 families, 34 baseline formats)</h3>
+{% for p in providers %}<details><summary>{{ p.provider }}</summary><pre>{{ p.capabilities|tojson(indent=2) }}</pre></details>{% endfor %}
+{% endblock %}

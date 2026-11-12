@@ -93,6 +93,8 @@ def slug(text: str) -> str:
 
 
 def folder_for(meeting: Found) -> str:
+    if meeting.connector_key:
+        return f"{meeting.day.isoformat()}-{slug(meeting.body)}-{meeting.connector_key[:20]}"
     return f"{meeting.day.isoformat()}-{slug(meeting.body)}-{slug(meeting.video)}"
 
 
@@ -233,6 +235,29 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
     folder.mkdir(parents=True, exist_ok=True)
     entry.update(folder=str(folder), body=meeting.body, day=meeting.day.isoformat())
     done: list[str] = entry.setdefault("done", [])
+    supplied = None
+    if meeting.connector_prepare is not None:
+        from civiccast_brief.connectors import CivicSources
+
+        evidence = meeting.connector_prepare(folder)
+        connectors = CivicSources(settings.city)
+        try:
+            entry["evidence_item"] = connectors.stage_evidence(settings.db, evidence, meeting.body)
+        finally:
+            connectors.close()
+        entry["limitations"] = evidence["limitations"]
+        entry["attachment_failures"] = evidence["failures"]
+        entry["connector_capture"] = meeting.connector_capture
+        entry["connector_revision"] = meeting.connector_revision
+        supplied = evidence.get("supplied_capture")
+        if evidence["failures"]:
+            raise StepFailed("source attachments unavailable; evidence saved; retry this run")
+        if entry.get("source_changed") or (not supplied and not meeting.video):
+            entry["evidence_only"] = True
+            return
+        entry["evidence_only"] = False
+        if "documents" not in done:
+            done.append("documents")
     # The documents come first: the recap names a voice from a self-introduction only when
     # the packet, the minutes or the agenda print that name.
     if "documents" not in done and meeting.documents is not None:
@@ -251,6 +276,9 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
                 f"no roster for {meeting.body} (add rosters/{slug(meeting.body)}.json)"
             )
         argv = ["run", meeting.video, "--out", str(folder), "--city", str(settings.city)]
+        if supplied:
+            argv[1] = f"connector-{meeting.connector_key}"
+            argv += ["--supplied-capture", supplied]
         argv += ["--roster", str(roster)]
         if meeting.agenda is not None:
             agenda = folder / "agenda.txt"
@@ -282,7 +310,9 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
 
 
 def _record(state: State, entry: dict[str, Any], error: str) -> None:
-    entry["status"] = "failed" if error else "done"
+    entry["status"] = (
+        "failed" if error else "evidence only" if entry.get("evidence_only") else "done"
+    )
     entry["error"] = error
     state.save()
 
@@ -458,6 +488,19 @@ def run_week(
     for meeting in meetings:
         entry = state.meeting(meeting.key)
         entry.update(title=meeting.title, week=last.isoformat())
+        if meeting.connector_key and entry.get("connector_capture") not in (
+            None,
+            meeting.connector_capture,
+        ):
+            entry["source_changed"] = True
+            entry["status"] = "source changed"
+            if settings.db.is_file():
+                with ReviewStore(settings.db) as store:
+                    for item in store.list_items():
+                        if item.meeting_id == f"connector-{meeting.connector_key}":
+                            store.hold(
+                                item.id, "Source changed; new evidence needs producer review."
+                            )
         if meeting.reason:
             entry.update(status="not run", error=meeting.reason)
             state.save()
@@ -473,7 +516,13 @@ def run_week(
             report.add(f"{meeting.day} {meeting.title}: failed: {exc}", failed=True)
             continue
         _record(state, entry, "")
-        report.add(f"{meeting.day} {meeting.title}: done")
+        if entry.get("evidence_only"):
+            report.add(
+                f"{meeting.day} {meeting.title}: evidence saved for review; "
+                "writing/transcription not completed"
+            )
+        else:
+            report.add(f"{meeting.day} {meeting.title}: done")
         for line in entry.get("documents", []):
             report.add(f"{meeting.day} {meeting.title}: {line}")
     line = run_roundup(steps, settings, state, last)

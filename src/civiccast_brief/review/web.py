@@ -40,6 +40,7 @@ from starlette.concurrency import run_in_threadpool
 
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
+from civiccast_brief.connectors import catalog
 from civiccast_brief.review import desk
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 
@@ -364,6 +365,7 @@ class DeskApp:
             title="Sources",
             sources=rows,
             kinds=city_sources.KINDS,
+            providers=catalog(),
             kind_labels=city_sources.KIND_LABELS,
             notice=notice,
             error=error or load_error,
@@ -411,6 +413,7 @@ def make_desk_app(
     city_dir: str | Path | None = None,
     writer: desk.Writer | None = None,
     regenerate: RegenerateCallback | None = None,
+    connector_factory: Callable | None = None,
 ) -> FastAPI:
     """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio."""
     state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate)
@@ -557,7 +560,7 @@ def make_desk_app(
                     error=f"No source {edit}; it may have been removed.", status=404
                 )
             form = {
-                k: (", ".join(v) if k == "bodies" else str(v))
+                k: (", ".join(v) if k == "bodies" else json.dumps(v) if k == "options" else str(v))
                 for k, v in found[0].to_json().items()
                 if k != "id"
             }
@@ -731,6 +734,9 @@ def make_desk_app(
             return state.sources_page(error=f"Not saved: {exc}", form=form, status=400)
         return _redirect("/sources?" + urlencode({"done": done, "id": new_id}))
 
+    from civiccast_brief.review.connector_web import install_routes
+
+    install_routes(app, state, read_form, bad_token, factory=connector_factory)
     return app
 
 

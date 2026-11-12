@@ -58,7 +58,7 @@ import json
 import os
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import parse_qs, urlsplit
@@ -75,6 +75,7 @@ KINDS: Final = (
     "escribe",
     "civicplus",
     "laserfiche",
+    "connector",
 )
 KIND_LABELS: Final = {
     "primegov": "PrimeGov portal",
@@ -86,6 +87,7 @@ KIND_LABELS: Final = {
     "escribe": "eScribe meetings site",
     "civicplus": "CivicPlus Agenda Center or Archive Center",
     "laserfiche": "Laserfiche WebLink folder (read in Chrome)",
+    "connector": "Standalone civic connector (31 providers)",
 }
 
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -125,9 +127,16 @@ class Source:
     tenant: str = ""
     #: The CivicPlus site's host.
     site: str = ""
+    provider: str = ""
+    input_format: str = ""
+    capture: str = ""
+    namespace: str = ""
+    options: dict[str, Any] = field(default_factory=dict)
 
     @property
     def id(self) -> str:
+        if self.kind == "connector":
+            return f"connector:{self.provider}:{self.url}"
         if self.kind == "primegov":
             return f"primegov:{urlsplit(self.url).hostname}"
         if self.kind == "youtube":
@@ -145,7 +154,7 @@ class Source:
     @property
     def address(self) -> str:
         """What a person reads: the portal, the channel, the page or the folder."""
-        if self.kind in ("primegov", "webpage", "laserfiche"):
+        if self.kind in ("primegov", "webpage", "laserfiche", "connector"):
             return self.url
         if self.kind == "youtube":
             return f"https://www.youtube.com/channel/{self.channel_id}"
@@ -161,7 +170,15 @@ class Source:
 
     def to_json(self) -> dict[str, Any]:
         data: dict[str, Any] = {"id": self.id, "kind": self.kind}
-        if self.kind == "primegov":
+        if self.kind == "connector":
+            data.update(url=self.url, provider=self.provider, input_format=self.input_format)
+            if self.capture:
+                data["capture"] = self.capture
+            if self.options:
+                data["options"] = self.options
+            if self.namespace:
+                data["namespace"] = self.namespace
+        elif self.kind == "primegov":
             data["url"] = self.url
         elif self.kind == "youtube":
             data["channel_id"] = self.channel_id
@@ -374,6 +391,60 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     kind = str(kind).strip().lower()
     if kind not in KINDS:
         raise SourceError(f"pick a kind: {', '.join(KINDS)}", "kind")
+    if kind == "connector":
+        from civic_data_connectors import create_engine
+        from civic_data_connectors.providers import FORMATS
+
+        provider = str(fields.get("provider") or "")
+        if provider not in FORMATS:
+            raise SourceError("pick a provider from the standalone capability list", "provider")
+        url = str(fields.get("connector_url") or fields.get("url") or "").strip()
+        input_format = str(fields.get("input_format") or "")
+        if input_format and input_format not in FORMATS[provider]:
+            raise SourceError("pick this provider's documented saved format", "input_format")
+        options = fields.get("options") or {}
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except ValueError as exc:
+                raise SourceError("options must be a JSON object", "options") from exc
+        if not isinstance(options, dict):
+            raise SourceError("options must be a JSON object", "options")
+        namespace = str(fields.get("namespace") or "").strip()
+        result = create_engine().execute(
+            "validate_source",
+            {
+                "source": {
+                    "provider": provider,
+                    "url": url,
+                    "options": options,
+                    **({"namespace": namespace} if namespace else {}),
+                }
+            },
+        )
+        if result.status not in {"completed", "partial"}:
+            raise SourceError(
+                "; ".join(e.message for e in result.errors) or "invalid configured source",
+                "connector_url",
+            )
+        capture = str(fields.get("capture") or "")
+        if capture and (
+            Path(capture).is_absolute()
+            or "\\" in capture
+            or ":" in capture
+            or any(part in {"..", "."} for part in capture.split("/"))
+        ):
+            raise SourceError("capture must be a relative file inside the city folder", "capture")
+        return Source(
+            kind,
+            parse_bodies(fields.get("bodies") or ""),
+            url=url,
+            provider=provider,
+            input_format=input_format,
+            capture=capture,
+            namespace=namespace,
+            options=options,
+        )
     # The address is checked before the bodies, in the order the form shows them.
     if kind == "primegov":
         url = _primegov_url(str(fields.get("url") or ""))

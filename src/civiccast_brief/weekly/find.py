@@ -60,9 +60,15 @@ class Found:
     )
     #: Why this meeting cannot be run; empty when it can.
     reason: str = ""
+    connector_key: str = ""
+    connector_revision: str = ""
+    connector_capture: str = ""
+    connector_prepare: Callable | None = field(default=None, compare=False, repr=False)
 
     @property
     def key(self) -> str:
+        if self.connector_key:
+            return f"connector:{self.connector_key}"
         if self.granicus_host:
             return f"granicus:{self.granicus_host}/{self.video}"
         if self.video:
@@ -85,6 +91,7 @@ class Listers:
     #: (host, view id) -> clips with .clip_id, .name, .date ("October 6, 2026")
     granicus: Callable[[str, int], Sequence[Any]] | None = None
     classifier: MeetingClassifier = field(default_factory=MeetingClassifier)
+    connector: Callable | None = None
 
 
 def _fold(text: str) -> str:
@@ -226,7 +233,11 @@ def find_meetings(
             problems.append(f"{source.id}: no reader for {source.kind} sources")
             continue
         try:
-            meetings = READERS[source.kind](source, first, last, listers)
+            if source.kind == "connector":
+                meetings, errors = listers.connector(source, first, last)
+                problems.extend(errors)
+            else:
+                meetings = READERS[source.kind](source, first, last, listers)
         except Exception as exc:  # noqa: BLE001 - one broken source must not stop the others
             problems.append(f"{source.id}: {exc}")
             continue
