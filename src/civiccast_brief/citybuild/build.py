@@ -1,7 +1,7 @@
 """Write what a search found into a city folder.
 
-``city.json`` is written only when the folder has none; a file already there is never changed.
-``roster.json`` is filled from the members page on the city's own site, read by rule
+``city.json`` is written only when the folder has none; in a file already there only the email
+addresses an earlier build left blank are set. ``roster.json`` is filled from the members page on the city's own site, read by rule
 (:mod:`civiccast_brief.citybuild.members`), when the folder has none or has only the empty
 template; a roster with members is never changed. ``sources.json`` gains the found sources, and a source already listed gains the
 bodies it lacked. ``city-search.json`` keeps the whole search, so the editor can see how each
@@ -28,6 +28,9 @@ REPORT_FILE: Final = "city-search.json"
 #: The address podcast directories write to: the publisher's own, the same for every city
 #: (Longmont's city.json has used it since the first episode).
 PUBLISHER_EMAIL: Final = "podcast@civiccastbrief.org"
+#: The address readers write to, shown on every city's About page. Email Routing forwards it,
+#: like the podcast address, to the publisher (set 2026-11-11).
+CONTACT_EMAIL: Final = "contact@civiccastbrief.org"
 
 
 @dataclass
@@ -68,18 +71,26 @@ def _write_new(path: Path, data: object) -> bool:
     return True
 
 
-def _fill_publisher_email(path: Path) -> bool:
-    """Set ``podcast.owner_email`` when an earlier build left it blank. Nothing else changes."""
+def _fill_blank_emails(path: Path) -> list[str]:
+    """Set ``contact_email`` and ``podcast.owner_email`` where an earlier build left them blank
+    (an empty string). Nothing else changes. Returns the fields set."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return False
-    podcast = data.get("podcast") if isinstance(data, dict) else None
-    if not isinstance(podcast, dict) or podcast.get("owner_email") != "":
-        return False
-    podcast["owner_email"] = PUBLISHER_EMAIL
-    _write(path, data)
-    return True
+        return []
+    if not isinstance(data, dict):
+        return []
+    filled = []
+    if data.get("contact_email") == "":
+        data["contact_email"] = CONTACT_EMAIL
+        filled.append("contact_email")
+    podcast = data.get("podcast")
+    if isinstance(podcast, dict) and podcast.get("owner_email") == "":
+        podcast["owner_email"] = PUBLISHER_EMAIL
+        filled.append("podcast.owner_email")
+    if filled:
+        _write(path, data)
+    return filled
 
 
 def _empty_roster(path: Path) -> bool:
@@ -157,15 +168,15 @@ def build_city(
     city = city_settings(
         slug=slug or slug_for(found.name),
         name=found.name,
-        contact_email="",
+        contact_email=CONTACT_EMAIL,
         podcast_email=PUBLISHER_EMAIL,
     )
     if _write_new(folder / CITY_FILE, city):
         built.lines.append(f"wrote {folder / CITY_FILE}")
         built.notice.append(f"Wrote {CITY_FILE}.")
-    elif _fill_publisher_email(folder / CITY_FILE):
-        built.lines.append(f"set podcast.owner_email in {folder / CITY_FILE} to {PUBLISHER_EMAIL}")
-        built.notice.append(f"Kept {CITY_FILE}; set its blank podcast address.")
+    elif filled := _fill_blank_emails(folder / CITY_FILE):
+        built.lines.append(f"set {' and '.join(filled)} in {folder / CITY_FILE} (they were blank)")
+        built.notice.append(f"Kept {CITY_FILE}; set its blank email addresses.")
     else:
         built.lines.append(f"kept {folder / CITY_FILE} (already there)")
         built.notice.append(f"Kept {CITY_FILE} (already there).")
