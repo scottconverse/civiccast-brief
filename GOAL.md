@@ -5,6 +5,9 @@ Scott chose option 1 for newsletter replies (forward brief@ to his Gmail).
 This OKs the scope calls the list named: new weekly readers (item 1), a weekly schedule (item 3) and naming more speakers (item 6).
 The list is fixed at 22 items. An item is done only when it is shown, not claimed. FAILED, BLOCKED or SKIPPED never count as done.
 
+2026-11-11, Scott: "Make finishing ALL OF THIS a goal. DO NOT STOP AGAIN. use subagents where appropriate. (Sonnet, haiku and Deepseek)."
+The goal is every open item in the 22-item list above. Work does not stop until each one is done and shown here, or Scott says stop.
+
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | 1 | Weekly run reads Laserfiche, CivicPlus, CivicClerk, eScribe, web pages and Google Drive, not only PrimeGov, YouTube and Granicus | open | |
