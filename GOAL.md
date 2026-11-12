@@ -83,7 +83,7 @@ Scott's decisions, 2026-11-09:
 | 25 | Email through Brevo's API format, settings documented, tested with a stand-in; clear the `nobody@example.com` row | done | scottconverse/civiccast-brief#2, merge 2891490. Row sub-f5391f814da11cfbb8154536 deleted from live D1 2026-11-10 (1 change; Scott's confirmed row kept). worker/signup/src/brevo.ts, used when the BREVO_API_KEY secret is set; test/brevo.test.ts (13 pass locally, and fail when the api-key header or the header filter is broken). Setup steps in docs/email-signup.md. No real Brevo account used |
 | **F** | **Issues** | | |
 | 26 | YouTube shared limit: other apps paused for now; CivicCast Brief reads captions with the copied TownRecord code | open (partly) | Captions use the copied TownRecord ladder with Scott's Data API key (Credential Manager, not in the repo). 0 429s so far |
-| 27 | Running on other machines: no separate installs; release work after A to E | open | |
+| 27 | Running on other machines: no separate installs; release work after A to E | moved to item 19 of the 22-item list | Installer done there (#48): no separate TownRecord or textflowkit install. Release work is not started; it waits on A to E |
 | 28 | Someone other than me sets up a city with the in-program setup | open | |
 
 ## Earlier goal: the 24 PLAN.md items (set by Scott, 2026-11-05)
