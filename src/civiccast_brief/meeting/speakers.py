@@ -16,6 +16,7 @@ print that name (see ``introductions``).
 
 from __future__ import annotations
 
+import itertools
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -139,11 +140,21 @@ def parse_call(text: str) -> Call | None:
     )
 
 
+def _squash(surname: str) -> str:
+    """A surname lower-cased with hyphens and spaces taken out ("Edgley-Wells" -> "edgleywells")."""
+    return re.sub(r"[\s\-]+", "", surname.lower())
+
+
 def match_member(call: Call, roster: Roster) -> Member | None:
     """The one roster member the call names, or None. Exact spelling only, no fuzzy matching."""
     candidates = [m for m in roster.members if m.last.lower() == call.last]
     if call.first is not None:
         candidates = [m for m in candidates if m.first.lower() == call.first]
+    if not candidates and call.first is not None:
+        # "Commissioner Edgley Wells" is two words to the parser but one surname to the roster
+        # ("Edgley-Wells"). The words still have to spell the whole surname, letter for letter.
+        joined = call.first + call.last
+        candidates = [m for m in roster.members if _squash(m.last) == joined]
     if call.mayor_title:
         candidates = [m for m in candidates if m.role == "Mayor"]
     return candidates[0] if len(candidates) == 1 else None
@@ -328,9 +339,31 @@ def name_recognition(title_kind: str, spoken: str, roster: Roster) -> tuple[str 
         if not rest:
             return None, None
         match = rs.match_name(rest, people)
+        by_sound = True
     else:
         match = rs.read_naming(title_kind, spoken, officials=people, holders=holders)
+        by_sound = match.method == rs.METHOD
+    if by_sound and match.person is not None and not _surname_sounds_like(spoken, match.person):
+        # A title is said with a surname. A word that sounds like the member's first name
+        # ("Marson" for Michael Polan) is not a reading of the member; leave the turn unknown.
+        match = rs.Match(
+            spoken=match.spoken,
+            candidate=match.candidate,
+            score=match.score,
+            runner_up=match.runner_up,
+            refused=True,
+        )
     return (match.person.name if match.person else None), match
+
+
+def _surname_sounds_like(spoken: str, person: Any) -> bool:
+    """Whether some word of the spoken name sounds like the person's surname (or part of it)."""
+    from civiccast_brief.record.records import speakers as rs
+    from civiccast_brief.record.repo.rows import Person
+
+    surname = person.name.replace('"', " ").split()[-1]
+    only_surname = Person(id=person.id, name=surname, created_at="")
+    return rs.match_name(rs._without_the_title(spoken), [only_surname]).score >= rs.CUTOFF
 
 
 #: Words that may follow the name in a hand-off ("Council member Popkin, go ahead, please.").
@@ -358,10 +391,13 @@ _HAND_OFF_TAIL = frozenset(
 #: A title right after one of these words is a mention ("seconded by Council Member Popkin",
 #: "carries six to one with Council Member Crist", "as Council Member Prieto said").
 _MENTION_BEFORE = frozenset(["with", "by", "from", "to", "as", "what", "and", "of", "about", "for"])
-_TITLE_WORDS = re.compile(r"\b(council\s*(?:member|man|woman)s?|mayor)\b", re.IGNORECASE)
+_TITLE_WORDS = re.compile(
+    r"\b(council\s*(?:member|man|woman)s?|commissioners?|mayor)\b", re.IGNORECASE
+)
+_MENTION = "a mention, not a hand-off"
 
 
-def is_hand_off(evidence: str, spoken: str) -> bool:
+def is_hand_off(evidence: str, spoken: str, name_words: int = 1) -> bool:
     """True when the line hands the floor to the named person, not when it mentions them.
 
     The name must end the line, be followed only by words such as "go ahead" or "thank you",
@@ -369,6 +405,9 @@ def is_hand_off(evidence: str, spoken: str) -> bool:
     title must not follow a word such as "with", "by" or "as". Measured on five Longmont
     meetings (October 2026): about one in eight recognitions read by the TownRecord code was a
     mention, and naming the next turn from it named the wrong person.
+
+    ``name_words`` is how many of the spoken words are the name: two for a compound surname
+    the captioner split ("Commissioner Edgley Wells" for Edgley-Wells).
     """
     first = spoken.split()[0].lower() if spoken.split() else ""
     text = evidence.replace(">>", " ").strip()
@@ -376,6 +415,8 @@ def is_hand_off(evidence: str, spoken: str) -> bool:
     if at < 0:
         return False
     rest = text[at + len(first) :]
+    for _ in range(name_words - 1):
+        rest = re.sub(r"^\s*\S+", "", rest, count=1)
     tail = re.sub(r"[^\w\s']", " ", rest).lower().split()
     question = rest.lstrip().startswith(",") and text.endswith("?")
     if not question and any(word not in _HAND_OFF_TAIL for word in tail):
@@ -407,6 +448,7 @@ def label_recognitions(
         for position, s in enumerate(segments)
     ]
     runs = rs.runs_of(rows)
+    diarized = any(s.voice for s in segments)
     assert [r.start_segment_id for r in runs] == [t.first for t in turns], "runs differ from turns"
     found: list[dict[str, Any]] = []
     for run in runs[:-1]:
@@ -428,8 +470,12 @@ def label_recognitions(
         }
         if name is None:
             entry["status"] = "no roster member matches by sound"
-        elif not is_hand_off(recognition.evidence, recognition.spoken):
-            entry["status"] = "a mention, not a hand-off"
+        elif not is_hand_off(
+            recognition.evidence if diarized else _to_end_of_turn(run.text, recognition.evidence),
+            recognition.spoken,
+            _name_word_count(recognition.spoken, name, roster),
+        ):
+            entry["status"] = _MENTION
         elif target.speaker is not None:
             entry["status"] = f"turn already named by {target.basis}"
         else:
@@ -439,6 +485,29 @@ def label_recognitions(
     return {"method": "chair_recognition", "recognitions": found}
 
 
+def _to_end_of_turn(turn_text: str, evidence: str) -> str:
+    """The recognition's sentence and everything the turn says after it.
+
+    A chair's hand-off ends her turn. When the captioner left out the speaker mark, the member's
+    own words follow the name in the same turn ("Commissioner Arman. Um, I would propose ..."),
+    and the next turn belongs to somebody else, so it must not be named from that name. Used
+    only when there are no voices: with voices, label_voices checks each named turn against the
+    voice that speaks it. Sound notes in brackets ("[clears throat]") are not words.
+    """
+    at = turn_text.find(evidence.strip())
+    return re.sub(r"\[[^\]]*\]", " ", turn_text[at:]) if at >= 0 else evidence
+
+
+def _name_word_count(spoken: str, name: str | None, roster: Roster) -> int:
+    """2 when the first two spoken words are the two halves of the member's compound surname."""
+    member = roster.by_name(name) if name else None
+    parts = re.split(r"[-\s]+", member.last) if member else []
+    words = spoken.split()
+    if len(parts) == 2 and len(words) >= 2 and _sound_key(words[1]) == _sound_key(parts[1]):
+        return 2
+    return 1
+
+
 def chair_voice(
     segments: list[Segment], turns: list[Turn], recognitions: list[dict[str, Any]]
 ) -> str | None:
@@ -446,11 +515,15 @@ def chair_voice(
 
     Each recognition is said on one caption line; the voice on that line is counted. The voice
     with the most is the chair's when it said at least MIN_CHAIR_RECOGNITIONS of them and
-    MIN_CHAIR_SHARE of all of them. The chair's own lines are never given the name of the person
-    the chair handed the floor to.
+    MIN_CHAIR_SHARE of all of them. A mention ("agree with Council Member Popkin"), which members
+    say from their own seats, is not counted: counting it hid the chair on Oct 27, 2026 (14 of
+    74 recognitions, 19 percent, against a 20 percent bar). The chair's own lines are never
+    given the name of the person the chair handed the floor to.
     """
     counts: dict[str, int] = {}
     for found in recognitions:
+        if found.get("status") == _MENTION:
+            continue
         turn = turns[found["turn"]]
         word = (found["spoken"].split() or [""])[0].casefold()
         said = next(
@@ -624,6 +697,7 @@ class PrintedNames:
 
     def __init__(self, pages: list[tuple[str, str]]) -> None:
         self.pages = [(where, _GAP.sub(" ", text)) for where, text in pages if text]
+        self._by_sound: dict[tuple[str, str], dict[str, tuple[str, str]]] | None = None
 
     @classmethod
     def from_documents(cls, data: dict[str, Any] | None, agenda: str | None = None) -> PrintedNames:
@@ -659,6 +733,39 @@ class PrintedNames:
                 if not re.match(r"\s+[A-Z]", rest) or re.match(_NEXT_TITLE, rest):
                     return where
         return None
+
+    def find_by_sound(self, words: list[str]) -> tuple[str, str] | None:
+        """(name as printed, where) for a two-word name the captioner spelled by ear, or None.
+
+        "Anna Castro" is the printed "Ana Castro", "Kristen Cody" the printed "Kristin Cote". Both
+        words must have the same sound key as the same two printed words (doubled letters
+        folded), and exactly one printed name may do so; two printed names that sound the same
+        name nobody. The name given back is the printed spelling.
+        """
+        if len(words) != 2:
+            return None
+        if self._by_sound is None:
+            self._by_sound = {}
+            for where, text in self.pages:
+                found = [(m.group(), m.start(), m.end()) for m in _CAPITALIZED_WORD.finditer(text)]
+                for (first, _, end), (last, start, _) in itertools.pairwise(found):
+                    if text[end:start] == " ":
+                        key = (_sound_key(first), _sound_key(last))
+                        self._by_sound.setdefault(key, {}).setdefault(
+                            f"{first} {last}".casefold(), (f"{first} {last}", where)
+                        )
+        hits = self._by_sound.get((_sound_key(words[0]), _sound_key(words[1])), {})
+        return next(iter(hits.values())) if len(hits) == 1 else None
+
+
+_CAPITALIZED_WORD = re.compile(r"(?<![\w'\-])[A-Z][a-z]+(?:['\-][A-Za-z]+)?(?![\w'\-])")
+
+
+def _sound_key(word: str) -> str:
+    """A word's sound key with doubled letters folded ("Anna" and "Ana" are one sound)."""
+    from civiccast_brief.record.records import speakers as rs
+
+    return str(rs.phonetic_key(re.sub(r"(.)\1+", r"\1", word.casefold())))
 
 
 def _name_words(raw: str, capitalized: bool) -> list[str]:
@@ -789,6 +896,10 @@ def introductions(
                 if where is not None:
                     entry["name"], entry["printed_in"] = " ".join(candidate), where
                     break
+            if entry["name"] is None and (heard := printed.find_by_sound(words)) is not None:
+                entry["name"], entry["printed_in"] = heard
+                if entry["name"].casefold() != spoken.casefold():
+                    entry["matched_by"] = "sound"
             if entry["name"] is None:
                 entry["status"] = "not named: the name is not printed in the meeting's documents"
             elif entry["name"].casefold() in members:
@@ -808,12 +919,21 @@ def introductions(
     for entry in found:
         if entry["status"] == "named":
             by_voice.setdefault(entry["voice"], set()).add(entry["name"].casefold())
+    # A voice that says several different names is a caller ("Thank you. Jim Harmon." then
+    # "Thank you. Lawrence Jacobson.") or two people the diarization merged. It is not named from
+    # any of them. Names count by surname, so "Chris Neils" and "Christopher Neils" are one.
+    said: dict[str, set[str]] = {}
+    for entry in found:
+        if entry["voice"] is not None and entry["spoken"].count(" ") >= 1:
+            said.setdefault(entry["voice"], set()).add(entry["spoken"].split()[-1].casefold())
     voices: dict[str, tuple[str, str]] = {}
     for entry in found:
         if entry["status"] != "named":
             continue
         if len(by_voice[entry["voice"]]) > 1:
             entry["status"] = "not named: this voice also introduces another name"
+        elif len(said[entry["voice"]]) > 1:
+            entry["status"] = "not named: this voice says several different names (a caller)"
         else:
             voices.setdefault(entry["voice"], (entry["name"], entry["printed_in"]))
     return found, voices
