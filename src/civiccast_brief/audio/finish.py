@@ -221,7 +221,9 @@ def chapter_marks(script: Script, line_starts: list[float]) -> list[ChapterMark]
     marks: list[ChapterMark] = []
     for position, chapter in enumerate(script.chapters):
         start = 0.0 if position == 0 else line_starts[chapter.line_index]
-        marks.append(ChapterMark(round(start, 3), chapter.title))
+        # The title is shown, so it starts with a capital ("public comment" is "Public comment").
+        title = chapter.title[:1].upper() + chapter.title[1:]
+        marks.append(ChapterMark(round(start, 3), title))
     return marks
 
 
