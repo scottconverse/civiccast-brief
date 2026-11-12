@@ -459,3 +459,18 @@ def test_a_city_title_for_a_body_the_city_lacks_is_still_skipped(conn) -> None:
     source = _longmont(conn, "City Council", "Planning and Zoning Commission")
 
     assert portal.resolve_body(conn, source, "Longmont Housing Authority Advisory Board") is None
+
+
+@pytest.mark.parametrize(
+    ("title", "wanted"),
+    [
+        ("11/02/26 City Council Meeting", "City Council"),
+        ("11-09-26 Water Resources Advisory Board Meeting", "Water Resources Advisory Board"),
+        ("10-13-26 Board of Zoning Adjustment Meeting", "Board of Zoning Adjustment"),
+    ],
+)
+def test_a_date_in_front_of_a_channels_title_is_not_part_of_the_body(
+    title: str, wanted: str
+) -> None:
+    """Louisville's and Boulder's channels put the meeting's date first."""
+    assert portal.body_name(title) == wanted

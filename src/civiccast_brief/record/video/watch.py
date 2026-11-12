@@ -634,11 +634,11 @@ def _meeting_for(conn: sqlite3.Connection, source: Source, listing: Any) -> tupl
             f"names no body of jurisdiction {source.jurisdiction_id}, and source {source.id} "
             "names none of its own."
         )
-    day = published_day(listing.published)
-    if day is None:
-        # yt-dlp's flat listing carries no date; the city's titles carry the
-        # sitting's own day ("City Council Regular Session - November 3, 2026").
-        day = title_day(listing.title)
+    # The sitting's own day is the one its title names ("City Council Regular
+    # Session - November 3, 2026"): a video goes up after the meeting, often the
+    # next day in UTC and sometimes weeks later. A title with no day falls back
+    # to the day it went up.
+    day = title_day(listing.title) or published_day(listing.published)
     if day is None:
         return None, (
             f"Video {listing.video_id} ({listing.title!r}) is not linked to a meeting: its "
@@ -752,7 +752,9 @@ _MONTH = "|".join(_MONTH_NUMBERS)
 #: channels title a sitting with, and "11/3/26" from the portal's own titles.
 _MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
 _DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\s+(\d{{4}})\b", re.IGNORECASE)
-_SLASH_DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})\b")
+#: "11/3/26", and "11-09-26" as Boulder's channel titles its boards' meetings.
+_SLASH_DATE = re.compile(r"\b(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})\b")
+_ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _COMPACT_DAY = re.compile(r"\d{8}")
 
 
@@ -768,9 +770,11 @@ def title_day(title: str | None) -> date | None:
         days.add(_day_or_none(int(year), _MONTH_NUMBERS[month.casefold()], int(day)))
     for day, month, year in _DAY_MONTH_YEAR.findall(text):
         days.add(_day_or_none(int(year), _MONTH_NUMBERS[month.casefold()], int(day)))
-    for month, day, year in _SLASH_DATE.findall(text):
+    for month, _, day, year in _SLASH_DATE.findall(text):
         full_year = int(year) + 2000 if len(year) == 2 else int(year)
         days.add(_day_or_none(full_year, int(month), int(day)))
+    for year, month, day in _ISO_DATE.findall(text):
+        days.add(_day_or_none(int(year), int(month), int(day)))
     days.discard(None)  # type: ignore[arg-type]
     return days.pop() if len(days) == 1 else None
 
