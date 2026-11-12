@@ -137,7 +137,7 @@ _PRO_TEM = r"(?:pro[\s\-]*(?:tem|team|tim)|prom|port)\b"
 #: naming. A bare "Prom" with no "Mayor" in front of it is a title too, which is
 #: what the last alternative is for.
 _TITLE = (
-    rf"\b(?:council\s*member|councilman|councilwoman|mayor\s+pro\s+tem|"
+    rf"\b(?:council\s*member|councilman|councilwoman|commissioner|mayor\s+pro\s+tem|"
     rf"pro\s+tem|pro\s+team|pro\s+tim|mayor|{_PRO_TEM})"
 )
 
