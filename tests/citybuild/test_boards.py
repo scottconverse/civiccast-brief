@@ -84,3 +84,68 @@ def test_a_board_roster_with_members_is_not_changed(tmp_path, web, capsys):
     cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
     assert own.read_text() == before
     assert "kept planning-and-zoning-commission.json" in capsys.readouterr().out
+
+
+# ----- School boards ---------------------------------------------------------------------------
+
+SVVSD_BOARD = "https://www.svvsd.org/about/board-of-education/"
+SVVSD_MEETINGS = SVVSD_BOARD + "board-meetings/2026-board-meetings/"
+
+
+def _page(name):
+    return (HERE / name).read_text(encoding="utf-8")
+
+
+def test_a_school_board_page_gives_each_director_with_office_and_district():
+    svvsd = boards.read_district_members(_page("svvsd-board-of-education.html"))
+    assert [(m["name"], m["role"]) for m in svvsd] == [
+        ("Jocelyn Gilligan", "President, District E"),
+        ("Jim Berthold", "Vice President, District C"),
+        ("Sarah Hurianek", "Secretary, District F"),
+        ("Jacqueline Weiss", "Treasurer, District A"),  # her names are on two lines
+        ("Geno Lechuga", "Assistant Secretary, District G"),
+        ("Meosha Babbs", "Board Member, District D"),
+        ("Hadley Solomon", "Board Member, District B"),
+    ]
+    bvsd = boards.read_district_members(_page("bvsd-meet-the-board.html"))
+    assert [(m["name"], m["role"]) for m in bvsd][:3] == [
+        ("Nicole Rajpal", "President, District B"),
+        ("Alex Medler", "Vice President, District C"),
+        ("Jason Unger", "Treasurer, District A"),
+    ]
+    # A name with a letter past A-Z is a name.
+    assert bvsd[-1] == {"name": "Jorge Chávez", "first": "Jorge", "last": "Chávez", "role": "Board Member, District G"}  # fmt: skip
+
+
+def _school_city(tmp_path, name):
+    folder = tmp_path / name
+    folder.mkdir()
+    source = make_source("webpage", {"url": SVVSD_MEETINGS, "bodies": ["Board of Education"]})
+    merge_sources(folder, [source])
+    (folder / "city.json").write_text(json.dumps({"name": name.title()}))
+    (folder / "roster.json").write_text(json.dumps({"state": "Colorado", "body": "City Council"}))
+    return folder
+
+
+def test_the_meetings_page_leads_up_to_the_boards_members(tmp_path, web, capsys):
+    web.add(SVVSD_BOARD, _page("svvsd-board-of-education.html"))
+    folder = _school_city(tmp_path, "lyons")
+    cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
+    path = roster_for(folder, "Board of Education")
+    assert path is not None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["sources"] == [SVVSD_BOARD] and len(data["members"]) == 7
+    # The meetings page was read first, then the page above it.
+    assert web.asked[:2] == [SVVSD_MEETINGS, SVVSD_MEETINGS.rsplit("/", 2)[0] + "/"]
+
+
+def test_a_town_sharing_the_boards_source_gets_the_same_roster(tmp_path, web):
+    web.add(SVVSD_BOARD, _page("svvsd-board-of-education.html"))
+    lyons = _school_city(tmp_path, "lyons")
+    cli._rosters(argparse.Namespace(city=lyons), fetcher=web.fetcher())
+    erie = _school_city(tmp_path, "erie")
+    web.pages.clear()  # the district's site is down; the roster Lyons wrote is used
+    cli._rosters(argparse.Namespace(city=erie), fetcher=web.fetcher())
+    ours = roster_for(erie, "Board of Education")
+    assert ours is not None
+    assert ours.read_bytes() == (lyons / "rosters" / "board-of-education.json").read_bytes()

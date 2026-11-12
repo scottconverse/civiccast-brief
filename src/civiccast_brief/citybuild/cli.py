@@ -137,21 +137,16 @@ def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    portals = [s for s in sources if s.kind == "primegov"]
-    if not portals:
-        print(f"{folder} lists no PrimeGov portal; no board rosters were read")
-        return 0
+    name, state, today = str(city.get("name", "")), str(roster.get("state", "")), date.today()
     fetcher = fetcher or Fetcher()
-    for source in portals:
-        for line in boards.write_primegov_rosters(
-            folder,
-            source,
-            str(city.get("name", "")),
-            str(roster.get("state", "")),
-            fetcher,
-            date.today(),
-        ):
-            print(line)
+    lines: list[str] = []
+    for source in sources:
+        if source.kind == "primegov":
+            lines += boards.write_primegov_rosters(folder, source, name, state, fetcher, today)
+    lines += boards.write_page_rosters(folder, sources, name, state, fetcher, today)
+    lines += boards.copy_shared_rosters(folder, sources)
+    for line in lines or [f"{folder}: no board has a member list this can read"]:
+        print(line)
     return 0
 
 
@@ -180,7 +175,7 @@ def add_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[
     )
     cmd.set_defaults(run=_check)
     cmd = sub.add_parser(
-        "rosters", help="write each board's roster from the city's PrimeGov portal"
+        "rosters", help="write each board's roster from its PrimeGov member list or its own page"
     )
     cmd.add_argument("--city", type=Path, required=True, help="the city folder")
     cmd.set_defaults(run=_rosters)
