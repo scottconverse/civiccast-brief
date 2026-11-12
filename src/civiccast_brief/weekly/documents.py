@@ -11,8 +11,9 @@ For one PrimeGov meeting :func:`read_documents` fetches
 Each document's pages are read with pypdf, and ``documents.json`` keeps, for each one, its kind,
 its portal URL, its SHA-256 and the text of every page it holds (by page number in that PDF, so
 ``url#page=N`` opens the page). A packet or minutes that is not there is a line for the report,
-not a failure. Downloads go through the adapter, so its size limits hold (the packet limit for a
-packet), and a pause comes between requests.
+not a failure. Downloads go through the adapter with the run's own size limit, the one the other
+document sources use (Boulder's 22 October 2026 study session packet is 340 MB, past the adapter's
+200 MiB packet limit; the run reads the whole public record), and a pause comes between requests.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from civiccast_brief.record.adapters.base import AdapterError
 from civiccast_brief.record.records import minutes, portal
 from civiccast_brief.record.records.pages import own_footer, printed_footers
 from civiccast_brief.record.repo.rows import RecordPage
+from civiccast_brief.weekly.listed import WHOLE_BYTES
 
 DOCUMENTS_NAME = "documents.json"
 PACKET = "packet"
@@ -69,6 +71,8 @@ class Fetcher:
     adapter: Any
     pause_s: float = PAUSE_S
     sleep: Callable[[float], None] = time.sleep
+    #: The largest document downloaded.
+    limit_bytes: int = WHOLE_BYTES
     _read: dict[int, Read] = field(default_factory=dict)
     _asked: bool = False
 
@@ -80,7 +84,7 @@ class Fetcher:
     def read(self, document: Any) -> Read:
         if document.template_id not in self._read:
             self._wait()
-            content = self.adapter.get_document(document)
+            content = self.adapter.get_document(document, limit_bytes=self.limit_bytes)
             self._read[document.template_id] = Read(
                 content.source_url, content.sha256, pdf_pages(content.content)
             )

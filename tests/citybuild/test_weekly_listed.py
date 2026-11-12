@@ -226,3 +226,16 @@ def test_a_pdf_page_pypdf_will_not_parse_is_reported_and_the_rest_read(monkeypat
     pages = data["documents"][0]["pages"]
     assert "Call to order" in pages[0]["text"] and pages[1]["text"] == ""
     assert lines == [f"packet: 2 pages ({url}); no text taken from page 2"]
+
+
+def test_a_listed_file_that_is_not_a_document_is_reported_not_read_as_pages(web):
+    """Boulder's Laserfiche folders list the meeting's MP3 recording beside its agenda (Planning
+    Board, 27 October 2026, 94 MB). Its bytes are not split into pages at each form feed."""
+    url = "https://example.test/recording"
+    sound = b"ID3\x03\x00\x00\x00\x006\x00TY" + b"\xff\xfb\x90\x0c" * 200
+    web.add(url, sound, "application/octet-stream")
+    doc = listed.Doc("Planning Board", date(2026, 10, 27), "Agenda", url, "agenda")
+    data, lines = listed.read_all([doc], web.fetcher())
+    assert data["documents"] == []
+    assert lines[0].startswith("agenda: not read: ")
+    assert "application/octet-stream" in lines[0]

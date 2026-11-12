@@ -246,9 +246,13 @@ def read_pages(doc: Doc, fetcher: Fetcher) -> tuple[str, list[str], list[int]]:
         if not items:
             raise FetchError(f"{doc.url} answered with a web page, not the document")
         pages = ["\n".join([title, *items]) if title else "\n".join(items)]
-    else:
+    elif page.content_type.lower().startswith("text/plain"):
         # A scanned WebLink document comes as its pages' text with a form feed between pages.
         pages = content.decode("utf-8-sig", errors="replace").split("\f")
+    else:
+        # A recording or another file listed beside the documents (Boulder's Laserfiche folders
+        # hold each meeting's MP3).
+        raise FetchError(f"{doc.url} is not a document ({page.content_type or 'no type'})")
     if not any(p.strip() for p in pages):
         raise FetchError(f"{doc.url} has no text to read (a scan without text?)")
     return hashlib.sha256(content).hexdigest(), pages, unread

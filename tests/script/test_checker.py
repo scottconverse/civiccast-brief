@@ -192,3 +192,13 @@ def test_a_middle_line_still_needs_a_claim_for_header_facts():
     lines = good_script()
     lines[4] = ScriptLine("S2", "The Longmont City Council met on October twentieth.")
     assert (5, "uncited") in errors_by_code(lines)
+
+
+def test_two_chapter_marks_together_fail_the_check():
+    # The audio cannot place a chapter with no line in it, so a passing script must not hold one.
+    lines = good_script()
+    lines.insert(2, ScriptLine("CHAPTER", "October 20 meeting", ("c01",)))
+    assert lines[3].is_chapter
+    report = check_script(RECAP, lines)
+    assert not report.passed
+    assert [i.code for i in report.errors] == ["empty_chapter"]

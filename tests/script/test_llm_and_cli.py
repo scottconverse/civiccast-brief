@@ -123,3 +123,31 @@ def test_cli_check_exit_zero_when_clean(tmp_path, capsys):
 def test_cli_rejects_missing_command():
     with pytest.raises(SystemExit):
         main([])
+
+
+def test_cli_write_drops_a_chapter_mark_with_no_line_in_it(tmp_path, monkeypatch, capsys):
+    from civiccast_brief.audio.lines import read_script
+    from civiccast_brief.script import cli
+
+    recap_path = _fixture_recap(tmp_path)
+    answer = "\n".join(
+        json.dumps(line)
+        for line in [
+            {"speaker": "S1", "text": "CivicCast Brief, Longmont.", "claim_ids": ["c01"]},
+            {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
+            {"speaker": "CHAPTER", "text": "October 20 meeting", "claim_ids": ["c01"]},
+            {"speaker": "CHAPTER", "text": "Live stream", "claim_ids": ["c02"]},
+            {"speaker": "S1", "text": "The meeting video is online.", "claim_ids": ["c02"]},
+            {
+                "speaker": "S2",
+                "text": "Watch it on the city's YouTube channel.",
+                "claim_ids": ["c02"],
+            },
+        ]
+    )
+    monkeypatch.setattr(cli, "_writer", lambda args, recap: lambda prompt: answer)
+    out = tmp_path / "script.txt"
+    main(["write", "--recap", str(recap_path), "--out", str(out)])
+
+    assert "dropped empty chapter: October 20 meeting" in capsys.readouterr().out
+    assert [c.title for c in read_script(out).chapters] == ["Live stream"]
