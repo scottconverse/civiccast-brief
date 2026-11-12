@@ -126,6 +126,13 @@ def numbers_in(text: str) -> set[str]:
     return found
 
 
+def _term(word: str) -> str:
+    """The word as the term check looks it up: lower case, without a possessive ("Longmont's")
+    or a hyphen left at its end ("COVID-" from "COVID-19")."""
+    word = word.lower().rstrip("-")
+    return word.removesuffix("'s").rstrip("'")
+
+
 def _capitalised_words(text: str) -> list[str]:
     """Capitalised words, except the first word of the text (a sentence opener)."""
     return [m.group(0) for m in _CAP_WORD_RE.finditer(text)][1:]
@@ -144,7 +151,7 @@ def verify(
     roster_tokens = {t.lower() for m in roster.members for t in (m.first, m.last)}
     roster_tokens |= {t.lower() for m in roster.members for t in m.name.split()}
     roster_tokens |= {t.lower() for t in f"{roster.city} {roster.state}".split()}
-    allowed = vocabulary | {w.lower() for w in GENERIC_WORDS} | roster_tokens
+    allowed = {_term(w) for w in vocabulary | GENERIC_WORDS | roster_tokens}
     dropped: list[dict[str, Any]] = []
     kept: list[tuple[float, str, str, str, str]] = []
     corrected: list[str] = []
@@ -208,7 +215,7 @@ def verify(
         off_roster = []
         for match in _TITLED_NAME_RE.finditer(text):
             for token in match.group(1).split():
-                if token.lower() not in roster_tokens:
+                if _term(token) not in roster_tokens:
                     off_roster.append(token)
         if off_roster:
             drop(position, text, f"titled name not on the roster: {', '.join(off_roster)}")
@@ -238,9 +245,9 @@ def verify(
         spoken_by = speaker_at(nearest.first) if speaker_at else None
         allowed_here = allowed
         if spoken_by and spoken_by != "unknown":
-            allowed_here = allowed | {t.lower() for t in spoken_by.split()}
+            allowed_here = allowed | {_term(t) for t in spoken_by.split()}
         off_agenda = sorted(
-            {w for w in _capitalised_words(text) if len(w) > 1 and w.lower() not in allowed_here}
+            {w for w in _capitalised_words(text) if len(w) > 1 and _term(w) not in allowed_here}
         )
         if off_agenda:
             drop(
