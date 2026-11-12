@@ -394,13 +394,16 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
     if kind == "connector":
         from civic_data_connectors import create_engine
         from civic_data_connectors.providers import FORMATS
+        from civic_data_connectors.providers.identification import ADDITIONAL_FORMATS
 
         provider = str(fields.get("provider") or "")
         if provider not in FORMATS:
             raise SourceError("pick a provider from the standalone capability list", "provider")
         url = str(fields.get("connector_url") or fields.get("url") or "").strip()
         input_format = str(fields.get("input_format") or "")
-        if input_format and input_format not in FORMATS[provider]:
+        if input_format and input_format not in (
+            FORMATS[provider] + ADDITIONAL_FORMATS.get(provider, ())
+        ):
             raise SourceError("pick this provider's documented saved format", "input_format")
         options = fields.get("options") or {}
         if isinstance(options, str):

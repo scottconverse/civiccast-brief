@@ -70,6 +70,9 @@
           {% for provider in providers %}{% for format in provider.formats %}
           <option value="{{ format.input_format }}" {% if form.get("input_format") == format.input_format %}selected{% endif %}>{{ provider.provider }} / {{ format.input_format }}</option>
           {% endfor %}{% endfor %}
+          {% for provider in providers %}{% for format in provider.additional_formats %}
+          <option value="{{ format }}" {% if form.get("input_format") == format %}selected{% endif %}>{{ provider.provider }} / {{ format }}</option>
+          {% endfor %}{% endfor %}
         </select></p>
       {{ field_error("input_format") }}
       <p><label for="capture">Saved capture, optional (relative to city folder)</label><br>

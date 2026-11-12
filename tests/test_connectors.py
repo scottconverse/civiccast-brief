@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
+import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -151,7 +153,18 @@ def test_all_31_source_choices_and_all_34_format_options(tmp_path):
         assert page.status_code == 200
         for provider in providers:
             assert f'value="{provider["provider"]}"' in page.text
+            for input_format in provider["additional_formats"]:
+                assert f'value="{input_format}"' in page.text
         assert 'name="capture"' in page.text
+    with pytest.raises(SourceError, match="documented saved format"):
+        make_source(
+            "connector",
+            {
+                "provider": "wistia",
+                "url": "https://api.wistia.com/modern/medias",
+                "input_format": "legistar-events-json",
+            },
+        )
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["connector"] + "/" + c["input_format"])
@@ -320,3 +333,65 @@ def test_same_external_id_isolated_by_city_and_producer_edits_preserved(tmp_path
     a.stage_evidence(db, evidence, "City Council")
     with ReviewStore(db) as store:
         assert store.get_item(item_id).article["headline"] == "Producer-owned headline"
+
+
+def test_supplied_recording_bytes_survive_review_reopen_and_export(tmp_path):
+    origin = "https://webapi.legistar.com/v1/synthetic/events"
+    recording_url = "https://media.synthetic.example/council.mp4"
+    recording = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+    capture = json.dumps(
+        [
+            {
+                "EventId": 42,
+                "EventBodyName": "City Council",
+                "EventDate": "2026-11-11",
+                "EventVideoPath": recording_url,
+            }
+        ]
+    ).encode()
+    (tmp_path / "saved.json").write_bytes(capture)
+
+    class Network:
+        def request(self, url, **options):
+            assert url == recording_url
+            return Response(url, recording, "video/mp4")
+
+    client = CivicSources(
+        tmp_path,
+        engine=create_engine(
+            storage=SQLiteStorage(tmp_path / ".connectors/state.db"),
+            provider_transport=Network(),
+            write_adapters={},
+        ),
+    )
+    config = make_source(
+        "connector",
+        {
+            "provider": "legistar",
+            "url": origin,
+            "capture": "saved.json",
+            "input_format": "legistar-events-json",
+            "bodies": "City Council",
+            "options": {"download_origins": ["https://media.synthetic.example"]},
+        },
+    )
+    save_sources(tmp_path, [config])
+    meetings, limitations = client.found(config, FIRST, LAST)
+    assert len(meetings) == 1 and limitations  # Saved discovery remains explicitly limited.
+    folder = tmp_path / "capture"
+    evidence = meetings[0].connector_prepare(folder)
+    assert evidence["media"][0]["available"] is True
+    assert evidence["media"][0]["sha256"] == hashlib.sha256(recording).hexdigest()
+    assert "No usable supplied timed captions" in " ".join(evidence["limitations"])
+    item_id = client.stage_evidence(tmp_path / "review.db", evidence, "City Council")
+    with ReviewStore(tmp_path / "review.db") as store:
+        assert store.get_item(item_id).status == "review"
+    reopened = CivicSources(tmp_path)
+    stored = reopened.store.list("brief_evidence", scope=reopened.context.scope)
+    assert stored[0].value["media"] == evidence["media"]
+    _result, _metadata, stream = reopened.export(include_attachments=True)
+    with stream, zipfile.ZipFile(io.BytesIO(stream.read())) as archive:
+        files = [archive.read(name) for name in archive.namelist()]
+    assert recording in files and capture in files
+    assert not (folder / "transcript.json").exists()
+    assert not export_published(tmp_path / "review.db", tmp_path / "published").exported
