@@ -438,3 +438,23 @@ def test_civicweb_calendar_and_notice_types_are_not_offered_as_bodies(web):
         assert dropped not in names
     assert "LOVELAND CITY COUNCIL MEETING" in names and "Planning Commission" in names
     assert len(names) == 7
+
+
+def test_civicweb_image_host_on_a_city_page_is_not_taken_for_a_portal(web):
+    """Loveland's site links https://i.civicweb.net/Global/Images/icon.png, CivicWeb's shared
+    image host, beside its portal; only the portal is a tenant."""
+    from civiccast_brief.citybuild import detect
+
+    assert detect.classify("https://i.civicweb.net/Global/Images/icon.png") is None
+    web.add(
+        "https://www.loveland.test/",
+        '<html><img src="https://i.civicweb.net/Global/Images/icon.png">'
+        '<a href="https://i.civicweb.net/Global/Images/icon.png">icon</a>'
+        '<a href="https://cilovelandco.civicweb.net/Portal/MeetingTypeList.aspx">Agendas</a></html>',
+    )
+    add_loveland(web, TODAY)
+    found = search_city(
+        "Loveland", "CO", website="https://www.loveland.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    assert [c.source.id for c in found.candidates] == [f"civicweb:{LOVELAND}"]
+    assert not found.unread

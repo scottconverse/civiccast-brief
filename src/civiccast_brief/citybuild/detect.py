@@ -124,6 +124,8 @@ def classify(url: str) -> Found | None:
         match = pattern.match(bare_host)
         if match:
             key = match.group(1)
+            if platform == "civicweb" and key == "i":
+                continue  # i.civicweb.net serves every portal's images; it is not a tenant
             if platform == "legistar" and key == "webapi":
                 parts_path = path.strip("/").split("/")
                 key = parts_path[1] if len(parts_path) > 1 else ""
