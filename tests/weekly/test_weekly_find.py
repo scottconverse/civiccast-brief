@@ -210,7 +210,7 @@ def test_listed_documents_go_with_the_same_day_video_or_stand_alone():
     no_video = "only the meeting's documents are listed; no source lists its video"
     clerk = make_source("civicclerk", {"tenant": "erieco", "bodies": "City Council"})
     folder = make_source("laserfiche", {"url": "https://lf.test/WebLink/Browse.aspx?id=1&dbid=0&repo=Town", "bodies": "City Council"})  # fmt: skip
-    video = NS(video_id="oWZpzjzjwnE", title="City Council Regular Session", published="2026-11-03T20:00:00-07:00")  # fmt: skip
+    video = NS(video_id="oWZpzjzjwnE", title="City Council Regular Session - November 3, 2026", published="2026-11-03T20:00:00-07:00")  # fmt: skip
     rows = {
         clerk.id: [
             _doc(COUNCIL, date(2026, 11, 3), "Regular Meeting", "https://clerk.test/2197"),
@@ -287,3 +287,24 @@ def test_a_civicweb_sources_documents_are_listed_with_the_meeting_day():
         "https://cw.test/1",
         "https://cw.test/2",
     ]
+
+
+def test_a_short_name_in_parentheses_does_not_hide_the_body():
+    """Longmont's channel, 10 November 2026."""
+    bodies = [
+        "Longmont Housing Authority Advisory Board",
+        "Longmont Housing Authority Board of Commissioners",
+    ]
+    title = "Longmont Housing Authority(LHA) Advisory Board of Commissioners Meeting, Nov. 10, 2026"
+    assert match_body(title, bodies) == "Longmont Housing Authority Advisory Board"
+
+
+def test_a_channel_video_with_no_meeting_day_in_its_title_is_not_run():
+    """'Senior Citizens Advisory Board - November 2026' went up on 9 November and the meeting run
+    failed on it: the run takes the date from the title."""
+    channel = Source(
+        kind="youtube", bodies=("Senior Citizens Advisory Board",), channel_id="UC" + "a" * 22
+    )
+    videos = [NS(video_id="GGGGGGGGGGG", title="Senior Citizens Advisory Board - November 2026", published="2026-11-06T00:00:00Z")]  # fmt: skip
+    found, _ = find_meetings([channel], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    assert [m.reason for m in found] == ["the title names no meeting day"]
