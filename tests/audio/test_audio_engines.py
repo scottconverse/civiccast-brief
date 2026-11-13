@@ -15,8 +15,6 @@ from civiccast_brief.audio.engines import (
     Dia2Remote,
     FakeEngine,
     RemoteConfig,
-    StepAudioConfig,
-    StepAudioRemote,
     chatterbox_commands,
     dia2_commands,
     dia2_spans,
@@ -29,9 +27,7 @@ from civiccast_brief.audio.engines import (
     parse_dia2_chunks,
     ps_quote,
     spans_from_durations,
-    stepaudio_commands,
     write_renderer_script,
-    wsl_path,
 )
 from civiccast_brief.audio.errors import ConfigError, EngineError
 from civiccast_brief.audio.ffmpeg import tools_available
@@ -193,23 +189,6 @@ def _stdout_for(durations, speakers) -> str:
     return "\n".join([*rows, "CIVICCAST_RC=0"]) + "\n"
 
 
-def test_wsl_path_maps_a_box_path_and_refuses_relative_ones() -> None:
-    assert wsl_path(r"C:\dev\x\script.txt") == "/mnt/c/dev/x/script.txt"
-    assert wsl_path("D:/a b/c.wav") == "/mnt/d/a b/c.wav"
-    with pytest.raises(EngineError, match="not an absolute Windows path"):
-        wsl_path(r"dev\x")
-
-
-def test_stepaudio_command_runs_the_renderer_in_wsl_with_separate_arguments() -> None:
-    cfg = StepAudioConfig()
-    (command,) = stepaudio_commands(cfg, r"C:\run\script.txt", r"C:\run\voice.wav")
-    assert command.startswith("& 'wsl.exe' '-d' 'Ubuntu-24.04' '--cd' ")
-    assert f"'--' '.venv/bin/python' '{cfg.renderer}'" in command
-    assert "'--script' '/mnt/c/run/script.txt' '--out' '/mnt/c/run/voice.wav'" in command
-    assert f"'--ref1' '{cfg.ref_s1}' '--ref2' '{cfg.ref_s2}' '--gap' '0.3'" in command
-    assert "bash" not in command
-
-
 def test_chatterbox_durations_parse_in_order_and_must_match_the_script() -> None:
     lines = list(SCRIPT.lines)  # four spoken lines; the two chapter marks are not lines
     stdout = _stdout_for([2.0, 3.5, 1.25, 4.0], [line.speaker for line in lines])
@@ -319,14 +298,23 @@ def test_unreadable_config_file_is_a_config_error(tmp_path: Path) -> None:
         load_config(tmp_path / "missing.json")
 
 
-def test_make_engine_knows_the_four_engines_and_refuses_others() -> None:
+def test_make_engine_knows_the_three_engines_and_refuses_others() -> None:
     config = AudioConfig()
-    assert isinstance(make_engine("stepaudio", config), StepAudioRemote)
     assert isinstance(make_engine("fake", config), FakeEngine)
     assert isinstance(make_engine("chatterbox", config), ChatterboxRemote)
     assert isinstance(make_engine("dia2", config), Dia2Remote)
     with pytest.raises(ConfigError, match="unknown engine"):
         make_engine("kokoro", config)
+    # Scott, 2026-11-12: Step-Audio-EditX is a Linux program and is not an option at all.
+    with pytest.raises(ConfigError, match="unknown engine 'stepaudio'"):
+        make_engine("stepaudio", config)
+
+
+def test_config_has_no_stepaudio_section(tmp_path: Path) -> None:
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps({"stepaudio": {"gap_s": 0.3}}), encoding="utf-8")
+    with pytest.raises(ConfigError, match=r"unknown keys \['stepaudio'\]"):
+        load_config(path)
 
 
 # --- remote orchestration with a stub runner (no ssh, no GPU) --------------------------------
@@ -362,7 +350,7 @@ class StubBox:
         return _completed(argv)
 
     def _stdout(self, script: str) -> str:
-        if "render_turbo2" in script or "render_step" in script:
+        if "render_turbo2" in script:
             count = sum(1 for line in self.uploaded_script().splitlines() if line.strip())
             spk = [line[1:3] for line in self.uploaded_script().splitlines()]
             return _stdout_for([1.0] * count, spk)
@@ -417,20 +405,3 @@ def test_dia2_remote_render_downloads_the_tempo_copy_and_splits_chunks(tmp_path:
     assert "'--atempo' '0.85'" in dia2_call
     # The renderer's tempo copy is the file that comes back, not the raw --out file.
     assert (tmp_path / "out" / "voice.wav").is_file()
-
-
-@needs_ffmpeg
-def test_stepaudio_remote_render_uses_measured_timing_and_wsl(tmp_path: Path) -> None:
-    fixture = tmp_path / "fixture.wav"
-    FakeEngine().render(list(SCRIPT.lines), fixture)
-    stub = StubBox(fixture)
-    engine = StepAudioRemote(RemoteConfig(host=HOST), StepAudioConfig(), runner=stub)
-    result = engine.render(list(SCRIPT.lines), tmp_path / "out" / "voice.wav")
-
-    assert result.timing == "measured" and result.engine == "stepaudio"
-    assert [line.number for line in result.lines] == [2, 3, 4, 6]
-    assert [line.speaker for line in result.lines] == ["S1", "S2", "S1", "S2"]
-    assert result.lines[-1].end == pytest.approx(result.duration, abs=0.002)
-    render_call = next(s for s in stub.scripts if "render_step" in s)
-    assert "'wsl.exe'" in render_call and "'/mnt/c/" in render_call
-    assert "CHAPTER" not in stub.uploaded_script()

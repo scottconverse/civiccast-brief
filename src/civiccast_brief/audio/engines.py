@@ -13,18 +13,16 @@ Timing, per engine:
   90-second e2e render, silence detection put the audible end 0.13 to 0.34 s before each line's
   end, and the audible start of the next line 0.02 to 0.11 s after the next start. The offset did
   not grow across the render. Captions can therefore run a few tenths of a second past the speech.
-- ``measured`` (StepAudioRemote): the same method as ChatterboxRemote. The renderer clones each
-  line on its own and prints its length; the gap between lines is fixed (0.3 s by default).
 - ``approximate`` (Dia2Remote): the renderer reports the exact length of each two-line chunk but
   not where one line ends inside a chunk. That boundary is estimated from the word counts of the
   two lines, then the timeline is stretched to the file length. Chunk edges use the renderer's
   measured chunk lengths and carry the same quiet-tail offset as ``measured``. A boundary inside a
-  chunk is an estimate and was not checked against the audio. Dia2 has no e2e render here.
+  chunk is an estimate and was not checked against the audio.
 
 The remote engines drive the bake-off renderers on the GPU box over ssh and scp. Remote commands
 are PowerShell (the box's default shell) sent with -EncodedCommand, so nothing has to survive
-cmd.exe quoting. Step-Audio-EditX runs in WSL on the box, so its command calls wsl.exe with the
-renderer's arguments as separate words (no bash -c string), and Windows paths become /mnt paths. The outer PowerShell reports exit code 1 whenever the inner command failed, so
+cmd.exe quoting. Every engine runs as plain Windows Python on the box; none needs Linux or WSL.
+The outer PowerShell reports exit code 1 whenever the inner command failed, so
 the exit code is not trusted. Each remote command prints CIVICCAST_RC=<n>, and that line decides.
 """
 
@@ -52,8 +50,9 @@ Timing = Literal["exact", "measured", "approximate"]
 
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=20")
 RC_MARKER = "CIVICCAST_RC="
-ENGINE_NAMES = ("stepaudio", "chatterbox", "dia2", "fake")
-DEFAULT_ENGINE = "stepaudio"  # Scott, 2026-11-06: "step audio - use that one for now."
+ENGINE_NAMES = ("dia2", "chatterbox", "fake")
+# Scott, 2026-11-12: Dia2, on Windows. Step-Audio-EditX (a Linux program) is not an option at all.
+DEFAULT_ENGINE = "dia2"
 
 _CHATTER_LINE = re.compile(r"^line\s+(\d+)\s+(S[12])\s+audio=\s*([0-9.]+)s", re.MULTILINE)
 _RC_LINE = re.compile(r"^CIVICCAST_RC=(-?\d+)\s*$", re.MULTILINE)
@@ -129,24 +128,8 @@ class Dia2Config:
 
 
 @dataclass(frozen=True)
-class StepAudioConfig:
-    """Step-Audio-EditX in WSL on the box. Paths are Linux paths inside that distro."""
-
-    distro: str = "Ubuntu-24.04"
-    workdir: str = "/home/scott/r3/Step-Audio-EditX"  # the checkout; its .venv runs the renderer
-    python: str = ".venv/bin/python"  # relative to workdir
-    renderer: str = "/mnt/c/dev/civiccast-brief-bakeoff/step/render_step.py"
-    models: str = "/home/scott/r3/models"
-    # Reference voices. Each WAV needs a .txt beside it with what it says. S1 is Maya, S2 is Theo.
-    ref_s1: str = "/mnt/c/dev/civiccast-brief-bakeoff/step/en_woman.wav"
-    ref_s2: str = "/mnt/c/dev/civiccast-brief-bakeoff/step/en_man.wav"
-    gap_s: float = 0.3
-
-
-@dataclass(frozen=True)
 class AudioConfig:
     box: RemoteConfig = field(default_factory=RemoteConfig)
-    stepaudio: StepAudioConfig = field(default_factory=StepAudioConfig)
     chatterbox: ChatterboxConfig = field(default_factory=ChatterboxConfig)
     dia2: Dia2Config = field(default_factory=Dia2Config)
 
@@ -194,8 +177,6 @@ def _coerce(hint: type, value: object, where: str) -> object:
 
 
 def make_engine(name: str, config: AudioConfig) -> VoiceEngine:
-    if name == "stepaudio":
-        return StepAudioRemote(config.box, config.stepaudio)
     if name == "chatterbox":
         return ChatterboxRemote(config.box, config.chatterbox)
     if name == "dia2":
@@ -225,14 +206,6 @@ def _invoke(argv: list[str]) -> str:
 
 def _tail(text: str, lines: int = 15) -> str:
     return "\n".join(text.strip().splitlines()[-lines:])
-
-
-def wsl_path(windows: str) -> str:
-    r"""A Windows path on the box as WSL sees it: C:\a\b becomes /mnt/c/a/b."""
-    match = re.match(r"^([A-Za-z]):[\\/](.*)$", windows)
-    if match is None:
-        raise EngineError(f"not an absolute Windows path: {windows!r}")
-    return f"/mnt/{match.group(1).lower()}/" + match.group(2).replace("\\", "/")
 
 
 def _scp_path(remote: str) -> str:
@@ -436,35 +409,6 @@ def chatterbox_commands(cfg: ChatterboxConfig, remote_script: str, remote_wav: s
     return commands
 
 
-def stepaudio_commands(cfg: StepAudioConfig, remote_script: str, remote_wav: str) -> list[str]:
-    return [
-        _invoke(
-            [
-                "wsl.exe",
-                "-d",
-                cfg.distro,
-                "--cd",
-                cfg.workdir,
-                "--",
-                cfg.python,
-                cfg.renderer,
-                "--script",
-                wsl_path(remote_script),
-                "--out",
-                wsl_path(remote_wav),
-                "--ref1",
-                cfg.ref_s1,
-                "--ref2",
-                cfg.ref_s2,
-                "--gap",
-                str(cfg.gap_s),
-                "--models",
-                cfg.models,
-            ]
-        )
-    ]
-
-
 def dia2_commands(cfg: Dia2Config, remote_script: str, remote_wav: str) -> list[str]:
     commands = []
     if cfg.hf_home:
@@ -500,37 +444,6 @@ def dia2_commands(cfg: Dia2Config, remote_script: str, remote_wav: str) -> list[
 
 
 # --- engines ---------------------------------------------------------------------------------
-
-
-class StepAudioRemote:
-    """Step-Audio-EditX (Apache-2.0) in WSL on the GPU box. One clone per line. Timing is measured."""
-
-    name = "stepaudio"
-
-    def __init__(
-        self, box: RemoteConfig, cfg: StepAudioConfig, runner: Runner = subprocess.run
-    ) -> None:
-        self.cfg = cfg
-        self.box = Box(box, runner)
-
-    def render(self, lines: list[Line], out_wav: Path) -> RenderResult:
-        if not lines:
-            raise EngineError("no spoken lines to render")
-        out_wav.parent.mkdir(parents=True, exist_ok=True)
-        run_dir = self.box.new_run_dir()
-        remote_script = win_join(run_dir, "script.txt")
-        remote_wav = win_join(run_dir, "voice.wav")
-        with tempfile.TemporaryDirectory(prefix="civiccast-stepaudio-") as tmp:
-            local_script = Path(tmp) / "script.txt"
-            write_renderer_script(lines, local_script)
-            self.box.mkdir(run_dir)
-            self.box.upload(local_script, remote_script)
-        stdout = self.box.run(stepaudio_commands(self.cfg, remote_script, remote_wav))
-        durations = parse_chatterbox_durations(stdout, lines)
-        self.box.download(remote_wav, out_wav)
-        duration = probe_duration(out_wav)
-        spans = fit_to_length(spans_from_durations(durations, self.cfg.gap_s), duration)
-        return _result(out_wav, self.name, "measured", lines, spans, duration)
 
 
 class ChatterboxRemote:

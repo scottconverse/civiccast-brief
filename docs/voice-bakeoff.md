@@ -1,6 +1,6 @@
 # Voice bake-off
 
-Status: rounds 1–3 done. Default voice: Step-Audio-EditX (Scott, 2026-11-06, "for now"). Backup: Dia2 (Scott, 2026-11-07).
+Status: rounds 1–3 done. Default voice: Dia2 (Scott, 2026-11-12). Step-Audio-EditX, picked on 2026-11-06, is a Linux program and was removed from the program on 2026-11-12.
 
 Phase 1 compares five free, open-source voice engines on the same two-host script, written from the
 Longmont City Council regular session of October 20, 2026 (14 lines, 228 words). The script was
@@ -44,26 +44,39 @@ engine rendered the same 42-line long script. Reference voices for the cloning e
 
 | Engine | License / use terms | Long script | Render time | Loudness | Misreads (Whisper medium.en, besides digits) |
 |---|---|---|---|---|---|
-| **Step-Audio-EditX** (picked) | Apache-2.0 | 364 s (6:04) | 214 s | -18.7 LUFS | "setback variance" heard as "sent back variants" |
+| **Step-Audio-EditX** (picked 2026-11-06, removed 2026-11-12: Linux only) | Apache-2.0 | 364 s (6:04) | 214 s | -18.7 LUFS | "setback variance" heard as "sent back variants" |
 | Higgs Audio v2 | Boson community license | 331 s (5:31) | 414 s | -17.7 LUFS | none; 74 samples at 0 dBFS (possible slight clipping) |
 | Voxtral 4B TTS | CC BY-NC 4.0 (non-commercial) | 441 s (7:21) | 152 s | -33.8 LUFS raw | "Saint Vrain" heard as "st rain"; reads slowly |
 | Gemini Flash TTS (hosted, free tier) | hosted service, not open source; outside PLAN.md §6 | rendered | n/a | n/a | read word for word |
 
 Not run: Orpheus (gated on Hugging Face; needs Scott to accept its terms) and ElevenLabs (needs Scott's sign-in).
 
-Step-Audio-EditX setup on nvideablackwell: WSL Ubuntu-24.04, checkout `~/r3/Step-Audio-EditX` (`uv sync`:
-torch 2.9.1+cu128, vLLM 0.14), models in `~/r3/models`. Each line is cloned on its own from that host's
-reference, then lines are joined with 0.3 s of silence. Lines must stay under about 30 s of speech.
-Renderer: `C:\dev\civiccast-brief-bakeoff\step\render_step.py` on the box. The engine adapter is
-`stepaudio` in `src/civiccast_brief/audio/engines.py`.
+Step-Audio-EditX needs vLLM, which has no Windows build, so it ran only in WSL. Scott, 2026-11-12: this is a
+Windows-first shop, and the Linux program is not an option at all. Its adapter was removed.
+
+### Dia2 setup
+
+On the voice PC (Windows, NVIDIA GPU, reached over ssh), as plain Windows Python:
+
+1. ffmpeg on PATH (`winget install --scope user Gyan.FFmpeg`).
+2. `git clone https://github.com/nari-labs/dia2 C:\dev\civiccast-brief-bakeoff\dia2`, then `uv sync` in it
+   (torch 2.9.1+cu128 on 2026-11-12).
+3. In `C:\dev\civiccast-brief-bakeoff\dia2tune`: the chunked renderer `render_dia2_chunked.py` and the two
+   reference voices `ref_s1.wav` (Maya) and `ref_s2.wav` (Theo).
+4. The Dia2-2B and Whisper small models download on the first render.
+
+The paths are the defaults in `Dia2Config` in `src/civiccast_brief/audio/engines.py`; a `--config` file
+can change them. The ssh host is `RemoteConfig.host`.
 
 ## Decision
 
-- **Default: Step-Audio-EditX.** Scott, 2026-11-06: "step audio - use that one for now." The CLI uses it
-  when `--engine` is not given.
-- **Backup: Dia2-2B.** Scott, 2026-11-07: "backup voice dia2". Use it with `--engine dia2` (round 2 settings,
-  variant C). Chatterbox Turbo also stays available with `--engine chatterbox`.
+- **Default: Dia2-2B.** Scott picked it on 2026-11-12, after Step-Audio-EditX turned out to be a Linux
+  program. The CLI uses it when `--engine` is not given (round 2 settings, variant C). Chatterbox Turbo
+  stays available with `--engine chatterbox`.
+- **Removed: Step-Audio-EditX.** Scott, 2026-11-06, had picked it "for now". Scott, 2026-11-12: the Linux
+  program is not an option at all.
 
-Check run after wiring it in (2026-11-06): a 4-line test script through
+Dia2 check run (2026-11-12, RTX 5060 Ti): a 4-line test script through `python -m civiccast_brief.audio
+--engine dia2` rendered 19.1 s; Whisper heard every word. Step-Audio-EditX check run after wiring it in (2026-11-06): a 4-line test script through
 `python -m civiccast_brief.audio` rendered 25.5 s in 1 min 42 s including model load, -16.6 LUFS,
 -1.4 dBTP. Whisper heard every word; the only differences were numbers written as digits.
