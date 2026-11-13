@@ -431,6 +431,8 @@ Optional `city.json` settings for the site:
   Spotify buttons on the front page and the podcast page appear only when these are set.
 - `email_signup`: `true` shows the sign-up form and the "By email" band. Needs `signup_url`
   (see `docs/email-signup.md`).
+- `desk_url`: the https address of the editor desk, for example `https://desk.example.org/desk`
+  for a station. Every page's footer then links to the desk's sign-in page as "Editor sign-in".
 
 An episode can carry an `article` (headline, dek, sections, votes, quotes, topics). Every paragraph
 cites claims from `recap.claims` by position. Without an article the episode page shows the claim

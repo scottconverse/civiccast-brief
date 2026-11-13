@@ -133,6 +133,7 @@ def _base(city: City, urls: Urls, *, path: str, title: str, description: str) ->
         "feed_href": urls.href(FEED_PATH),
         "feed_url": urls.absolute(FEED_PATH),
         "signup_url": signup,
+        "desk_signin": f"{city.desk_url.rstrip('/')}/sign-in" if city.desk_url else None,
         "form_action": _origin(signup) if signup else None,
         "analytics": {
             "token": ANALYTICS_TOKEN,
