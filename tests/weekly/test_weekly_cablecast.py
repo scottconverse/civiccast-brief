@@ -104,3 +104,26 @@ def test_the_meeting_command_gets_the_cablecast_host_and_the_show_id(tmp_path):
     assert argv[:2] == ["run", "746"]
     assert argv[argv.index("--cablecast") + 1] == HOST
     assert "--granicus" not in argv
+
+
+def test_a_civicweb_style_body_name_finds_the_shows_when_the_city_is_known():
+    body = "LOVELAND CITY COUNCIL MEETING"
+    first, last = date(2026, 10, 27), date(2026, 11, 10)
+    shows = lambda host: _shows()
+    found, _ = find_meetings([_source(body)], first, last, Listers(cablecast=shows))
+    assert found == []  # without the city's name the leading "Loveland" is not dropped
+    listers = Listers(cablecast=shows, city="Loveland")
+    found, problems = find_meetings([_source(body)], first, last, listers)
+    assert problems == []
+    # The October 27 Study Session is not the regular meeting; only November 4 is found.
+    assert [(m.body, m.day, m.title) for m in found] == [
+        (body, date(2026, 11, 4), "City Council Meeting November 4, 2026")
+    ]
+
+
+def test_the_shortened_name_does_not_pick_a_study_session_or_another_board():
+    listers = Listers(cablecast=lambda host: _shows(), city="Loveland")
+    found, _ = find_meetings(
+        [_source("LOVELAND CITY COUNCIL MEETING")], date(2026, 11, 5), date(2026, 11, 10), listers
+    )
+    assert found == []  # 748 Planning Commission, 749 LURA, 750 "Council Study Session"

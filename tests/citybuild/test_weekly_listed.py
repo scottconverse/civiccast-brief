@@ -305,3 +305,17 @@ def test_a_civicweb_agenda_page_is_read_as_its_lines_of_text(web):
     other = listed.Doc("Planning Commission", date(2026, 11, 9), "x", other_url, "agenda")
     with pytest.raises(FetchError, match="web page, not the document"):
         listed.read_pages(other, web.fetcher())
+
+
+def test_a_listed_body_matches_a_name_without_the_city_when_the_city_is_known():
+    _listed_body = listed._listed_body
+    source = make_source(
+        "webpage", {"url": "https://x.gov/", "bodies": ["LOVELAND CITY COUNCIL MEETING"]}
+    )
+    assert _listed_body(source, "City Council Meeting") == ""
+    token = listed._CITY.set("Loveland")
+    try:
+        assert _listed_body(source, "City Council Meeting") == "LOVELAND CITY COUNCIL MEETING"
+        assert _listed_body(source, "City Council Study Session") == ""
+    finally:
+        listed._CITY.reset(token)

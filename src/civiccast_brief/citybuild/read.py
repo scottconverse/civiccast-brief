@@ -118,8 +118,13 @@ def body_matches(body: str, text: str, city: str = "") -> bool:
     lowered = squash(text).casefold()
     if any(name in lowered for name in names_for(body)):
         return True
+    return shortened_match(body, lowered, city)
+
+
+def shortened_match(body: str, text: str, city: str = "") -> bool:
+    """Whether ``text`` (casefolded) names ``body`` in a shortened form (see :func:`short_names`)."""
     return any(
-        re.search(rf"(?<!\w){re.escape(name)}{_AFTER_SHORT}", lowered, re.IGNORECASE)
+        re.search(rf"(?<!\w){re.escape(name)}{_AFTER_SHORT}", text, re.IGNORECASE)
         for name in short_names(body, city)
     )
 

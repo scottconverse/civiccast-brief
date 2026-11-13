@@ -70,13 +70,13 @@ def real_listers(client: Any) -> Listers:
     pages = PageFetcher(client)
 
     def documents(source: Any, first: date, last: date) -> list[Any]:
-        return listed.list_docs(source, first, last, pages)
+        return listed.list_docs(source, first, last, pages, listers.city)
 
     def read_listed(docs: Any) -> tuple[dict[str, Any], list[str]]:
         return listed.read_all(docs, pages)
 
     channel = channel_lister(client)
-    return Listers(
+    listers = Listers(
         primegov=primegov,
         primegov_agenda=primegov_agenda,
         primegov_documents=primegov_documents,
@@ -86,6 +86,7 @@ def real_listers(client: Any) -> Listers:
         documents=documents,
         read_documents=read_listed,
     )
+    return listers
 
 
 def _site(args: argparse.Namespace, slug: str) -> Site | None:
@@ -128,7 +129,9 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
 
     # One client for the whole run: the documents step fetches packets inside run_week.
     with httpx.Client(timeout=60, follow_redirects=True) as client:
-        return _week(city.name, sources, first, last, real_listers(client), settings)
+        listers = real_listers(client)
+        listers.city = city.name  # a title may leave the city's name off a body's name
+        return _week(city.name, sources, first, last, listers, settings)
 
 
 def _week(

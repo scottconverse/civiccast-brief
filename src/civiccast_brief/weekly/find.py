@@ -29,6 +29,7 @@ from functools import partial
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from civiccast_brief.citybuild.read import shortened_match
 from civiccast_brief.record.records.portal import body_name
 from civiccast_brief.record.video.watch import title_day
 from civiccast_brief.record.video.youtube.classify import MeetingClassifier
@@ -102,22 +103,30 @@ class Listers:
     #: (one meeting's listed.Doc rows) -> (documents.json data, report lines); fetched when called
     read_documents: Callable[[Sequence[Any]], tuple[dict[str, Any], list[str]]] | None = None
     classifier: MeetingClassifier = field(default_factory=MeetingClassifier)
+    #: The city's name (city.json): a title may leave it off a body's name.
+    city: str = ""
 
 
 def _fold(text: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
 
 
-def match_body(title: str, bodies: Iterable[str]) -> str:
+def match_body(title: str, bodies: Iterable[str], city: str = "") -> str:
     """The listed body a title names, or "" when it names none of them.
 
     The body the title names must be the listed body, or the listed body must appear in the
     title as whole words. When several do, the longest wins ("Planning and Zoning Commission"
-    over "Commission").
+    over "Commission"). A title may also leave off the city's name and a trailing "Meeting",
+    by the same rule as ``city check`` (``citybuild.read.shortened_match``).
     """
     named = _fold(body_name(title))
     folded = f" {_fold(title)} "
-    hits = [b for b in bodies if _fold(b) == named or f" {_fold(b)} " in folded]
+    lowered = " ".join(title.casefold().split())
+    hits = [
+        b
+        for b in bodies
+        if _fold(b) == named or f" {_fold(b)} " in folded or shortened_match(b, lowered, city)
+    ]
     return max(hits, key=len) if hits else ""
 
 
@@ -158,7 +167,7 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
     found: list[Found] = []
     for meeting in listers.primegov(source.url, first, last):  # type: ignore[misc]
         title = str(meeting.title)
-        body = match_body(title, source.bodies)
+        body = match_body(title, source.bodies, listers.city)
         if not body:
             continue
         day = _day(meeting.start)
@@ -200,7 +209,7 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
         in_days = any(d is not None and first <= d <= last for d in (day, posted))
         if day is None or not in_days or not listers.classifier.is_meeting(title):
             continue
-        body = match_body(title, source.bodies)
+        body = match_body(title, source.bodies, listers.city)
         reason = "" if body else f"the title names no body this source covers ({body_name(title)})"
         found.append(Found(body, day, title, source.id, str(video.video_id), reason=reason))
     return found
@@ -214,7 +223,7 @@ def _granicus(source: Source, first: date, last: date, listers: Listers) -> list
         if day is None or not first <= day <= last:
             continue
         title = str(clip.name)
-        body = match_body(title, source.bodies) or (
+        body = match_body(title, source.bodies, listers.city) or (
             source.bodies[0] if len(source.bodies) == 1 else ""
         )
         reason = "" if body else "the clip name names no body this source covers"
@@ -242,7 +251,7 @@ def _cablecast(source: Source, first: date, last: date, listers: Listers) -> lis
         title = str(show.name)
         # A Cablecast site carries every body's meetings and its shows too, so a title must
         # name one of the source's bodies; a show that names none is not a meeting of theirs.
-        body = match_body(title, source.bodies)
+        body = match_body(title, source.bodies, listers.city)
         if not body:
             continue
         found.append(
@@ -301,11 +310,11 @@ READERS = {
 LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
 
 
-def _city_body(meeting: Found, city_bodies: Sequence[str]) -> Found:
+def _city_body(meeting: Found, city_bodies: Sequence[str], city: str = "") -> Found:
     """A channel video whose title names a body another of the city's sources lists."""
     if meeting.body:
         return meeting
-    body = match_body(meeting.title, city_bodies)
+    body = match_body(meeting.title, city_bodies, city)
     return replace(meeting, body=body, reason="") if body else meeting
 
 
@@ -333,7 +342,7 @@ def find_meetings(
             listed += meetings
             continue
         if source.kind == "youtube":
-            meetings = [_city_body(m, city_bodies) for m in meetings]
+            meetings = [_city_body(m, city_bodies, listers.city) for m in meetings]
         for meeting in meetings:
             held = by_key.get(meeting.key)
             if held is None:
