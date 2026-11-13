@@ -45,7 +45,14 @@ def _find(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     fetcher = fetcher or Fetcher(
         log=(lambda line: print(line, file=sys.stderr)) if args.verbose else (lambda _l: None)
     )
-    found = search_city(args.name, args.state, website=args.website, extra=extra, fetcher=fetcher)
+    found = search_city(
+        args.name,
+        args.state,
+        website=args.website,
+        extra=extra,
+        fetcher=fetcher,
+        open_in_browser=browser.open_page,
+    )
     for line in found.report():
         print(line)
     print(f"({len(found.asked)} web requests, no model)")

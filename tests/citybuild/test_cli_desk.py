@@ -9,7 +9,8 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from civiccast_brief.citybuild import cli, members
+from civiccast_brief.citybuild import browser, cli, members
+from civiccast_brief.citybuild.fetch import Page
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.review.web import make_desk_app
 from civiccast_brief.sources import add_source, load_sources, make_source
@@ -19,6 +20,7 @@ from .conftest import (
     SVCM,
     SVCM_NEWEST,
     TPCA_ROOT,
+    add_primegov,
     add_tpca_drive,
     gdoc_export,
 )
@@ -201,3 +203,34 @@ def test_adding_with_nothing_checked_saves_nothing(web, desk):
     empty = client.post("/sources/find/save", data={"token": t, "search": search_id})
     assert empty.status_code == 400 and "check at least one source" in empty.text
     assert load_sources(city) == []
+
+
+def test_the_find_screen_reads_a_site_that_answers_403_in_chrome(web, desk, monkeypatch):
+    """lovgov.org answers a plain client 403; the desk opens it in Chrome (2026-11-12)."""
+    client, _city = desk
+    home = "https://www.lovgov.org"
+    web.add(home, "<html>Access Denied</html>", status=403)
+    add_primegov(web, "https://loveland.primegov.com")
+    opened: list[str] = []
+    closed: list[bool] = []
+
+    def open_page(url: str) -> Page:
+        opened.append(url)
+        html = '<html><a href="https://loveland.primegov.com/">Agendas</a></html>'
+        return Page(url=url, status=200, content=html.encode(), content_type="text/html")
+
+    monkeypatch.setattr(browser, "open_page", open_page)
+    monkeypatch.setattr(browser, "close_shared", lambda: closed.append(True))
+    found = client.post(
+        "/sources/find",
+        data={
+            "token": client.app.state.desk.token,
+            "name": "Loveland",
+            "state": "CO",
+            "website": home,
+        },
+    )
+    assert found.status_code == 200
+    assert opened == [home]
+    assert closed
+    assert "primegov:loveland.primegov.com" in found.text

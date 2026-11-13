@@ -18,7 +18,7 @@ Platforms it finds but cannot read yet are listed, not saved.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Final
@@ -258,15 +258,16 @@ def search_city(
     extra: Iterable[tuple[str, str]] = (),
     fetcher: Fetcher | None = None,
     today: date | None = None,
+    open_in_browser: Callable[[str], Page] | None = None,
 ) -> Search:
     fetcher = fetcher or Fetcher()
     today = today or date.today()
     result = Search(name=squash(name), state=squash(state))
     result.asked = fetcher.asked
-    home = _find_website(result, website, fetcher)
+    home = _find_website(result, website, fetcher, open_in_browser)
     found: dict[tuple[str, str, str], detect.Found] = {}
     if home is not None:
-        for url, text in _crawl(home, fetcher):
+        for url, text in _crawl(home, fetcher, open_in_browser):
             for item in _platform_links(text, url):
                 found.setdefault((item.platform, item.key.casefold(), item.extra.casefold()), item)
     platforms = list(found.values())
@@ -295,14 +296,37 @@ def search_city(
 # ----- the city's own site ----------------------------------------------------------------------
 
 
-def _find_website(result: Search, website: str | None, fetcher: Fetcher) -> Page | None:
+def _read_site(
+    url: str, fetcher: Fetcher, open_in_browser: Callable[[str], Page] | None
+) -> tuple[Page | None, str]:
+    """``url`` as a page, or None and why not. A site that answers the plain client HTTP 403 is
+    opened in Chrome, as the board and member readers do."""
+    try:
+        return fetcher.get(url), ""
+    except FetchError as exc:
+        problem = str(exc)
+    fetcher.log(f"  no: {problem}")
+    if open_in_browser is None or "HTTP 403" not in problem:
+        return None, problem
+    try:
+        return open_in_browser(url), ""
+    except FetchError as exc:
+        return None, f"{problem} and did not open in Chrome either: {exc}"
+
+
+def _find_website(
+    result: Search,
+    website: str | None,
+    fetcher: Fetcher,
+    open_in_browser: Callable[[str], Page] | None = None,
+) -> Page | None:
     if website:
         url = website.strip()
         if "://" not in url:
             url = f"https://{url}"
-        page = fetcher.try_get(url)
+        page, problem = _read_site(url, fetcher, open_in_browser)
         if page is None:
-            result.notes.append(f"the website {url} could not be read")
+            result.notes.append(f"the website could not be read: {problem}")
             return None
         result.website = page.url
         return page
@@ -321,7 +345,9 @@ def _site_domain(url: str) -> str:
     return host.removeprefix("www.")
 
 
-def _crawl(home: Page, fetcher: Fetcher) -> list[tuple[str, str]]:
+def _crawl(
+    home: Page, fetcher: Fetcher, open_in_browser: Callable[[str], Page] | None = None
+) -> list[tuple[str, str]]:
     pages = [(home.url, home.text)]
     domain = _site_domain(home.url)
     _, links, _ = parse(home.text, home.url)
@@ -339,7 +365,7 @@ def _crawl(home: Page, fetcher: Fetcher) -> list[tuple[str, str]]:
         if url not in picked and url.rstrip("/") != home.url.rstrip("/"):
             picked.append(url)
     for url in picked[:MAX_PAGES]:
-        page = fetcher.try_get(url)
+        page, _ = _read_site(url, fetcher, open_in_browser)
         if page is not None:
             pages.append((page.url, page.text))
     return pages

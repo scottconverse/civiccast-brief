@@ -6,6 +6,7 @@ import json
 from datetime import date
 
 from civiccast_brief.citybuild.build import PUBLISHER_EMAIL, REPORT_FILE, build_city
+from civiccast_brief.citybuild.fetch import FetchError, Page
 from civiccast_brief.citybuild.search import PROBED, guesses, search_city
 from civiccast_brief.sources import load_sources, make_source
 
@@ -319,3 +320,49 @@ def test_archive_lists_of_other_documents_are_not_taken_for_bodies(web):
     )
     (site,) = found.candidates
     assert site.source.bodies == ("Local Liquor Licensing Authority", "Town Council")
+
+
+LOVGOV = "https://www.lovgov.org"
+
+
+def test_a_city_site_that_answers_403_is_read_in_chrome(web):
+    """lovgov.org answers a plain client 403 (Akamai); Chrome opens it (2026-11-12)."""
+    web.add(LOVGOV, "<html>Access Denied</html>", status=403)
+    add_primegov(web, "https://loveland.primegov.com")
+    opened: list[str] = []
+
+    def open_in_browser(url: str) -> Page:
+        opened.append(url)
+        html = '<html><a href="https://loveland.primegov.com/">Agendas</a></html>'
+        return Page(url=url, status=200, content=html.encode(), content_type="text/html")
+
+    found = search_city(
+        "Loveland",
+        "CO",
+        website=LOVGOV,
+        fetcher=web.fetcher(),
+        today=TODAY,
+        open_in_browser=open_in_browser,
+    )
+    assert opened == [LOVGOV]
+    assert found.website == LOVGOV
+    assert [c.source.kind for c in found.candidates].count("primegov") == 1
+
+
+def test_a_city_site_that_cannot_be_read_names_the_address_and_status(web):
+    web.add(LOVGOV, "<html>Access Denied</html>", status=403)
+
+    def open_in_browser(url: str) -> Page:
+        raise FetchError("Chrome is not installed")
+
+    found = search_city(
+        "Loveland",
+        "CO",
+        website=LOVGOV,
+        fetcher=web.fetcher(),
+        today=TODAY,
+        open_in_browser=open_in_browser,
+    )
+    (note,) = found.notes
+    assert f"{LOVGOV} answered HTTP 403" in note
+    assert "did not open in Chrome either: Chrome is not installed" in note
