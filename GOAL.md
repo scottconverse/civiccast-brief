@@ -138,3 +138,17 @@ Same rule: an item is done only when it is shown, not claimed. FAILED, BLOCKED o
 | G8 | Docs say desk.cmd keeps its window open while the desk runs and opens the browser by itself | done | #62. README line 5-6 and docs/set-up-a-city.md line 16-17: desk.cmd opens the browser by itself at http://127.0.0.1:8765/ and keeps its window open while the desk runs; closing it stops the desk |
 | G9 | Command-line setup asks for the video platform (or picks from what was found) instead of making YouTube the default | done | #62 and #64 (108a172). setup takes --platform, else the one platform it finds (--granicus, --cablecast or sources.json), else asks by number; with no terminal it stops ('no video platform was found ... it is not guessed'). Never YouTube by default. Tests in tests/test_city.py (never_picks_youtube, takes_the_one_platform, reads_the_platform_from_the_folders_sources, asks_when_two_platforms_fit) fail on the old code; CI green on #64 |
 | G10 | Docs say plainly where the program installs: %LOCALAPPDATA%\CivicCastBrief\app normally, or inside a copy you already downloaded | done | #62. docs/set-up-a-city.md lines 31-32: with no copy, the code goes to %LOCALAPPDATA%\CivicCastBrief\app (-AppDir picks another folder); run inside a copy you downloaded, it installs there |
+
+## Goal: the always-on desk (approved by Scott, 2026-11-13)
+
+Scott's decisions: the desk works like TownReporter and runs in the cloud and on PCs; publish is immediate; auto-publish is on for every board, every time; a failed check holds the item; sign-in reuses TownReporter's; Cloudflare is the default host, and it must also run elsewhere (Hostinger). The desk and site run in the cloud; a Windows PC fetches YouTube captions and makes audio. All Python.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| D1 | Desk sign-in ported from TownReporter to Python | open | #76 |
+| D2 | One always-on app with the desk at /desk that runs the weekly job on a schedule: last run, next run, Run now | open | |
+| D3 | Publish deploys in minutes | open | |
+| D4 | Control room: Edit, Unpublish, Kill, a Problems list; the per-board auto switches removed | open | |
+| D5 | A desk link in the site footer leads to sign-in | open | |
+| D6 | A Windows PC worker fetches captions and makes audio, and reports to the cloud desk | open | |
+| D7 | Cloud deploy: Cloudflare by default, plus a Hostinger guide (a Linux server: ask Scott first) | open | |
