@@ -141,7 +141,9 @@ def test_a_city_with_no_website_says_so(web):
     found = search_city("Nowhere", "CO", fetcher=web.fetcher(), today=TODAY)
     assert found.candidates == []
     # The desk shows this note too, where the website is a form box, not a flag.
-    assert "City website" in found.notes[0] and "--website" in found.notes[0]
+    note = found.notes[0]
+    assert "Search the web for the city's official website" in note
+    assert "City website" in note and "--website" in note
 
 
 def test_a_cablecast_archive_says_which_host_to_add_on_the_sources_page(web):

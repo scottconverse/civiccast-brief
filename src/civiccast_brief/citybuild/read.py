@@ -52,6 +52,8 @@ class Proof:
     what: str = ""
     lines: list[str] = field(default_factory=list)
     problem: str = ""
+    #: The city's name, from city.json: a title may leave it off a body's name.
+    city: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -88,9 +90,43 @@ def names_for(body: str) -> list[str]:
     return [n for n in dict.fromkeys((name, short)) if n]
 
 
-def body_matches(body: str, text: str) -> bool:
+_MONTH: Final = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d"
+#: What may follow a shortened body name in a title: the end, a dash or colon, "Meeting", or a date.
+_AFTER_SHORT: Final = rf"(?:\s+meeting)?(?=\s*(?:$|[-–—:,(]|\d|{_MONTH}))"
+
+
+def short_names(body: str, city: str = "") -> list[str]:
+    """A body's name as a title may shorten it: without a trailing "Meeting" and without the
+    city's name in front ("LOVELAND CITY COUNCIL MEETING" -> "city council"). A shortened name
+    keeps at least two words, so a bare "council" is never made."""
+    out: list[str] = []
+    for name in names_for(body):
+        name = re.sub(r"\s+meeting$", "", name)
+        if city.strip():
+            lead = re.escape(squash(city).casefold())
+            name = re.sub(rf"^(?:city of\s+)?{lead}\s+", "", name)
+        if len(name.split()) >= 2 and name not in out:
+            out.append(name)
+    return out
+
+
+def body_matches(body: str, text: str, city: str = "") -> bool:
+    """Whether ``text`` names ``body``. A title may leave off the city's name and "Meeting"
+    ("City Council Meeting November 4, 2026" names "LOVELAND CITY COUNCIL MEETING"), but a
+    shortened name must end where the title ends it or dates it: "City Council" does not
+    match "City Council Study Session"."""
     lowered = squash(text).casefold()
-    return any(name in lowered for name in names_for(body))
+    if any(name in lowered for name in names_for(body)):
+        return True
+    return shortened_match(body, lowered, city)
+
+
+def shortened_match(body: str, text: str, city: str = "") -> bool:
+    """Whether ``text`` (casefolded) names ``body`` in a shortened form (see :func:`short_names`)."""
+    return any(
+        re.search(rf"(?<!\w){re.escape(name)}{_AFTER_SHORT}", text, re.IGNORECASE)
+        for name in short_names(body, city)
+    )
 
 
 def read_latest(
@@ -101,9 +137,10 @@ def read_latest(
     today: date | None = None,
     captions: bool = False,
     work_dir: Path | None = None,
+    city: str = "",
 ) -> Proof:
     today = today or date.today()
-    proof = Proof(body=body, kind=source.kind, address=source.address)
+    proof = Proof(body=body, kind=source.kind, address=source.address, city=city)
     readers: dict[str, Callable[..., None]] = {
         "primegov": _primegov,
         "youtube": _youtube,
@@ -338,7 +375,11 @@ def _youtube(
     captions: bool = False,
     work_dir: Path | None = None,
 ) -> None:
-    videos = [v for v in feed_entries(source.channel_id, fetcher) if body_matches(proof.body, v[1])]
+    videos = [
+        v
+        for v in feed_entries(source.channel_id, fetcher)
+        if body_matches(proof.body, v[1], proof.city)
+    ]
     # A livestream can be set up weeks before the meeting, so a date in the title wins over the
     # day the video went up.
     videos = [(v[0], v[1], first_date(v[1]) or v[2]) for v in videos]
@@ -395,7 +436,7 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     dated = []
     for clip in clips:
         day = granicus.long_date(clip.date)
-        if day and body_matches(proof.body, clip.name):
+        if day and body_matches(proof.body, clip.name, proof.city):
             # long_date writes "October 6, 2026", not an ISO date.
             when = datetime.strptime(day, "%B %d, %Y").date()
             if when <= today:
@@ -414,6 +455,20 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
 # ----- Cablecast --------------------------------------------------------------------------------
 
 
+_TITLE_DATE: Final = re.compile(rf"[\s\-–—:,]*(?:{_MONTH}|\d).*$", re.IGNORECASE)
+
+
+def title_body_names(titles: list[str]) -> list[tuple[str, int]]:
+    """The body names that show titles use, most used first: each title without its date
+    ("City Council - Oct 20 2026" -> "City Council"), counted."""
+    counts: dict[str, int] = {}
+    for title in titles:
+        name = _TITLE_DATE.sub("", squash(title)).strip(" -–—:,")
+        if name:
+            counts[name] = counts.get(name, 0) + 1
+    return sorted(counts.items(), key=lambda pair: (-pair[1], pair[0].casefold()))
+
+
 def _cablecast(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
     from civiccast_brief.meeting import cablecast
 
@@ -423,7 +478,7 @@ def _cablecast(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> N
         raise FetchError(str(exc)) from exc
     dated = []
     for show in shows:
-        if body_matches(proof.body, show.name):
+        if body_matches(proof.body, show.name, proof.city):
             when = datetime.strptime(show.date, "%B %d, %Y").date()
             if when <= today:
                 dated.append((when, show))
@@ -573,7 +628,7 @@ def _civicclerk(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> 
     docs = [
         d
         for d in platforms.clerk_docs(source.tenant, fetcher, today)
-        if body_matches(proof.body, d.body)
+        if body_matches(proof.body, d.body, proof.city)
     ]
     if not docs:
         proof.problem = (
@@ -588,7 +643,7 @@ def _escribe(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> Non
     meetings = [
         m
         for m in platforms.escribe_meetings(source.tenant, fetcher, today)
-        if body_matches(proof.body, f"{m.get('MeetingName')} {m.get('MeetingType')}")
+        if body_matches(proof.body, f"{m.get('MeetingName')} {m.get('MeetingType')}", proof.city)
         and "cancel" not in str(m.get("MeetingName") or "").casefold()
     ]
     if not meetings:
@@ -634,7 +689,7 @@ def _civicweb(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     meetings = [
         m
         for m in platforms.civicweb_meetings(source.tenant, fetcher, today)
-        if body_matches(proof.body, m["Name"])
+        if body_matches(proof.body, m["Name"], proof.city)
     ]
     if not meetings:
         proof.problem = (
@@ -692,7 +747,9 @@ def _civicplus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> N
             continue
         host = (urlsplit(page.url).hostname or source.site).lower()
         listed = parse_page(host, page.text)
-        docs = [d for d in listed if body_matches(proof.body, d.body) and d.day <= today]
+        docs = [
+            d for d in listed if body_matches(proof.body, d.body, proof.city) and d.day <= today
+        ]
         docs = [d for d in docs if "cancel" not in d.title.casefold()]
         if docs:
             break

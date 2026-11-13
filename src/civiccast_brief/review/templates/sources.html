@@ -87,6 +87,14 @@
         <input class="wide" id="cablecast_host" type="text" name="cablecast_host" value="{{ form.get("cablecast_host", "") }}"
                placeholder="reflect-yourcity.cablecast.tv" {{ invalid("cablecast_host") }}></p>
       {{ field_error("cablecast_host") }}
+      <p><button type="submit" formaction="/sources/cablecast-titles" data-busy="Reading the host's show list…">Show recent titles</button>
+        <span class="muted">Lists the names its recent shows use, so you can type a matching body name.</span></p>
+      {% if cablecast_titles %}
+      <p>Body names in the recent show titles (the date is left off; the number is how many shows):</p>
+      <ul>
+        {% for name, count in cablecast_titles %}<li>{{ name }} ({{ count }})</li>{% endfor %}
+      </ul>
+      {% endif %}
     </div>
     <div data-kind="webpage">
       <p><label for="page_url">Address of the page that links the meeting documents</label><br>

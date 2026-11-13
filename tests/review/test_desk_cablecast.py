@@ -39,3 +39,31 @@ def test_a_cablecast_source_is_added_then_opened_for_editing(store, city):  # no
     edit = client.get("/sources", params={"edit": f"cablecast:{HOST}"})
     assert edit.status_code == 200
     assert f'name="cablecast_host" value="{HOST}"' in edit.text
+
+
+def test_show_recent_titles_lists_the_body_names_from_one_read(store, city, monkeypatch):  # noqa: F811
+    import json
+    from pathlib import Path
+
+    from civiccast_brief.meeting import cablecast
+
+    fixtures = Path(__file__).parent.parent / "meeting" / "fixtures" / "cablecast"
+    shows = cablecast.parse_shows(json.loads((fixtures / "shows.json").read_text("utf-8")), HOST)
+    asked: list[str] = []
+    monkeypatch.setattr(cablecast, "list_shows", lambda host: asked.append(host) or shows)
+    client = client_for(store, city)
+    page = client.get("/sources")
+    assert "Show recent titles" in page.text and asked == []  # nothing is read until asked
+    reply = client.post(
+        "/sources/cablecast-titles",
+        data={"token": token(client), "kind": "cablecast", "cablecast_host": HOST, "bodies": "x"},
+    )
+    assert reply.status_code == 200 and asked == [HOST]
+    assert "City Council Meeting (" in reply.text and "Planning Commission (" in reply.text
+    assert f'name="cablecast_host" value="{HOST}"' in reply.text
+    assert sources.load_sources(city) == []  # nothing was saved
+    bad = client.post(
+        "/sources/cablecast-titles",
+        data={"token": token(client), "kind": "cablecast", "cablecast_host": "example.com"},
+    )
+    assert bad.status_code == 400 and "not a Cablecast host" in bad.text and asked == [HOST]

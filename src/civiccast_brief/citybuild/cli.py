@@ -75,6 +75,16 @@ def _find(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     return 0 if found.candidates else 1
 
 
+def _city_name(folder: Path) -> str:
+    """The city's name from city.json ("" when there is none): a title may leave it off."""
+    try:
+        data = json.loads((folder / "city.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    name = data.get("name") if isinstance(data, dict) else None
+    return name.strip() if isinstance(name, str) else ""
+
+
 def check_city(
     folder: Path,
     *,
@@ -88,6 +98,7 @@ def check_city(
     source when that is given)."""
     fetcher = fetcher or Fetcher()
     proofs: list[Proof] = []
+    city = _city_name(folder)
     try:
         for source in load_sources(folder):
             if source_id is not None and source.id != source_id:
@@ -103,6 +114,7 @@ def check_city(
                         today=today,
                         captions=captions,
                         work_dir=folder / "city-check",
+                        city=city,
                     )
                 )
     finally:

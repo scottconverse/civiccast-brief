@@ -17,6 +17,7 @@ import hashlib
 import io
 import logging
 from collections.abc import Callable, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Final
@@ -61,9 +62,14 @@ class Doc:
     via: str = ""
 
 
+#: The city's name for the listing in progress (set by :func:`list_docs`): a platform's name for a
+#: body may leave it off. A context variable, so no reader needs a new argument.
+_CITY: ContextVar[str] = ContextVar("listed_city", default="")
+
+
 def _listed_body(source: Source, named: str) -> str:
     """The source's listed body that ``named`` (the platform's name for it) is, or ""."""
-    hits = [b for b in source.bodies if body_matches(b, named)]
+    hits = [b for b in source.bodies if body_matches(b, named, _CITY.get())]
     return max(hits, key=len) if hits else ""
 
 
@@ -205,9 +211,15 @@ READERS: Final[dict[str, Callable[[Source, date, date, Fetcher], list[Doc]]]] = 
 }
 
 
-def list_docs(source: Source, first: date, last: date, fetcher: Fetcher) -> list[Doc]:
+def list_docs(
+    source: Source, first: date, last: date, fetcher: Fetcher, city: str = ""
+) -> list[Doc]:
     """Every document the source lists for its bodies from ``first`` to ``last``."""
-    return READERS[source.kind](source, first, last, fetcher)
+    token = _CITY.set(city)
+    try:
+        return READERS[source.kind](source, first, last, fetcher)
+    finally:
+        _CITY.reset(token)
 
 
 # ----- Reading a document in full ---------------------------------------------------------------
