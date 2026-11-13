@@ -17,6 +17,7 @@ from .conftest import (
     FLAGSTAFF,
     LAFAYETTE,
     LONGMONT_HOME,
+    LOVELAND,
     LYONS,
     PRIMEGOV,
     SVCM,
@@ -25,6 +26,7 @@ from .conftest import (
     TPCA_ROOT,
     add_boulder_county,
     add_erie,
+    add_loveland,
     add_primegov,
     add_tpca_drive,
     data_api,
@@ -366,3 +368,93 @@ def test_a_city_site_that_cannot_be_read_names_the_address_and_status(web):
     (note,) = found.notes
     assert f"{LOVGOV} answered HTTP 403" in note
     assert "did not open in Chrome either: Chrome is not installed" in note
+
+
+def test_a_linked_civicweb_portal_is_saved_with_every_body_it_lists(web):
+    web.add(
+        "https://www.loveland.test/",
+        '<html><a href="https://cilovelandco.civicweb.net/Portal/">Agendas and minutes</a></html>',
+    )
+    add_loveland(web, TODAY)
+    found = search_city(
+        "Loveland", "CO", website="https://www.loveland.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    (portal,) = [c for c in found.candidates if c.source.kind == "civicweb"]
+    assert portal.source.id == f"civicweb:{LOVELAND}"
+    assert portal.source.address == "https://cilovelandco.civicweb.net"
+    assert portal.source.bodies == (
+        "LOVELAND CITY COUNCIL MEETING",
+        "LOVELAND CITY COUNCIL SPECIAL MEETING",
+        "LOVELAND CITY COUNCIL STUDY SESSION",
+        "Affordable Housing Commission",
+        "Loveland Communication Advisory Board",
+        "Open Lands and Trails Advisory Commission",
+        "Planning Commission",
+    )
+    assert portal.how == "linked from the city site; the portal lists 7 bodies"
+    assert not found.unread
+
+
+def test_a_given_civicweb_portal_is_saved_for_the_given_body(web):
+    add_loveland(web, TODAY)
+    found = search_city(
+        "Nowhere",
+        "CO",
+        website="https://none.test/",
+        extra=[("City Council", "https://cilovelandco.civicweb.net/Portal/MeetingTypeList.aspx")],
+        fetcher=web.fetcher(),
+        today=TODAY,
+    )
+    got = {c.source.id: (c.source.bodies, c.how) for c in found.candidates}
+    assert got == {f"civicweb:{LOVELAND}": (("City Council",), "given; the portal lists 7 bodies")}
+
+
+def test_a_civicweb_portal_whose_body_list_does_not_answer_is_named(web):
+    found = search_city(
+        "Nowhere",
+        "CO",
+        website="https://none.test/",
+        extra=[("Board", "https://cilovelandco.civicweb.net/")],
+        fetcher=web.fetcher(),
+        today=TODAY,
+    )
+    assert found.candidates == []
+    ((platform, note),) = [(u.platform, u.note) for u in found.unread]
+    assert platform == "CivicWeb"
+    assert note.startswith("its body list did not answer: ")
+
+
+def test_civicweb_calendar_and_notice_types_are_not_offered_as_bodies(web):
+    """Loveland's meeting-type list also holds "Rolling Calendar", "Public Meetings Notice" and
+    "Standing Meeting Notices"; a newcomer picking bodies is not shown them."""
+    from civiccast_brief.citybuild import platforms
+
+    add_loveland(web, TODAY)
+    page = web.pages[f"https://{LOVELAND}.civicweb.net/Portal/MeetingTypeList.aspx"][1]
+    for name in (b"Rolling Calendar", b"Public Meetings Notice", b"Standing Meeting Notices"):
+        assert name in page  # the real page lists them
+    names = platforms.civicweb_bodies(LOVELAND, web.fetcher())
+    for dropped in ("Rolling Calendar", "Public Meetings Notice", "Standing Meeting Notices"):
+        assert dropped not in names
+    assert "LOVELAND CITY COUNCIL MEETING" in names and "Planning Commission" in names
+    assert len(names) == 7
+
+
+def test_civicweb_image_host_on_a_city_page_is_not_taken_for_a_portal(web):
+    """Loveland's site links https://i.civicweb.net/Global/Images/icon.png, CivicWeb's shared
+    image host, beside its portal; only the portal is a tenant."""
+    from civiccast_brief.citybuild import detect
+
+    assert detect.classify("https://i.civicweb.net/Global/Images/icon.png") is None
+    web.add(
+        "https://www.loveland.test/",
+        '<html><img src="https://i.civicweb.net/Global/Images/icon.png">'
+        '<a href="https://i.civicweb.net/Global/Images/icon.png">icon</a>'
+        '<a href="https://cilovelandco.civicweb.net/Portal/MeetingTypeList.aspx">Agendas</a></html>',
+    )
+    add_loveland(web, TODAY)
+    found = search_city(
+        "Loveland", "CO", website="https://www.loveland.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    assert [c.source.id for c in found.candidates] == [f"civicweb:{LOVELAND}"]
+    assert not found.unread

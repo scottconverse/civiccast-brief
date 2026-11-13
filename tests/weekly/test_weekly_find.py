@@ -264,3 +264,26 @@ def test_a_channel_video_of_a_body_another_city_source_lists_is_that_bodys():
     # A body no source of the city lists is still not run, with the reason.
     assert by_video["GGGGGGGGGGG"].body == ""
     assert by_video["GGGGGGGGGGG"].reason.startswith("the title names no body this source covers")
+
+
+def test_a_civicweb_sources_documents_are_listed_with_the_meeting_day():
+    from civiccast_brief.sources import make_source
+
+    portal = make_source("civicweb", {"tenant": "cilovelandco", "bodies": "City Council"})
+    rows = {
+        portal.id: [
+            _doc(COUNCIL, date(2026, 11, 4), "Council Meeting", "https://cw.test/1", "agenda"),
+            _doc(COUNCIL, date(2026, 11, 4), "Council Meeting", "https://cw.test/2", "packet"),
+        ]
+    }
+    listers = Listers(
+        documents=lambda source, first, last: rows[source.id],
+        read_documents=lambda docs: ({"documents": [{"url": d.url} for d in docs]}, []),
+    )
+    found, problems = find_meetings([portal], FIRST, LAST, listers)
+    assert problems == []
+    assert [(m.day, m.body) for m in found] == [(date(2026, 11, 4), COUNCIL)]
+    assert [d["url"] for d in found[0].documents()[0]["documents"]] == [
+        "https://cw.test/1",
+        "https://cw.test/2",
+    ]

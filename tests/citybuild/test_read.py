@@ -14,6 +14,7 @@ from .conftest import (
     ERIE,
     FLAGSTAFF,
     LAFAYETTE,
+    LOVELAND,
     LYONS,
     PRIMEGOV,
     SVCM,
@@ -24,6 +25,7 @@ from .conftest import (
     TPCA_ROOT,
     add_boulder_county,
     add_erie,
+    add_loveland,
     add_primegov,
     add_tpca_drive,
     feed,
@@ -553,3 +555,129 @@ def test_a_livestream_set_up_weeks_ahead_is_dated_by_its_title(web):
     assert proof.ok, proof.problem
     assert proof.document == "https://www.youtube.com/watch?v=eeeeeeeeeee"
     assert proof.meeting_date == date(2026, 10, 27)
+
+
+# ----- CivicWeb (fixtures trimmed from Loveland's live portal, 2026-11-12) -----------------------
+
+LOVELAND_TODAY = date(2026, 11, 12)
+LOVELAND_PORTAL = f"https://{LOVELAND}.civicweb.net"
+
+
+def _loveland(web, body, today=LOVELAND_TODAY):
+    add_loveland(web, today)
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": [body]})
+    return read_latest(source, body, web.fetcher(), today=today)
+
+
+def _documents_asked(web):
+    return [u.rsplit("/meetings/", 1)[1].split("/")[0] for u in web.asked if "/meetings/" in u]
+
+
+def test_civicweb_reads_the_newest_past_agenda_of_the_body(web):
+    proof = _loveland(web, "City Council")
+    assert proof.ok, proof.problem
+    # The 10 November study session is newer than the 4 November meeting; the 17 and 19 November
+    # council meetings are after "today".
+    assert (proof.meeting_date, proof.what) == (date(2026, 11, 10), "agenda")
+    assert proof.title == "LOVELAND CITY COUNCIL STUDY SESSION - 10 Nov 2026"
+    assert proof.document == (
+        f"{LOVELAND_PORTAL}/document/522976/"
+        "LOVELAND%20CITY%20COUNCIL%20STUDY%20SESSION%20-%2010%20Nov%202026.html"
+    )
+    assert proof.lines[:3] == ["AGENDA", "TUESDAY, NOVEMBER 10, 2026", "STUDY SESSION 7:30 P.M."]
+    assert _documents_asked(web) == ["18423"]
+
+
+def test_civicweb_lists_the_agendas_numbered_items(web):
+    proof = _loveland(web, "Planning Commission")
+    assert proof.ok, proof.problem
+    assert (proof.meeting_date, proof.title) == (
+        date(2026, 11, 9),
+        "Planning Commission - 09 Nov 2026",
+    )
+    assert proof.lines == [
+        "5 agenda items",
+        "I. CALL TO ORDER",
+        "II. PLEDGE OF ALLEGIANCE",
+        "III. ROLL CALL",
+    ]
+
+
+def test_civicweb_skips_cancelled_unpublished_and_future_meetings(web):
+    # 18078 (11 Nov) is CANCELLED but published, 18433 (18 Nov) is unpublished and not yet held:
+    # the 14 October meeting is the newest one to read.
+    proof = _loveland(web, "Open Lands and Trails Advisory Commission")
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 14)
+    assert proof.lines[:2] == ["3 agenda items", "1. CALL TO ORDER (5:30 PM)"]
+    assert _documents_asked(web) == ["18077"]
+    # 18220 (11 Nov) is unpublished and 18196 (11 Nov) is cancelled; neither is asked for.
+    proof = _loveland(web, "Loveland Communication Advisory Board")
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 10, 14)
+    assert "18220" not in _documents_asked(web) and "18196" not in _documents_asked(web)
+
+
+def test_civicweb_reads_the_meeting_day_it_is_asked_for(web):
+    # Asked on 4 November, the council meeting that day is the newest; "today" itself counts.
+    proof = _loveland(web, "City Council", today=date(2026, 11, 4))
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 11, 4)
+    assert proof.title == "LOVELAND CITY COUNCIL MEETING - 04 Nov 2026"
+    assert proof.lines == [
+        "6 agenda items",
+        "1. INTRODUCTION",
+        "1.1. CALL TO ORDER",
+        "1.2. PLEDGE OF ALLEGIANCE",
+    ]
+
+
+def test_civicweb_goes_on_to_an_older_meeting_when_the_newest_has_no_agenda(web):
+    import json
+
+    from civiccast_brief.citybuild import platforms
+
+    from .conftest import HERE
+
+    add_loveland(web, LOVELAND_TODAY)
+    rows = json.loads((HERE / "civicweb-loveland-docs-18423.json").read_text("utf-8"))
+    packet_only = [row for row in rows if row["DocumentType"] != 1]
+    assert packet_only  # the packet is posted; the agenda is not
+    web.add(
+        platforms.civicweb_documents_url(LOVELAND, 18421),
+        (HERE / "civicweb-loveland-docs-18421.json").read_bytes(),
+        "application/json",
+    )
+    web.add(
+        platforms.civicweb_documents_url(LOVELAND, 18423),
+        json.dumps(packet_only),
+        "application/json",
+    )
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=LOVELAND_TODAY)
+    assert proof.ok, proof.problem
+    assert proof.meeting_date == date(2026, 11, 4)
+    assert _documents_asked(web) == ["18423", "18421"]
+
+
+def test_civicweb_says_when_the_body_has_no_meeting_or_its_documents_do_not_answer(web):
+    proof = _loveland(web, "Zoning Board of Adjustment")
+    assert not proof.ok
+    assert proof.problem == (
+        "no published 'Zoning Board of Adjustment' meeting in the portal's last 120 days "
+        "up to 2026-11-12"
+    )
+    # A portal whose document list for the meeting does not answer is named, not passed over.
+    web = type(web)()
+    add_loveland(web, LOVELAND_TODAY, docs=())
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": ["Planning Commission"]})
+    proof = read_latest(source, "Planning Commission", web.fetcher(), today=LOVELAND_TODAY)
+    assert not proof.ok
+    assert proof.problem.startswith("2026-11-09: ") and "answered HTTP 404" in proof.problem
+
+
+def test_civicweb_portal_that_does_not_answer_is_not_read(web):
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=LOVELAND_TODAY)
+    assert not proof.ok
+    assert "answered HTTP 404" in proof.problem

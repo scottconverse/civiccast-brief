@@ -1,6 +1,6 @@
 """Meetings from the sources that list documents but no video, for the weekly run.
 
-A Laserfiche folder, a CivicPlus Agenda or Archive Center, a CivicClerk or eScribe portal, a
+A Laserfiche folder, a CivicPlus Agenda or Archive Center, a CivicClerk, eScribe or CivicWeb portal, a
 plain web page and a Google Drive folder each list a body's agendas, packets and minutes by date.
 :func:`list_docs` gives every one dated in the run's days, for the bodies the source covers, with
 the readers that ``city check`` uses. :func:`read_all` reads each document in full for
@@ -36,7 +36,7 @@ from civiccast_brief.citybuild.read import _MEETING_WORD, body_matches
 from civiccast_brief.sources import Source
 
 #: The kinds this module reads.
-KINDS: Final = ("laserfiche", "civicplus", "civicclerk", "escribe", "webpage", "gdrive")
+KINDS: Final = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
 #: The most pages read from one scanned Laserfiche document.
 SCANNED_PAGES: Final = 400
 #: A Drive file with no day in its name is opened when it was changed this long before the
@@ -102,6 +102,19 @@ def _escribe(source: Source, first: date, last: date, fetcher: Fetcher) -> list[
         for what, path in platforms.escribe_html_links(meeting):
             url = base + path if path.startswith("/") else path
             docs.append(platforms.Doc(body, meeting["day"], title, url, what))
+    return _keep(source, docs, first, last)
+
+
+def _civicweb(source: Source, first: date, last: date, fetcher: Fetcher) -> list[Doc]:
+    docs: list[Any] = []
+    for meeting in platforms.civicweb_meetings(source.tenant, fetcher, last):
+        # Only the source's own bodies' meetings in the run's days are asked for their documents.
+        if not first <= meeting["day"] <= last or not _listed_body(source, meeting["Name"]):
+            continue
+        try:
+            docs += platforms.civicweb_docs(source.tenant, meeting, fetcher)
+        except FetchError:
+            continue  # one meeting's document list did not answer; the others are still listed
     return _keep(source, docs, first, last)
 
 
@@ -186,6 +199,7 @@ READERS: Final[dict[str, Callable[[Source, date, date, Fetcher], list[Doc]]]] = 
     "civicplus": _civicplus,
     "civicclerk": _civicclerk,
     "escribe": _escribe,
+    "civicweb": _civicweb,
     "webpage": _webpage,
     "gdrive": _gdrive,
 }
@@ -242,10 +256,14 @@ def read_pages(doc: Doc, fetcher: Fetcher) -> tuple[str, list[str], list[int]]:
     elif content.startswith(b"PK"):
         pages = [_docx_text(content, doc.url)]
     elif "html" in page.content_type.lower():
-        title, items = platforms.escribe_items(page.text)
-        if not items:
-            raise FetchError(f"{doc.url} answered with a web page, not the document")
-        pages = ["\n".join([title, *items]) if title else "\n".join(items)]
+        if platforms.CIVICWEB_MARK in page.text:
+            # A CivicWeb agenda or minutes page: its text, line by line, is the one page.
+            pages = ["\n".join(platforms.civicweb_lines(page.text))]
+        else:
+            title, items = platforms.escribe_items(page.text)
+            if not items:
+                raise FetchError(f"{doc.url} answered with a web page, not the document")
+            pages = ["\n".join([title, *items]) if title else "\n".join(items)]
     elif page.content_type.lower().startswith("text/plain"):
         # A scanned WebLink document comes as its pages' text with a form feed between pages.
         pages = content.decode("utf-8-sig", errors="replace").split("\f")

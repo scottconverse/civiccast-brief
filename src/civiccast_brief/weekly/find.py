@@ -7,7 +7,7 @@
   and name one of the source's bodies, or another body the city's sources list: a city's channel
   carries all its bodies' meetings, and setup names only the bodies its newest titles showed.
 - A **Granicus** archive lists its clips with their names and dates.
-- A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **web page** or **Google Drive**
+- A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **CivicWeb**, **web page** or **Google Drive**
   source lists a body's agendas, packets and minutes by date, and no video
   (:mod:`civiccast_brief.weekly.listed`). They go with the video meeting of the same body on the
   same day; a day with documents and no video is kept with that reason.
@@ -261,7 +261,7 @@ def _chain(*fetches: Callable[[], tuple[dict[str, Any], list[str]]] | None) -> A
 
 
 READERS = {"primegov": _primegov, "youtube": _youtube, "granicus": _granicus}
-LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "webpage", "gdrive")
+LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
 
 
 def _city_body(meeting: Found, city_bodies: Sequence[str]) -> Found:

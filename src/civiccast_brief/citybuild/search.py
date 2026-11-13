@@ -657,7 +657,7 @@ def _meeting_pages(links: list[Link], base: str) -> tuple[str, int, date | None]
     return follow, len(days), max(days)
 
 
-# ----- CivicClerk, eScribe and CivicPlus --------------------------------------------------------
+# ----- CivicClerk, eScribe, CivicWeb and CivicPlus --------------------------------------------------------
 
 
 def _listed(
@@ -703,6 +703,17 @@ def _escribe(
     _listed(result, item, "escribe", {"tenant": item.key}, names, body, how)
 
 
+def _civicweb(
+    result: Search, item: detect.Found, fetcher: Fetcher, today: date, body: str | None
+) -> None:
+    try:
+        names = platforms.civicweb_bodies(item.key, fetcher)
+    except (FetchError, ValueError) as exc:
+        result.unread.append(Unread(item.label, item.url, f"its body list did not answer: {exc}"))
+        return
+    _listed(result, item, "civicweb", {"tenant": item.key}, names, body, "the portal lists")
+
+
 def _civicplus(
     result: Search, item: detect.Found, fetcher: Fetcher, today: date, body: str | None
 ) -> None:
@@ -726,4 +737,9 @@ def _civicplus(
     _listed(result, item, "civicplus", {"site": site}, names, body, how)
 
 
-_LISTED: Final = {"civicclerk": _civicclerk, "escribe": _escribe, "civicplus": _civicplus}
+_LISTED: Final = {
+    "civicclerk": _civicclerk,
+    "escribe": _escribe,
+    "civicweb": _civicweb,
+    "civicplus": _civicplus,
+}

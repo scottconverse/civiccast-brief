@@ -100,6 +100,12 @@
                placeholder="https://pub-yourcounty.escribemeetings.com" {{ invalid("escribe_tenant") }}></p>
       {{ field_error("escribe_tenant") }}
     </div>
+    <div data-kind="civicweb">
+      <p><label for="civicweb_tenant">CivicWeb portal address or tenant</label><br>
+        <input class="wide" id="civicweb_tenant" type="text" name="civicweb_tenant" value="{{ form.get("civicweb_tenant", "") }}"
+               placeholder="https://yourtown.civicweb.net" {{ invalid("civicweb_tenant") }}></p>
+      {{ field_error("civicweb_tenant") }}
+    </div>
     <div data-kind="civicplus">
       <p><label for="site">Town site address (the one with the Agenda Center or Archive Center)</label><br>
         <input class="wide" id="site" type="text" name="site" value="{{ form.get("site", "") }}"

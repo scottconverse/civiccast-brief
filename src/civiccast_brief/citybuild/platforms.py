@@ -1,4 +1,4 @@
-"""Meeting lists from CivicClerk, eScribe and CivicPlus, read with rules and no model.
+"""Meeting lists from CivicClerk, eScribe, CivicWeb and CivicPlus, read with rules and no model.
 
 Each platform is asked the way its own public pages ask it (checked live on 2026-11-10 against
 Erie, Boulder County, Lyons and Lafayette):
@@ -7,6 +7,11 @@ Erie, Boulder County, Lyons and Lafayette):
   the bodies and ``Events`` lists meetings, newest first, with their published agenda files.
 - eScribe: ``https://pub-<tenant>.escribemeetings.com`` lists meetings when its calendar is POSTed
   a date range, and shows each agenda as an HTML page of numbered items.
+- CivicWeb (iCompass): ``https://<tenant>.civicweb.net`` answers plain GETs (checked live on
+  2026-11-12 against Loveland). ``/Portal/MeetingTypeList.aspx`` names the bodies,
+  ``/Services/MeetingsService.svc/meetings?from=&to=`` lists meetings as JSON, and
+  ``.../meetings/<id>/meetingDocuments`` lists each meeting's documents, the agenda with its HTML
+  in the answer. A document opens at ``/document/<id>/<name>``.
 - CivicPlus: the town's own site has an Agenda Center (``/AgendaCenter``, one panel per body) and
   an Archive Center (``/Archive.aspx``, one list per body and kind of document).
 """
@@ -17,9 +22,11 @@ import html
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from html.parser import HTMLParser
 from typing import Any, Final
+from urllib.parse import quote
 
-from civiccast_brief.citybuild.fetch import Fetcher
+from civiccast_brief.citybuild.fetch import Fetcher, FetchError
 from civiccast_brief.citybuild.page import first_date, squash
 
 #: How many CivicClerk meetings are listed, newest first. The API answers a few at a time (15 for
@@ -28,6 +35,8 @@ CLERK_EVENTS: Final = 200
 #: How far back the eScribe calendar is asked for meetings.
 ESCRIBE_DAYS: Final = 120
 ESCRIBE_CALENDAR: Final = "/MeetingsCalendarView.aspx/GetCalendarMeetings"
+#: How far back the CivicWeb meeting list is asked for meetings.
+CIVICWEB_DAYS: Final = 120
 _TAG: Final = re.compile(r"<[^>]+>")
 
 
@@ -190,6 +199,202 @@ def escribe_items(text: str) -> tuple[str, list[str]]:
     return (_text(title.group(1)) if title else ""), items
 
 
+# ----- CivicWeb ---------------------------------------------------------------------------------
+
+#: CivicWeb's ``DocumentType`` numbers, as the portal's own page uses them: 1 is the agenda as
+#: HTML, 4 the agenda packet (a PDF), and 9, 10 and 53 are minutes (HTML, PDF, adopted PDF).
+#: Minutes are taken from the first of these that a meeting lists: the adopted PDF first.
+_CIVICWEB_MINUTES: Final = (53, 10, 9)
+_CIVICWEB_TYPE: Final = re.compile(
+    r'<a\b[^>]*href="/Portal/MeetingInformation\.aspx\?type=(\d+)"[^>]*'
+    r'class="meeting-type-item-title"[^>]*>(.*?)</a>',
+    re.IGNORECASE | re.DOTALL,
+)
+_CIVICWEB_DATE_SUFFIX: Final = re.compile(r"\s*-\s*\d{1,2} [A-Za-z]{3,9} \d{4}\s*$")
+_CIVICWEB_NUMBER: Final = re.compile(r"^(?:\d+(?:\.\d+)*|[IVXL]+|[A-Z])\.$")
+_CIVICWEB_ITEM: Final = re.compile(r"^(?:\d+(?:\.\d+)*|[IVXL]+|[A-Z])\.\s+\S")
+#: The marker CivicWeb puts in the head of every document it renders as HTML.
+CIVICWEB_MARK: Final = "iCompass-Open-Document"
+
+
+def civicweb_base(tenant: str) -> str:
+    return f"https://{tenant}.civicweb.net"
+
+
+def civicweb_bodies(tenant: str, fetcher: Fetcher) -> list[str]:
+    """The portal's meeting types, which are its bodies (a type with no meetings page is not)."""
+    page = fetcher.get(civicweb_base(tenant) + "/Portal/MeetingTypeList.aspx")
+    names = [_text(name) for _id, name in _CIVICWEB_TYPE.findall(page.text)]
+    return [n for n in dict.fromkeys(names) if n and not _CIVICWEB_NOT_BODY.search(n)]
+
+
+def civicweb_body(name: str) -> str:
+    """ "LOVELAND CITY COUNCIL MEETING - 04 Nov 2026" is the body "LOVELAND CITY COUNCIL MEETING"."""
+    return _CIVICWEB_DATE_SUFFIX.sub("", squash(name))
+
+
+def civicweb_meetings_url(tenant: str, today: date) -> str:
+    first = (today - timedelta(days=CIVICWEB_DAYS)).isoformat()
+    return (
+        f"{civicweb_base(tenant)}/Services/MeetingsService.svc/meetings"
+        f"?from={first}&to={today.isoformat()}"
+    )
+
+
+def civicweb_documents_url(tenant: str, meeting_id: int) -> str:
+    return (
+        f"{civicweb_base(tenant)}/Services/MeetingsService.svc/meetings/{meeting_id}"
+        "/meetingDocuments"
+    )
+
+
+def _civicweb_json(fetcher: Fetcher, url: str) -> list[Any]:
+    page = fetcher.get(url)
+    try:
+        data = page.json()
+    except ValueError as exc:
+        raise FetchError(f"{url} did not answer JSON: {exc}") from exc
+    if not isinstance(data, list):
+        raise FetchError(f"{url} did not answer a list")
+    return data
+
+
+def civicweb_meetings(tenant: str, fetcher: Fetcher, today: date) -> list[dict[str, Any]]:
+    """Meetings of the last :data:`CIVICWEB_DAYS` days up to ``today``, newest first, each with its
+    ``day`` and its ``Name`` squashed. A cancelled meeting ("CANCELLED - ...", "*CANCELED* ...")
+    and one the portal has not published are left out."""
+    found: list[dict[str, Any]] = []
+    for row in _civicweb_json(fetcher, civicweb_meetings_url(tenant, today)):
+        if not isinstance(row, dict) or not row.get("Id") or not row.get("Published"):
+            continue
+        name = squash(str(row.get("Name") or ""))
+        try:
+            day = datetime.strptime(str(row.get("MeetingDate"))[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if day > today or "cancel" in name.casefold():
+            continue
+        found.append({**row, "Name": name, "day": day})
+    found.sort(key=lambda m: (str(m.get("MeetingDateTime")), int(m["Id"])), reverse=True)
+    return found
+
+
+def civicweb_document_url(tenant: str, doc_id: int, name: str, suffix: str) -> str:
+    """Where a document opens. The portal's page adds ``?handle=`` to a PDF's link, and the
+    document opens without it (checked on 2026-11-12), so the link is built from the id."""
+    stem = quote(squash(name) or "document", safe="")
+    return f"{civicweb_base(tenant)}/document/{doc_id}/{stem}{suffix}"
+
+
+def civicweb_rows(
+    tenant: str, meeting: dict[str, Any], fetcher: Fetcher
+) -> dict[int, dict[str, Any]]:
+    """The meeting's documents by ``DocumentType`` (the first of each)."""
+    by_type: dict[int, dict[str, Any]] = {}
+    for row in _civicweb_json(fetcher, civicweb_documents_url(tenant, int(meeting["Id"]))):
+        if isinstance(row, dict) and isinstance(row.get("DocumentType"), int) and row.get("Id"):
+            by_type.setdefault(row["DocumentType"], row)
+    return by_type
+
+
+def civicweb_docs(tenant: str, meeting: dict[str, Any], fetcher: Fetcher) -> list[Doc]:
+    """The meeting's agenda (HTML), packet and minutes, in that order, as :class:`Doc`.
+
+    ``Doc.title`` is the meeting's name. Minutes are the adopted PDF, else the PDF, else the HTML.
+    """
+    by_type = civicweb_rows(tenant, meeting, fetcher)
+    name = str(meeting.get("Name") or "")
+    chosen: list[tuple[int, str, str]] = []
+    if 1 in by_type:
+        chosen.append((1, "agenda", ".html"))
+    if 4 in by_type:
+        chosen.append((4, "packet", ".pdf"))
+    minutes = next((t for t in _CIVICWEB_MINUTES if t in by_type), None)
+    if minutes is not None:
+        chosen.append((minutes, "minutes", ".html" if minutes == 9 else ".pdf"))
+    return [
+        Doc(
+            civicweb_body(name),
+            meeting["day"],
+            name,
+            civicweb_document_url(tenant, int(by_type[kind]["Id"]), name, suffix),
+            what,
+        )
+        for kind, what, suffix in chosen
+    ]
+
+
+class _Lines(HTMLParser):
+    """The text of a CivicWeb HTML document, a line to a paragraph, a table row or a break."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.lines: list[str] = []
+        self._line: list[str] = []
+        self._skip = 0
+        self._in_body = False
+
+    def _end(self) -> None:
+        line = squash("".join(self._line))
+        self._line = []
+        if line:
+            self.lines.append(line)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "body":
+            self._in_body = True
+        elif tag in ("style", "script"):
+            self._skip += 1
+        elif tag == "br":
+            self._end()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("style", "script"):
+            self._skip = max(0, self._skip - 1)
+        elif tag in _BLOCKS:
+            self._end()
+        elif tag in ("td", "th"):
+            self._line.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if self._in_body and not self._skip:
+            self._line.append(data)
+
+    def close(self) -> None:
+        super().close()
+        self._end()
+
+
+_BLOCKS: Final = frozenset({"p", "div", "li", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6"})
+
+
+def civicweb_lines(markup: str) -> list[str]:
+    """The text lines of a CivicWeb HTML document (its head is not text).
+
+    An agenda item's number ("1.1.") sits in a cell and paragraph of its own, apart from its
+    title, so a line that is only a number is joined to the line after it.
+    """
+    parser = _Lines()
+    parser.feed(markup)
+    parser.close()
+    lines: list[str] = []
+    number = ""
+    for line in parser.lines:
+        if _CIVICWEB_NUMBER.match(line):
+            number = f"{number} {line}".strip()
+            continue
+        lines.append(f"{number} {line}".strip())
+        number = ""
+    return lines
+
+
+def civicweb_items(markup: str) -> tuple[str, list[str]]:
+    """The document's title and its numbered items ("1.1. CALL TO ORDER", "IV. REPORTS")."""
+    title = _TITLE.search(markup)
+    items = [line for line in civicweb_lines(markup) if _CIVICWEB_ITEM.match(line)]
+    return (_text(title.group(1)) if title else ""), items
+
+
 # ----- CivicPlus --------------------------------------------------------------------------------
 
 _CATEGORY: Final = re.compile(
@@ -279,6 +484,9 @@ _NOT_MEETINGS: Final = re.compile(
     r"applications?|articles?)\b",
     re.IGNORECASE,
 )
+#: A CivicWeb meeting type that is a calendar or a notice page ("Rolling Calendar", "Public
+#: Meetings Notice", "Standing Meeting Notices" on Loveland's portal) and not a body.
+_CIVICWEB_NOT_BODY: Final = re.compile(_NOT_MEETINGS.pattern + r"|\bcalendar\b", re.IGNORECASE)
 
 
 def archive_center_bodies(text: str) -> list[str]:
