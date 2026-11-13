@@ -592,3 +592,36 @@ def test_a_story_no_longer_published_leaves_the_site(tmp_path):
     report = run_week(settings, [COUNCIL_MEETING], LAST, held.steps())
     assert not story_file.exists()
     assert "owzpzjzjwne: story is no longer published; removed from the site" in report.lines
+
+
+def test_one_meeting_published_twice_reaches_the_site_once(tmp_path):
+    # Longmont uploaded the Nov 3 session twice; both videos were published on the desk and
+    # their stories got the same id, which the site build refuses.
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    twice = Found(COUNCIL, date(2026, 11, 3), "City Council Regular Session", "p", "Q3Cpd52hWa4")
+    fake = Fake()
+    fake.exported = {
+        f"000{n}-article": {"kind": "article", "status": "published", "meeting_id": video}
+        for n, video in ((2, "oWZpzjzjwnE"), (3, "Q3Cpd52hWa4"))
+    }
+    story = fake.episode
+
+    def same_id(argv):
+        code = story(argv)
+        if argv[0] == "story":
+            Path(_opt(argv, "--out")).write_text(json.dumps({"id": "2026-11-03-council"}))
+        return code
+
+    fake.episode = same_id
+    report = run_week(settings, [COUNCIL_MEETING, twice], LAST, fake.steps())
+
+    stories = sorted(p.name for p in (site.episodes / "stories").glob("*.json"))
+    assert stories == ["owzpzjzjwne.json"]
+    assert report.failed == 1
+    assert any(
+        line.startswith("q3cpd52hwa4: same meeting as owzpzjzjwne (story 2026-11-03-council)")
+        and "Kill one copy on the desk" in line
+        for line in report.lines
+    ), report.lines
+    assert fake.calls[-1][0] == "site"  # the site is still built

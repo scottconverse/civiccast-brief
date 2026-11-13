@@ -459,10 +459,38 @@ def _publish_stories(
         built_from[meeting_id] = meta.get("content_hash")
         state.save()
         log.append((f"{meeting_id}: built story {name}", False))
+    log += _drop_twice_published(folder, wanted)
     for old in folder.glob("*.json"):
         if old.name not in wanted:
             old.unlink()
             log.append((f"{old.stem}: story is no longer published; removed from the site", False))
+    return log
+
+
+def _drop_twice_published(folder: Path, wanted: set[str]) -> list[tuple[str, bool]]:
+    """Keep one story per story id. Two published videos of one meeting (a city that uploads
+    the same session twice) give the same id, and the site refuses a story id used twice, so
+    the later file (by name) is left off the site and the editor is told to kill one copy on
+    the desk."""
+    log: list[tuple[str, bool]] = []
+    kept: dict[str, str] = {}
+    for name in sorted(wanted):
+        path = folder / name
+        try:
+            story_id = json.loads(path.read_text(encoding="utf-8")).get("id")
+        except (OSError, ValueError, AttributeError):
+            continue  # a missing or broken file is reported by the site build
+        if not isinstance(story_id, str):
+            continue
+        if story_id in kept:
+            path.unlink()  # built again next run, and left off again until one copy is killed
+            why = (
+                f"{path.stem}: same meeting as {kept[story_id]} (story {story_id}); "
+                "left off the site so it is not published twice. Kill one copy on the desk"
+            )
+            log.append((why, True))
+            continue
+        kept[story_id] = path.stem
     return log
 
 
