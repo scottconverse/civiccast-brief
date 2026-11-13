@@ -503,6 +503,38 @@ def _drop_twice_published(folder: Path, wanted: set[str]) -> list[tuple[str, boo
     return log
 
 
+def _drop_unpublished_episodes(
+    site: Site, state: State, items: list[tuple[Path, dict[str, Any]]]
+) -> list[tuple[str, bool]]:
+    """Remove the files of each episode this run built whose item is no longer published
+    (unpublished, held or killed on the desk), so it leaves the site on the next build. Files
+    the run did not build are left alone."""
+    built: dict[str, str] = state.data.setdefault("built", {})
+    built_from: dict[str, str | None] = state.data.setdefault("built_from", {})
+    published = {
+        str(meta.get("meeting_id"))
+        for _, meta in items
+        if meta.get("kind") == "episode" and meta.get("status") == "published"
+    }
+    keep = {name for meeting_id, name in built.items() if meeting_id in published}
+    log: list[tuple[str, bool]] = []
+    for meeting_id in [m for m in built if m not in published]:
+        name = built.pop(meeting_id)
+        built_from.pop(meeting_id, None)
+        if name in keep:
+            continue
+        for path in (
+            site.episodes / f"{name}.json",
+            site.media / f"{name}.mp3",
+            site.media / f"{name}-chapters.json",
+            site.media / f"{name}.vtt",
+        ):
+            path.unlink(missing_ok=True)
+        log.append((f"{meeting_id}: no longer published; episode {name} removed", False))
+    state.save()
+    return log
+
+
 def publish(
     steps: Steps, settings: Settings, state: State, published: str
 ) -> list[tuple[str, bool]]:
@@ -528,6 +560,7 @@ def publish(
     built_from: dict[str, str | None] = state.data.setdefault("built_from", {})
     site.episodes.mkdir(parents=True, exist_ok=True)
     site.media.mkdir(parents=True, exist_ok=True)
+    log += _drop_unpublished_episodes(site, state, items)
     for path, meta in items:
         meeting_id = str(meta.get("meeting_id"))
         if meta.get("kind") != "episode":

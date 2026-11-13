@@ -649,3 +649,35 @@ def test_next_weeks_roundup_leaves_out_what_this_weeks_covered(tmp_path):
     report = run_week(settings, [PZ_MEETING, later], date(2026, 11, 17), fake.steps())
 
     assert "roundup: not made (1 meeting(s) done this week; it needs 2)" in report.lines
+
+
+def test_an_episode_killed_on_the_desk_leaves_the_site(tmp_path):
+    """Killing a published episode took its story off the site but left the episode there."""
+    import shutil
+
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    settings = _settings(tmp_path, site=site)
+    (site.episodes).mkdir(parents=True)
+    (site.episodes / "older-episode.json").write_text("{}", encoding="utf-8")
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    assert (site.episodes / "ep-oWZpzjzjwnE.json").is_file()
+
+    shutil.rmtree(settings.work / "exported")  # the real export drops what is not published
+    killed = Fake()
+    killed.exported = {}
+    report = run_week(settings, [COUNCIL_MEETING], LAST, killed.steps())
+
+    assert "oWZpzjzjwnE: no longer published; episode ep-oWZpzjzjwnE removed" in report.lines
+    assert sorted(p.name for p in site.episodes.glob("*.json")) == ["older-episode.json"]
+    assert list(site.media.iterdir()) == []
