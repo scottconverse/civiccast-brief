@@ -1,6 +1,7 @@
 """The weekly run with stand-in steps: each one writes the files the real one writes."""
 
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -80,6 +81,11 @@ class Fake:
             Path(_opt(argv, "--out")).write_text(
                 json.dumps({"id": f"ep-{meeting_id}"}), encoding="utf-8"
             )
+        if argv[0] == "story":
+            meeting_id = json.loads((Path(_opt(argv, "--article")) / "item.json").read_text())[
+                "meeting_id"
+            ]
+            Path(_opt(argv, "--out")).write_text(json.dumps({"id": f"st-{meeting_id}"}))
         return 1 if self._failing("episode") else 0
 
     def article(self, argv):
@@ -523,3 +529,66 @@ def test_a_story_already_on_the_desk_is_not_written_again(tmp_path):
 
     assert report.failed == 0, report.lines
     assert rerun.names() == []
+
+
+def _site(tmp_path):
+    return Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+
+
+def test_a_published_story_reaches_the_site_with_no_published_episode(tmp_path):
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0002-article": {
+            "kind": "article",
+            "status": "published",
+            "meeting_id": "oWZpzjzjwnE",
+            "content_hash": "a" * 64,
+        }
+    }
+    report = run_week(
+        settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00"
+    )
+
+    assert report.failed == 0
+    assert "oWZpzjzjwnE: built story owzpzjzjwne.json" in report.lines
+    story = next(a for step, a in fake.calls if step == "episode" and a[0] == "story")
+    assert _opt(story, "--article") == str(settings.work / "exported" / "0002-article")
+    assert _opt(story, "--city") == "longmont"
+    assert (site.episodes / "stories" / "owzpzjzjwne.json").is_file()
+    assert not any(a[0] == "assemble" for step, a in fake.calls if step == "episode")
+    # The site is built (no "nothing published" stop) and fetches the meeting stills.
+    build = fake.calls[-1]
+    assert build[0] == "site" and "--stills" in build[1]
+
+    again = Fake()
+    again.exported = fake.exported
+    run_week(settings, [COUNCIL_MEETING], LAST, again.steps())
+    assert again.names() == [("review", "export"), ("site", "build")]  # not made twice
+
+
+def test_a_story_no_longer_published_leaves_the_site(tmp_path):
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0002-article": {"kind": "article", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    story_file = site.episodes / "stories" / "owzpzjzjwne.json"
+    assert story_file.is_file()
+
+    # The real export removes the folder of an item that is no longer published.
+    shutil.rmtree(settings.work / "exported")
+    held = Fake()
+    report = run_week(settings, [COUNCIL_MEETING], LAST, held.steps())
+    assert not story_file.exists()
+    assert "owzpzjzjwne: story is no longer published; removed from the site" in report.lines

@@ -10,7 +10,36 @@
     <h{{ level }} class="row-title"><a href="{{ r.href }}">{{ r.headline }}</a></h{{ level }}>
     <p>{{ r.board }}{% if r.dek %} · {{ r.dek }}{% endif %}</p>
   </div>
-  <span class="dur"><span class="visually-hidden">Listen time </span>{{ r.length }}</span>
+  {% if r.has_audio %}<span class="dur"><span class="visually-hidden">Listen time </span>{{ r.length }}</span>{% endif %}
+</article>
+{% endmacro %}
+
+{# The meeting still, or a plain colored block with the board name when there is none. #}
+{% macro thumb(c, extra="") %}
+{% if c.still %}
+<a class="thumb {{ extra }}" href="{{ c.href }}" tabindex="-1" aria-hidden="true"><img src="{{ c.still }}" alt="" width="640" height="360" loading="lazy" decoding="async"></a>
+{% else %}
+<a class="thumb block c{{ c.color }} {{ extra }}" href="{{ c.href }}" tabindex="-1" aria-hidden="true"><span>{{ c.board }}</span></a>
+{% endif %}
+{% endmacro %}
+
+{% macro listen(c) %}{% if c.has_audio %}<a class="listen" href="{{ c.href }}#listen">Listen · {{ c.length }}</a>{% endif %}{% endmacro %}
+
+{% macro story_card(c) %}
+<article class="scard" data-board="{{ c.board }}" data-text="{{ (c.headline ~ ' ' ~ c.dek ~ ' ' ~ c.board)|lower }}">
+  {{ thumb(c) }}
+  <p class="kicker"><a href="{{ c.board_href }}">{{ c.board }}</a></p>
+  <h3 class="scard-title"><a href="{{ c.href }}">{{ c.headline }}</a></h3>
+  {% if c.dek %}<p class="scard-dek">{{ c.dek }}</p>{% endif %}
+  <p class="meta"><time datetime="{{ c.iso_date }}">{{ c.meeting_date }}</time>{{ listen(c) }}</p>
+</article>
+{% endmacro %}
+
+{% macro latest_row(c) %}
+<article class="lrow{% if c.top %} is-top{% endif %}" data-board="{{ c.board }}" data-text="{{ (c.headline ~ ' ' ~ c.dek ~ ' ' ~ c.board)|lower }}">
+  <p class="lrow-board"><a href="{{ c.board_href }}">{{ c.board }}</a></p>
+  <h4 class="row-title"><a href="{{ c.href }}">{{ c.headline }}</a></h4>
+  <p class="meta"><time datetime="{{ c.iso_date }}">{{ c.meeting_date }}</time>{{ listen(c) }}</p>
 </article>
 {% endmacro %}
 

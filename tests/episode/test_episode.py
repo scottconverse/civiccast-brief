@@ -188,7 +188,7 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
 
     assert episode["id"] == "2026-10-20-example-weekly-roundup"
     # The dates are a range, not every date strung together.
-    assert episode["headline"] == "Longmont weekly roundup: October 6 to October 20, 2026"
+    assert episode["headline"] == "Longmont weekly roundup, Oct. 6 – Oct. 20"
     assert episode["video_url"] is None and episode["transcript"] is None
 
 
@@ -430,3 +430,27 @@ def test_a_story_citing_a_document_page_keeps_its_page_in_the_site_format(
     )
     paragraph = episode["article"]["sections"][0]["paragraphs"][0]
     assert paragraph["pages"] == [{"kind": "minutes", "url": url, "page": 3}]
+
+
+def test_a_published_article_becomes_a_stand_alone_story_file_with_no_episode(tmp_path, meeting):
+    meeting_dir, _ = meeting  # no episode is staged, approved or assembled
+    _, article_dir = _published_article(tmp_path, meeting_dir, _story())
+    story = B.assemble_story(
+        article_dir=article_dir,
+        meeting_dir=meeting_dir,
+        city_slug="example",
+        published="2026-10-21T09:00:00-06:00",
+    )
+    # Same id the meeting's episode gets, so the site can merge the two later.
+    assert story["id"] == "2026-10-20-example-city-council"
+    assert story["article"]["headline"] == "Consent agenda passes"
+    assert "audio" not in story and "script" not in story
+    assert story["video_url"].startswith("https://www.youtube.com/")
+
+    site_in = tmp_path / "site-in"
+    (site_in / "stories").mkdir(parents=True)
+    shutil.copy(CITY, site_in / "city.json")
+    (site_in / "stories" / f"{story['id']}.json").write_text(json.dumps(story), encoding="utf-8")
+    report = build_site(site_in, tmp_path / "site", "https://example.test")
+    assert (report.episodes, report.stories) == (0, 1)
+    assert (tmp_path / "site" / "stories" / story["id"] / "index.html").is_file()

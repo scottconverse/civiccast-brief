@@ -17,7 +17,8 @@ a written title, and its episode on the desk.
 
 Then, when the site settings are given: ``review export``; for each published episode not built
 yet, ``audio``, ``episode assemble`` (with the published story of the same meeting), the media
-files copied under their episode names; and ``site build``.
+files copied under their episode names; each published story is written as a stand-alone
+story file (so it is on the site with or without an episode); and ``site build``.
 
 ``weekly-state.json`` in the work folder records each meeting's steps, so a rerun picks up where
 the last one stopped: a finished meeting is not run again, a failed one is tried again.
@@ -42,7 +43,7 @@ from civiccast_brief.script.writer import (
     parse_txt,
     save_script,
 )
-from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE
+from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE, STORIES_DIR
 from civiccast_brief.weekly import rosterfill
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
@@ -408,6 +409,63 @@ def _desk_script(
     return desk / "script.txt", desk / "script.json", desk / "audio"
 
 
+def _publish_stories(
+    steps: Steps,
+    site: Site,
+    state: State,
+    items: list[tuple[Path, dict[str, Any]]],
+    runs: dict[str, dict[str, Any]],
+    published: str,
+) -> list[tuple[str, bool]]:
+    """Write each published story as a stand-alone story file in ``<episodes>/stories``.
+
+    A story is on the site whether or not its meeting has an episode: with an episode the site
+    merges them, without one it is a page of its own. A story that is no longer published (held,
+    killed or edited since) has its file removed, so it leaves the site on the next build.
+    """
+    log: list[tuple[str, bool]] = []
+    folder = site.episodes / STORIES_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    built_from: dict[str, str | None] = state.data.setdefault("stories_from", {})
+    wanted: set[str] = set()
+    for path, meta in items:
+        if meta.get("kind") != "article" or meta.get("status") != "published":
+            continue
+        meeting_id = str(meta.get("meeting_id"))
+        name = f"{slug(meeting_id)}.json"
+        wanted.add(name)
+        out = folder / name
+        if out.is_file() and built_from.get(meeting_id) == meta.get("content_hash"):
+            continue
+        entry = runs.get(meeting_id)
+        if entry is None:
+            log.append(
+                (f"{meeting_id}: story published, but no run of it is in this work folder", False)
+            )
+            continue
+        argv = [
+            "story",
+            "--article", str(path),
+            "--meeting", str(entry["folder"]),
+            "--city", site.slug,
+            "--published", published,
+            "--out", str(out),
+        ]  # fmt: skip
+        try:
+            _call(steps.episode, argv, "episode story")
+        except StepFailed as exc:
+            log.append((f"{meeting_id}: {exc}", True))
+            continue
+        built_from[meeting_id] = meta.get("content_hash")
+        state.save()
+        log.append((f"{meeting_id}: built story {name}", False))
+    for old in folder.glob("*.json"):
+        if old.name not in wanted:
+            old.unlink()
+            log.append((f"{old.stem}: story is no longer published; removed from the site", False))
+    return log
+
+
 def publish(
     steps: Steps, settings: Settings, state: State, published: str
 ) -> list[tuple[str, bool]]:
@@ -480,13 +538,17 @@ def publish(
         built_from[meeting_id] = meta.get("content_hash")
         state.save()
         log.append((f"{meeting_id}: built episode {name}", False))
-    if not any(p.name not in (CITY_FILE, ROSTER_FILE) for p in site.episodes.glob("*.json")):
+    log.extend(_publish_stories(steps, site, state, items, runs, published))
+    has_stories = any((site.episodes / STORIES_DIR).glob("*.json"))
+    if not has_stories and not any(
+        p.name not in (CITY_FILE, ROSTER_FILE) for p in site.episodes.glob("*.json")
+    ):
         # Nothing approved yet is the desk doing its job, not a failed build.
         log.append(
             ("site: not built: no episode is published yet; approve items on the desk", False)
         )
         return log
-    argv = ["build", "--episodes", str(site.episodes), "--out", str(site.out)]
+    argv = ["build", "--episodes", str(site.episodes), "--out", str(site.out), "--stills"]
     _call(steps.site, [*argv, "--base-url", site.base_url], "site build")
     log.append((f"site: built into {site.out}", False))
     return log

@@ -52,12 +52,21 @@
 </head>
 <body class="page-{{ page.nav or 'other' }}">
 <a class="skip-link" href="#main">Skip to content</a>
+{% if today is defined %}
+<div class="topstrip"><p><time>{{ today }}</time><span class="sep" aria-hidden="true">·</span><span>{{ city.name }}</span><span class="note">AI-written from the public meeting video</span></p></div>
+{% endif %}
 <div class="wrap">
 <header class="s-head">
-  <a class="s-brand" href="{{ href('/') }}">
-    {% include "_logo.html" %}
-    <span class="wordmark">CivicCast <b>Brief</b><small>{{ city.name }}</small></span>
-  </a>
+  <div class="mast">
+    <a class="s-brand" href="{{ href('/') }}">
+      {% include "_logo.html" %}
+      <span class="wordmark">CivicCast <b>Brief</b><small>{{ city.name }}</small></span>
+    </a>
+    <form class="search" role="search" action="{{ href('/search/') }}" method="get">
+      <label class="visually-hidden" for="site-q">Search meetings</label>
+      <input id="site-q" name="q" type="search" placeholder="Search meetings" autocomplete="off">
+    </form>
+  </div>
   <nav class="s-nav" aria-label="Site">
     <a href="{{ href('/') }}"{% if page.nav in ('meetings', 'episode', 'archive') %} aria-current="page"{% endif %}>Meetings</a>
     <a href="{{ href('/boards/') }}"{% if page.nav == 'boards' %} aria-current="page"{% endif %}>Boards</a>
@@ -65,10 +74,14 @@
     <a href="{{ href('/podcast/') }}"{% if page.nav == 'podcast' %} aria-current="page"{% endif %}>Podcast</a>
     <a href="{{ href('/about/') }}"{% if page.nav in ('about', 'how') %} aria-current="page"{% endif %}>About</a>
   </nav>
-  <form class="search" role="search" action="{{ href('/search/') }}" method="get">
-    <label class="visually-hidden" for="site-q">Search meetings</label>
-    <input id="site-q" name="q" type="search" placeholder="Search meetings" autocomplete="off">
-  </form>
+  {% if topic_chips is defined and topic_chips %}
+  <nav class="chips topics-row" aria-label="Topics">
+    {% for chip in topic_chips %}
+    <a class="chip" href="{{ chip.href }}">{{ chip.short }}</a>
+    {% endfor %}
+    <a class="chip all" href="{{ href('/topics/') }}">All topics</a>
+  </nav>
+  {% endif %}
 </header>
 <main id="main" class="page" tabindex="-1">
 {% block content %}{% endblock %}

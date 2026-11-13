@@ -30,12 +30,12 @@ def test_home_lists_the_latest_episode_first(built: tuple[Path, object]) -> None
         "SAMPLE: Planning commission"
     )
     assert 'id="lead-title"' in home
-    assert "Also recently" in home
-    assert "Every meeting" in home
+    assert "Latest articles" in home
+    assert "every public meeting, written up" in home
     # The lead story's first vote is split (6-1), so it gets the split badge.
     assert '<span class="vote split">6-1</span>' in home
     # Docket rows sit under a month header that links to that month's archive.
-    assert '<a href="/archive/2026-10/">October 2026</a>' in home
+    assert '<a href="/archive/2026-10/">Earlier in October</a>' in home
     assert '<a class="chip" href="/topics/land-use/">Land use</a>' in home
     assert 'type="application/ld+json"' in home
     assert '"@type": "PodcastSeries"' in home
