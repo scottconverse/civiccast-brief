@@ -1,4 +1,4 @@
-"""Run the Phase 4 stages for one meeting (YouTube or Granicus) and write each stage's file.
+"""Run the Phase 4 stages for one meeting (YouTube, Granicus or Cablecast) and write each stage's file.
 
 out/raw/                caption file and yt-dlp's info file
 out/transcript.json     normalized caption lines, with speaker labels
@@ -21,6 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.meeting import cablecast as cablecast_mod
 from civiccast_brief.meeting import diarize as diarize_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting import transcript as transcript_mod
@@ -80,11 +81,13 @@ def run(
     diarize: bool = False,
     granicus_host: str | None = None,
     granicus_view_id: int | None = None,
+    cablecast_host: str | None = None,
     complete: Complete | None = None,
     judge_complete: Complete | None = None,
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
-    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id.
+    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id, or with
+    ``cablecast_host`` the Cablecast show id.
 
     ``complete`` writes the recap drafts and ``judge_complete`` judges the claims; each falls
     back to the Ollama ``model``. ``models.complete_for`` makes them from the city's picks.
@@ -126,6 +129,32 @@ def run(
 
         def fetch_audio(audio_dir: Path) -> Path:
             return granicus_mod.fetch_audio(gcap, audio_dir)
+
+    elif cablecast_host:
+        log(f"[{video_id}] capture: Cablecast {cablecast_host} show {video_id}")
+        try:
+            ccap = cablecast_mod.capture(cablecast_host, int(video_id), raw_dir)
+        except cablecast_mod.CablecastError as exc:
+            raise PipelineError(str(exc)) from exc
+        title = ccap.show.name
+        meeting_date = ccap.show.date
+        items = ccap.items
+        caption_kind = "cablecast_captions"
+        source = {
+            "platform": "cablecast",
+            "host": cablecast_host,
+            "show_id": int(video_id),
+            "vod_id": ccap.show.vod_id,
+            "video_url": ccap.video_url,
+            "caption_kind": caption_kind,
+            "caption_file": ccap.caption_file.name,
+            "caption_download_reused": ccap.caption_reused,
+            "capture": "the city's Cablecast caption segments (vod.m3u8 subtitles), joined",
+        }
+        video_id = ccap.meeting_id
+
+        def fetch_audio(audio_dir: Path) -> Path:
+            return cablecast_mod.fetch_audio(ccap, audio_dir)
 
     else:
         log(f"[{video_id}] capture: caption command")
@@ -250,7 +279,9 @@ def run(
         meeting_date=meeting_date,
         video_id=video_id,
         claims=tuple(claims),
-        video_place=GRANICUS_VIDEO_PLACE if granicus_host else DEFAULT_VIDEO_PLACE,
+        video_place=GRANICUS_VIDEO_PLACE
+        if granicus_host or cablecast_host
+        else DEFAULT_VIDEO_PLACE,
     )
     save_recap(recap, out / "recap.json")
     verify_report["agenda_source"] = agenda.source if agenda else None
@@ -306,7 +337,11 @@ def _diarize(
         audio = fetch_audio(out / "audio")
         log(f"[{video_id}] diarize: voices")
         data = diarize_mod.run_diarization(audio, out / "diarization.json")
-    except (diarize_mod.DiarizeError, granicus_mod.GranicusError) as exc:
+    except (
+        diarize_mod.DiarizeError,
+        granicus_mod.GranicusError,
+        cablecast_mod.CablecastError,
+    ) as exc:
         log(f"[{video_id}] diarize FAILED: {exc}")
         return {"status": "failed", "reason": str(exc)}
     counts = diarize_mod.assign_voices(segments, diarize_mod.spans_from(data))

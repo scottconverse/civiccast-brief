@@ -36,6 +36,7 @@ Kinds and what each needs:
 - ``primegov``: the portal address, ``https://<name>.primegov.com``.
 - ``youtube``: the channel id, ``UC`` and 22 more letters, digits, ``-`` or ``_``.
 - ``granicus``: the host, ``<name>.granicus.com``, and the view id (digits).
+- ``cablecast``: the host, ``<name>.cablecast.tv``, of a Cablecast (Reflect) video archive.
 - ``webpage``: a page that links the meeting documents (agendas, packets, minutes), for a body
   with no meeting platform, like a school board. ``follow`` is optional: the start of a path, like
   ``/boardmeetings/``, for a page that links one page per meeting instead of the documents.
@@ -73,6 +74,7 @@ KINDS: Final = (
     "primegov",
     "youtube",
     "granicus",
+    "cablecast",
     "webpage",
     "gdrive",
     "civicclerk",
@@ -85,6 +87,7 @@ KIND_LABELS: Final = {
     "primegov": "PrimeGov portal",
     "youtube": "YouTube channel",
     "granicus": "Granicus video archive",
+    "cablecast": "Cablecast video archive",
     "webpage": "Web page of meeting documents",
     "gdrive": "Google Drive folder",
     "civicclerk": "CivicClerk portal",
@@ -97,6 +100,7 @@ KIND_LABELS: Final = {
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 _PRIMEGOV_HOST: Final = re.compile(rf"^{_LABEL}\.primegov\.com$")
 _GRANICUS_HOST: Final = re.compile(rf"^{_LABEL}\.granicus\.com$")
+_CABLECAST_HOST: Final = re.compile(rf"^{_LABEL}\.cablecast\.tv$")
 _CHANNEL_ID: Final = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
 _VIEW_ID: Final = re.compile(r"^[0-9]{1,6}$")
 _FOLDER_ID: Final = re.compile(r"^[A-Za-z0-9_-]{10,100}$")
@@ -147,6 +151,8 @@ class Source:
             return f"{self.kind}:{self.tenant}"
         if self.kind == "civicplus":
             return f"civicplus:{self.site}"
+        if self.kind == "cablecast":
+            return f"cablecast:{self.host}"
         return f"granicus:{self.host}/{self.view_id}"
 
     @property
@@ -166,6 +172,8 @@ class Source:
             return f"https://{self.tenant}.civicweb.net"
         if self.kind == "civicplus":
             return f"https://{self.site}"
+        if self.kind == "cablecast":
+            return f"https://{self.host}"
         return f"https://{self.host}/ViewPublisher.php?view_id={self.view_id}"
 
     def to_json(self) -> dict[str, Any]:
@@ -186,6 +194,8 @@ class Source:
             data["site"] = self.site
         elif self.kind == "laserfiche":
             data["url"] = self.url
+        elif self.kind == "cablecast":
+            data["host"] = self.host
         else:
             data["host"] = self.host
             data["view_id"] = self.view_id
@@ -278,6 +288,22 @@ def _granicus(host_value: str, view_value: str) -> tuple[str, str]:
     if not _VIEW_ID.match(view):
         raise SourceError(f"{view!r} is not a view id; it is a number, like 2", "view_id")
     return text, str(int(view))
+
+
+def _cablecast(host_value: str) -> str:
+    text = host_value.strip().lower()
+    if not text:
+        raise SourceError("enter the Cablecast host", "cablecast_host")
+    if "://" in text:
+        text = urlsplit(text).hostname or ""
+    text = text.split("/")[0]
+    if not _CABLECAST_HOST.match(text):
+        raise SourceError(
+            f"{host_value.strip()!r} is not a Cablecast host; it looks like "
+            "reflect-yourcity.cablecast.tv",
+            "cablecast_host",
+        )
+    return text
 
 
 def _webpage(url_value: str, follow_value: str) -> tuple[str, str]:
@@ -423,6 +449,10 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
         value = str(fields.get("laserfiche_url") or fields.get("url") or "")
         url = _laserfiche_url(value)
         return Source(kind, parse_bodies(fields.get("bodies") or ""), url=url)
+    if kind == "cablecast":
+        # The desk form names the field apart from Granicus's host; the file calls it host.
+        host = _cablecast(str(fields.get("cablecast_host") or fields.get("host") or ""))
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), host=host)
     host, view = _granicus(str(fields.get("host") or ""), str(fields.get("view_id") or ""))
     return Source(kind, parse_bodies(fields.get("bodies") or ""), host=host, view_id=view)
 

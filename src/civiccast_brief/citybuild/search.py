@@ -118,7 +118,7 @@ KEYWORDS: Final = ("agenda", "meeting", "minutes", "board", "commission", "counc
 MAX_PAGES: Final = 8
 _MAX_LINK_TEXT: Final = 60
 _PLATFORM_URL: Final = re.compile(
-    r"https?://[A-Za-z0-9.-]+\.(?:primegov\.com|legistar\.com|granicus\.com|civicclerk\.com|"
+    r"https?://[A-Za-z0-9.-]+\.(?:primegov\.com|legistar\.com|granicus\.com|cablecast\.tv|civicclerk\.com|"
     r"escribemeetings\.com|boarddocs\.com|civicweb\.net|onboardmeetings\.com)[^\s\"'<>\\]*"
 )
 _DRIVE_FOLDER: Final = re.compile(
@@ -286,6 +286,9 @@ def search_city(
     for item in platforms:
         if item.platform in _LISTED:
             _LISTED[item.platform](result, item, fetcher, today, None)
+        elif item.platform == "cablecast":
+            note = "the program can read it; add it on the Sources page with the bodies it carries"
+            result.unread.append(Unread(item.label, item.url, note))
         elif item.platform not in ("primegov", "legistar", "granicus", "youtube", "gdrive"):
             result.unread.append(Unread(item.label, item.url))
     for body, url in extra:
