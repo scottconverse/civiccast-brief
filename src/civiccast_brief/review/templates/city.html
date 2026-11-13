@@ -29,6 +29,16 @@
     <p><label for="podcast_email">Podcast owner email (the address Spotify and Apple write to)</label><br>
       <input class="wide" id="podcast_email" type="text" name="podcast_email" value="{{ form.get("podcast_email", "") }}"
              {% if error_field == "podcast_email" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="platform">Where the city keeps its meeting videos</label><br>
+      <select id="platform" name="platform" {% if error_field == "platform" %}aria-invalid="true"{% endif %}>
+        {% if not form.get("platform") %}<option value="" selected>Choose one</option>{% endif %}
+        {% for p in platforms %}<option value="{{ p }}" {% if form.get("platform") == p %}selected{% endif %}>{{ {"youtube": "YouTube", "granicus": "Granicus", "cablecast": "Cablecast", "none": "None yet"}[p] }}</option>{% endfor %}
+      </select></p>
+    {% if found_platforms|length > 1 and form.get("platform") in ("", "none") %}
+    <p class="notice" role="status">Find found more than one video platform ({{ found_platforms|join(", ") }}). Choose the one meetings are captured from, then save.</p>
+    {% elif not found_platforms and form.get("platform") == "none" %}
+    <p class="muted">No video platform is set. None of this city's sources is a YouTube channel, Cablecast or Granicus archive yet.</p>
+    {% endif %}
     <button type="submit" class="primary" data-busy="Saving the city…">Save the city</button>
   </fieldset>
 </form>

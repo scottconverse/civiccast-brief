@@ -300,6 +300,7 @@ def test_a_youtube_channel_find_did_not_offer_can_be_added_anyway(web, desk):
     )
     assert "names a body" in found.text and "Add anyway" in found.text
     assert 'data-busy="Adding the channel' in found.text
+    assert 'placeholder="e.g. City Council"' in found.text and 'value="LOVELAND' not in found.text
     (search_id,) = client.app.state.desk.searches
     assert load_sources(city) == []
     none = client.post(

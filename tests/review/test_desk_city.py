@@ -75,7 +75,7 @@ def test_saving_the_city_makes_city_json_when_the_folder_has_none(store, city): 
     assert page.status_code == 200 and 'name="slug"' in page.text
     assert client.post("/city", data={"token": token(client), **GOOD}).status_code == 200
     made = json.loads((city / "city.json").read_text(encoding="utf-8"))
-    assert made["slug"] == "loveland" and made["capture"] == {"platform": "youtube"}
+    assert made["slug"] == "loveland" and made["capture"] == {"platform": "none"}  # never assumed
     assert made["podcast"]["owner_email"] == "podcast@example.org"
 
 

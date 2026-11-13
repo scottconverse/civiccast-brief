@@ -118,9 +118,8 @@ def city_settings(
     platform: str | None = None,
     cablecast_host: str | None = None,
 ) -> dict[str, Any]:
-    # A city made by Find has no choice yet and gets the long-standing default; ``setup`` always
-    # passes the platform it was told or asked for.
-    capture: dict[str, Any] = {"platform": platform or ("granicus" if granicus_host else "youtube")}
+    # No platform is assumed: with none given (and no Granicus host) the capture says "none".
+    capture: dict[str, Any] = {"platform": platform or ("granicus" if granicus_host else "none")}
     if capture["platform"] == "granicus":
         capture.update(host=granicus_host, view_id=granicus_view_id)
     elif capture["platform"] == "cablecast":
@@ -240,6 +239,8 @@ def setup(
 
 
 IDENTITY_FIELDS = ("name", "slug", "state", "contact_email", "podcast_email")
+#: Also read and saved on the City page, but optional in a form that does not send it.
+PLATFORM_FIELD = "platform"
 
 
 def read_identity(folder: Path) -> dict[str, str]:
@@ -258,6 +259,8 @@ def read_identity(folder: Path) -> dict[str, str]:
         "contact_email": data.get("contact_email"),
         "podcast_email": podcast.get("owner_email") if isinstance(podcast, dict) else None,
     }
+    capture = data.get("capture")
+    out[PLATFORM_FIELD] = str(capture.get("platform") or "") if isinstance(capture, dict) else ""
     if not values["state"]:
         try:
             roster = json.loads((folder / ROSTER_FILE).read_text(encoding="utf-8"))
@@ -296,11 +299,37 @@ def check_identity(values: dict[str, str]) -> dict[str, str]:
     return clean
 
 
+def _capture_for(folder: Path, platform: str) -> dict[str, Any]:
+    """The ``capture`` object for a platform picked on the City page. Granicus and Cablecast take
+    their host from the folder's sources, so one must be there."""
+    from civiccast_brief.sources import SourceError, load_sources
+
+    if platform not in PLATFORMS:
+        raise CityFieldError(f"Pick one of: {', '.join(PLATFORMS)}.", "platform")
+    if platform in ("youtube", "none"):
+        return {"platform": platform}
+    try:
+        sources = load_sources(folder)
+    except SourceError as exc:
+        raise CityFieldError(str(exc), "platform") from exc
+    match = next((s for s in sources if s.kind == platform), None)
+    if match is None:
+        raise CityFieldError(
+            f"There is no {platform.title()} source yet. Add it on the Sources page first.",
+            "platform",
+        )
+    if platform == "cablecast":
+        return {"platform": platform, "host": match.host}
+    return {"platform": platform, "host": match.host, "view_id": int(match.view_id)}
+
+
 def save_identity(folder: Path, values: dict[str, str]) -> Path:
     """Save the checked values into ``city.json``, leaving every other field as it was. With no
     city.json yet, the file is made the way ``setup`` makes it. Returns the file."""
     clean = check_identity(values)
     folder = Path(folder)
+    platform = str(values.get(PLATFORM_FIELD, "")).strip()
+    capture = _capture_for(folder, platform) if platform else None
     path = folder / CITY_FILE
     if path.exists():
         data = _read(path)
@@ -313,6 +342,9 @@ def save_identity(folder: Path, values: dict[str, str]) -> Path:
             podcast = {}
         podcast["owner_email"] = clean["podcast_email"]
         data["podcast"] = podcast
+        old = data.get("capture")
+        if capture is not None and not (isinstance(old, dict) and old.get("platform") == platform):
+            data["capture"] = capture
     else:
         data = city_settings(
             slug=clean["slug"],
@@ -321,6 +353,8 @@ def save_identity(folder: Path, values: dict[str, str]) -> Path:
             podcast_email=clean["podcast_email"],
         )
         data["state"] = clean["state"]
+        if capture is not None:
+            data["capture"] = capture
     folder.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

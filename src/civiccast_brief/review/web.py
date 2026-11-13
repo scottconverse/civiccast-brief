@@ -581,10 +581,20 @@ def make_desk_app(
                 form = city_file.read_identity(state.city_dir)
             except city_file.CityError as exc:
                 error = f"{state.city_dir / city_file.CITY_FILE} cannot be read: {exc}"
+        found_platforms: list[str] = []
+        if state.city_dir is not None:
+            try:
+                from civiccast_brief.citybuild.build import video_platforms
+
+                found_platforms = list(video_platforms(city_sources.load_sources(state.city_dir)))
+            except city_sources.SourceError:
+                pass
         return state.page(
             "city.html",
             status=status,
             title="City",
+            platforms=city_file.PLATFORMS,
+            found_platforms=found_platforms,
             form=dict(form or {}),
             notice=notice,
             error=error,
