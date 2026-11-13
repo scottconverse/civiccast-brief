@@ -43,6 +43,7 @@ from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
 from civiccast_brief.review import desk
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
+from civiccast_brief.weekly import rosterfill
 
 logger = logging.getLogger(__name__)
 
@@ -560,6 +561,11 @@ def make_desk_app(
             return state.settings_page(error=f"Not saved: {exc}", status=400)
         return _redirect("/settings?notice=" + ("models" if which == "models" else "auto"))
 
+    @app.get("/roster", response_class=HTMLResponse)
+    def roster() -> HTMLResponse:
+        rosters = rosterfill.loaded_rosters(state.city_dir) if state.city_dir else []
+        return state.page("roster.html", title="Roster", rosters=rosters)
+
     @app.get("/sources", response_class=HTMLResponse)
     def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:
         form: dict[str, str] = {}
@@ -727,7 +733,9 @@ def make_desk_app(
             )
         except (OSError, city_sources.SourceError) as exc:
             return state.sources_page(error=f"Not saved: {exc}", status=400)
-        state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
+        state.found_lines = built.notice + [
+            f"Filled in during the weekly run: {line}" for line in built.to_fill
+        ]
         return _redirect("/sources?" + urlencode({"done": "found"}))
 
     @app.post("/sources/check")

@@ -171,7 +171,7 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
     entry = state["meetings"]["youtube:oWZpzjzjwnE"]
     assert entry["status"] == "done"
-    assert entry["done"] == ["recap", "script", "episode", "article"]
+    assert entry["done"] == ["roster", "recap", "script", "episode", "article"]
 
 
 def test_a_failing_script_is_written_again_with_the_report_then_repaired(tmp_path):

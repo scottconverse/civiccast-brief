@@ -141,12 +141,18 @@ def _roster(
     if not path.exists():
         _write(path, roster_template(name=found.name, state=found.state, body=body, roster_page=""))
         built.lines.append(f"wrote {path} (no members)")
-        built.notice.append(f"Wrote {ROSTER_FILE} with no members.")
+        built.notice.append(
+            f"Wrote {ROSTER_FILE} with no members yet: the weekly run fills them in from the "
+            "meeting records."
+        )
     why = read.problem if read is not None else "the members page was not looked for"
     if not found.website:
         why = "the city has no website the search found"
     built.lines.append(f"roster: {why}")
-    built.to_fill.append(f"roster.json members: the {body} members ({why})")
+    built.to_fill.append(
+        f"the {body} members: nothing to type, the weekly run fills them in from the "
+        f"meeting records ({why})"
+    )
 
 
 def build_city(

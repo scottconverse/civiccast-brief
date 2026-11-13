@@ -2,6 +2,8 @@
 
 For each meeting :mod:`find` turned up, in date order:
 
+0. the body's roster, filled from the meeting's own records (:mod:`rosterfill`): the roll call
+   in the minutes and any member list on the agenda, by plain parsing, kept with their source;
 1. ``agenda.txt`` from the portal's HTML agenda, when there is one;
 2. ``meeting run`` (captions, speakers, recap) with the body's roster;
 3. ``script write``; when the check fails, once more with the report, then ``script repair``;
@@ -41,6 +43,7 @@ from civiccast_brief.script.writer import (
     save_script,
 )
 from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE
+from civiccast_brief.weekly import rosterfill
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
 
@@ -233,6 +236,21 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
     return str(article)
 
 
+def _fill_roster(settings: Settings, meeting: Found, folder: Path) -> list[str]:
+    """Merge the members this meeting's records print into the body's roster. Never stops the
+    meeting: a record that cannot be read is a line for the report."""
+    try:
+        path = roster_for(settings.city, meeting.body) or (
+            settings.city / "rosters" / f"{slug(meeting.body)}.json"
+        )
+        documents = folder / DOCUMENTS_NAME
+        data = json.loads(documents.read_text(encoding="utf-8")) if documents.is_file() else None
+        agenda = meeting.agenda.text(meeting.day) if meeting.agenda is not None else ""
+        return rosterfill.fill_roster(path, settings.city, meeting.body, meeting.day, data, agenda)
+    except Exception as exc:  # noqa: BLE001 - a record that will not parse must not stop the meeting
+        return [f"roster {meeting.body}: not filled from the records: {exc}"]
+
+
 def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[str, Any]) -> None:
     """Run one meeting's steps, skipping the ones ``entry`` says are done. Updates ``entry``."""
     folder = settings.work / folder_for(meeting)
@@ -250,6 +268,9 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             write_documents(folder, data)
             entry["documents"] = lines
         done.append("documents")
+    if "roster" not in done:
+        entry["roster"] = _fill_roster(settings, meeting, folder)
+        done.append("roster")
     if "recap" not in done:
         roster = roster_for(settings.city, meeting.body)
         if roster is None:
@@ -509,10 +530,12 @@ def run_week(
         except StepFailed as exc:
             _record(state, entry, str(exc))
             report.add(f"{meeting.day} {meeting.title}: failed: {exc}", failed=True)
+            for line in entry.get("roster", []):
+                report.add(f"{meeting.day} {meeting.title}: {line}")
             continue
         _record(state, entry, "")
         report.add(f"{meeting.day} {meeting.title}: done")
-        for line in entry.get("documents", []):
+        for line in [*entry.get("documents", []), *entry.get("roster", [])]:
             report.add(f"{meeting.day} {meeting.title}: {line}")
     line = run_roundup(steps, settings, state, last)
     report.add(line, failed=line.startswith("roundup: failed"))

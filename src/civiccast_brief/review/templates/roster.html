@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set nav = "roster" %}
+{% block content %}
+<h2>Roster</h2>
+<p class="muted">Nobody types the members in. The weekly run reads each meeting's own records (the roll call in
+  the minutes, member lists on the agenda) and fills them in, with the record each came from. This page is read-only.</p>
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to see the roster.</p>
+{% elif not rosters %}
+<p>No roster file yet. The first weekly run that reads a meeting's roll call writes it.</p>
+{% else %}
+{% for r in rosters %}
+<h3>{{ r.body or r.file }} <span class="muted">({{ r.file }})</span></h3>
+{% if r.members %}
+<table>
+  <thead><tr><th>Member</th><th>Title</th><th>Where the records print them</th></tr></thead>
+  <tbody>
+  {% for m in r.members %}
+    <tr>
+      <td>{{ m.name }}</td>
+      <td>{{ m.role }}</td>
+      <td>{% if m.records %}
+        {% for rec in m.records %}
+          <div>{{ rec.date }}: {{ rec.document }}{% if rec.page %}, page {{ rec.page }}{% endif %}, line {{ rec.line }}
+            ({{ rec.status }}{% if rec.title %} as {{ rec.title }}{% endif %}){% if rec.url.startswith("http") %}
+            <a href="{{ rec.url }}" rel="noopener noreferrer">open</a>{% endif %}</div>
+        {% endfor %}
+      {% else %}<span class="muted">Entered by hand; no record read yet.</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No members yet. The weekly run fills them in when a meeting's records list them.</p>
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endblock %}
