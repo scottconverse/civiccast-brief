@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -157,10 +158,16 @@ def _article(
 
 
 def episode_slug(recap: Recap, city_slug: str) -> str:
-    """The id of a meeting's episode, and of its story: "2026-11-03-longmont-city-council"."""
-    kind = (
-        "weekly-roundup" if recap.video_id == ROUNDUP_ID else recap.body.lower().replace(" ", "-")
-    )
+    """The id of a meeting's episode, and of its story: "2026-11-03-longmont-city-council".
+
+    Only lowercase letters, digits and hyphens, which is what the site accepts: "Longmont Urban
+    Renewal Authority (LURA)" is "longmont-urban-renewal-authority-lura", and the city's name is
+    not said twice ("2026-11-10-longmont-urban-renewal-authority-lura")."""
+    if recap.video_id == ROUNDUP_ID:
+        kind = "weekly-roundup"
+    else:
+        kind = re.sub(r"[^a-z0-9]+", "-", recap.body.lower()).strip("-")
+        kind = kind.removeprefix(f"{city_slug}-") or kind
     return f"{_iso_date(recap.meeting_date)}-{city_slug}-{kind}"
 
 

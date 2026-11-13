@@ -440,3 +440,27 @@ def test_a_published_article_becomes_a_stand_alone_story_file_with_no_episode(tm
     report = build_site(site_in, tmp_path / "site", "https://example.test")
     assert (report.episodes, report.stories) == (0, 1)
     assert (tmp_path / "site" / "stories" / story["id"] / "index.html").is_file()
+
+
+def test_an_episode_id_has_only_what_the_site_accepts():
+    """The Urban Renewal Authority's body name has parentheses and starts with the city's name;
+    its episode id was "2026-11-10-longmont-longmont-urban-renewal-authority-(lura)", which the
+    site build refused, so the whole weekly deploy failed."""
+    from civiccast_brief.script.recap import Recap
+
+    recap = Recap(
+        city="Longmont",
+        body="Longmont Urban Renewal Authority (LURA)",
+        meeting_date="November 10, 2026",
+        video_id="VID00000002",
+        claims=(),
+    )
+    assert B.episode_slug(recap, "longmont") == "2026-11-10-longmont-urban-renewal-authority-lura"
+    council = Recap(
+        city="Longmont",
+        body="City Council",
+        meeting_date="November 3, 2026",
+        video_id="VID00000003",
+        claims=(),
+    )
+    assert B.episode_slug(council, "longmont") == "2026-11-03-longmont-city-council"
