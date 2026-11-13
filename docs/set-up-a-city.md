@@ -88,6 +88,8 @@ Then run, for a YouTube city:
 python -m civiccast_brief setup cities/yourcity --slug yourcity --name "Your City" --state "Your State" --contact-email corrections@example.org --podcast-email podcast@example.org --roster-page https://yourcity.gov/council
 ```
 
+`--state` takes the full name or the two-letter code (`CO`); the folder stores the full name.
+
 The `podcast` settings in `city.json` (category, language, the email Spotify writes to, show art) are
 explained in [List a city show on Apple Podcasts and Spotify](podcast-directories.md).
 

@@ -85,3 +85,46 @@ def test_setup_command_line(tmp_path, capsys):
     assert top.main(argv) == 0
     assert "roster.json" in capsys.readouterr().out
     assert top.main(argv) == 1
+
+
+def _setup_argv(folder, *extra, state="Ohio"):
+    argv = ["setup", str(folder), "--slug", "ex", "--name", "Ex", "--state", state]
+    return argv + ["--contact-email", "a@example.org", "--podcast-email", "b@example.org", *extra]
+
+
+def test_setup_next_steps_follow_the_docs_order(tmp_path, capsys):
+    assert top.main(_setup_argv(tmp_path / "c")) == 0
+    out = capsys.readouterr().out
+    sources, members, meeting = (
+        out.index("add the city's sources"),
+        out.index("add the members"),
+        out.index("run one meeting"),
+    )
+    assert sources < members < meeting
+    assert "city find" in out and "city check" in out and "Sources screen" in out
+
+
+@pytest.mark.parametrize(
+    ("given", "stored"),
+    [
+        ("CO", "Colorado"),
+        ("co", "Colorado"),
+        ("NH", "New Hampshire"),
+        ("WV", "West Virginia"),
+        ("DC", "District of Columbia"),
+        ("Colorado", "Colorado"),
+    ],
+)
+def test_setup_takes_a_state_code_and_stores_the_full_name(tmp_path, given, stored):
+    assert top.main(_setup_argv(tmp_path / "c", state=given)) == 0
+    roster = json.loads((tmp_path / "c" / "roster.json").read_text(encoding="utf-8"))
+    assert roster["state"] == stored
+
+
+def test_setup_says_which_capture_platform_it_set(tmp_path, capsys):
+    assert top.main(_setup_argv(tmp_path / "y")) == 0
+    out = capsys.readouterr().out
+    assert "capture.platform" in out and "'youtube'" in out and "meeting run" in out
+    granicus = ["--granicus", "ex.granicus.com", "--view-id", "2"]
+    assert top.main(_setup_argv(tmp_path / "g", *granicus)) == 0
+    assert "'granicus'" in capsys.readouterr().out
