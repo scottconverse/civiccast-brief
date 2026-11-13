@@ -212,11 +212,11 @@ def test_sources_add_edit_remove_and_errors_name_the_field(store, city):
     t = token(client)
     bad = client.post(
         "/sources/add",
-        data={"token": t, "kind": "youtube", "channel_id": "@longmont", "bodies": "City Council"},
+        data={"token": t, "kind": "youtube", "channel_id": "longmont", "bodies": "City Council"},
     )
     assert bad.status_code == 400
-    assert 'id="channel_id-error"' in bad.text and "channel handle" in bad.text
-    assert 'value="@longmont"' in bad.text  # what was typed is kept
+    assert 'id="channel_id-error"' in bad.text and "not a YouTube channel address" in bad.text
+    assert 'value="longmont"' in bad.text  # what was typed is kept
     added = client.post(
         "/sources/add",
         data={

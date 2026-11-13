@@ -40,6 +40,7 @@ from starlette.concurrency import run_in_threadpool
 
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
+from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
 from civiccast_brief.review import desk
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 
@@ -727,6 +728,53 @@ def make_desk_app(
         state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
         return _redirect("/sources?" + urlencode({"done": "found"}))
 
+    @app.post("/sources/check")
+    async def sources_check(request: Request) -> Response:
+        """Read each source once, as ``city check`` does, and show READ or NOT READ per body."""
+        from civiccast_brief.citybuild.cli import check_city, save_proofs
+
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.sources_page(
+                error="Start the desk with --city to check sources.", status=400
+            )
+        source_id = form.get("source_id", "").strip() or None
+        try:
+            rows = city_sources.load_sources(state.city_dir)
+            if source_id is not None and not any(s.id == source_id for s in rows):
+                return state.sources_page(
+                    error=f"No source {source_id}; it may have been removed.", status=404
+                )
+            if not rows:
+                return state.sources_page(error="There are no sources to check yet.", status=400)
+            # Captions stay off, as in the CLI: YouTube's captions are slow and paced.
+            proofs = await run_in_threadpool(
+                _then_close_chrome,
+                check_city,
+                state.city_dir,
+                fetcher=state.make_fetcher(),
+                source_id=source_id,
+            )
+        except city_sources.SourceError as exc:
+            return state.sources_page(error=f"Not checked: {exc}", status=400)
+        saved = ""
+        if source_id is None:  # one source's result would overwrite the whole city's file
+            try:
+                saved = str(save_proofs(state.city_dir, proofs))
+            except OSError as exc:
+                saved = f"not saved: {exc}"
+        return state.page(
+            "check.html",
+            title="Check",
+            proofs=proofs,
+            kind_labels=city_sources.KIND_LABELS,
+            read=sum(p.ok for p in proofs),
+            saved=saved,
+            one_source=source_id is not None,
+        )
+
     @app.post("/sources/{action}")
     async def source_action(action: str, request: Request) -> Response:
         if action not in ("add", "edit", "remove"):
@@ -750,7 +798,16 @@ def make_desk_app(
                     state.removed[source_id] = f"{old.address} for {', '.join(old.bodies)}"
                 done, new_id = "removed", source_id
             else:
-                source = city_sources.make_source(form.get("kind", ""), form)
+                fields = dict(form)
+                typed = form.get("channel_id", "").strip()
+                if form.get("kind") == "youtube" and typed:
+                    try:
+                        fields["channel_id"] = await run_in_threadpool(
+                            resolve_channel, typed, state.make_fetcher()
+                        )
+                    except ChannelError as exc:
+                        raise city_sources.SourceError(str(exc), "channel_id") from exc
+                source = city_sources.make_source(form.get("kind", ""), fields)
                 if action == "add":
                     city_sources.add_source(state.city_dir, source)
                     done = "added"

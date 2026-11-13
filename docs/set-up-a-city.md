@@ -69,6 +69,12 @@ its date and a line of its text, or why it could not. Add `--body "Water Board"`
 bodies, and `--captions` to also read YouTube captions (slower; YouTube limits how fast you can ask).
 It saves the result to `city-check.json` and exits with an error when any body was not read.
 
+The desk has this check too: **Sources > Check all sources**, or **Check** on one source's row. It
+reads each source once (without YouTube captions) and lists each body as READ, with the meeting's
+date, title and document link, or NOT READ with the reason. Checking all sources saves
+`city-check.json` as the command does; checking one source does not change that file. It can take
+a minute, and the button says it is working until the result page opens.
+
 The editor desk has the same search under **Sources > Find a city's sources**. It shows what it
 found with a checkbox for each source, and saves only the sources you leave checked.
 
@@ -110,7 +116,7 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | Kind | What to enter | Example |
 |---|---|---|
 | PrimeGov portal | the portal's home address | `https://longmont.primegov.com` |
-| YouTube channel | the channel id: `UC` and 22 more letters, digits, `-` or `_` | `UCH5_wkpLrKYb1JuUk6-UdNg` |
+| YouTube channel | the channel id (`UC` and 22 more letters, digits, `-` or `_`), or the channel's address or `@handle` | `UCH5_wkpLrKYb1JuUk6-UdNg`, `https://www.youtube.com/@CityofLoveland` |
 | Granicus video archive | the host and the `view_id` number | `yourcity.granicus.com`, `2` |
 | Web page of meeting documents | the page that links the agendas, packets or minutes; optionally the path its meeting pages start with | `https://www.svcmontessori.org/board-meetings`; `/boardmeetings/` |
 | Google Drive folder | the public folder's address or id | `https://drive.google.com/drive/folders/15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2` |
@@ -121,9 +127,13 @@ meeting instead (a school district's board calendar, for example), give the path
 with, and the program opens the newest one and reads the documents on it. A Drive folder source
 looks through the folder and its subfolders for the newest agenda.
 
-A channel handle such as `@yourcity` is not a channel id; YouTube shows the id under About > Share
-channel > Copy channel ID. The screen checks each field, names the one that is wrong, and keeps what
-you typed. Each source can be edited or removed later. The desk saves them to
+For a YouTube channel you can paste the id, a `youtube.com/channel/UC...` link, a
+`youtube.com/@Handle` link or a bare `@Handle`, or a `youtube.com/user/Name` or `youtube.com/c/Name`
+link. A handle or name is turned into the id with one read of the channel's public page (no API key,
+no sign-in) and the id is what is saved. If that page cannot be read, the screen says so; paste the
+id instead, which YouTube shows under About > Share channel > Copy channel ID.
+
+The screen checks each field, names the one that is wrong, and keeps what you typed. Each source can be edited or removed later. The desk saves them to
 `cities/yourcity/sources.json`:
 
 ```json

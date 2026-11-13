@@ -82,12 +82,16 @@ def check_city(
     captions: bool = False,
     fetcher: Fetcher | None = None,
     today: date | None = None,
+    source_id: str | None = None,
 ) -> list[Proof]:
-    """Read each body's newest meeting from each source that lists it."""
+    """Read each body's newest meeting from each source that lists it (only ``source_id``'s
+    source when that is given)."""
     fetcher = fetcher or Fetcher()
     proofs: list[Proof] = []
     try:
         for source in load_sources(folder):
+            if source_id is not None and source.id != source_id:
+                continue
             for body in source.bodies:
                 if bodies and body.casefold() not in {b.casefold() for b in bodies}:
                     continue
@@ -105,6 +109,17 @@ def check_city(
         # A Laserfiche folder opens Chrome; the window closes when the check is done.
         browser.close_shared()
     return proofs
+
+
+def save_proofs(folder: Path, proofs: list[Proof]) -> Path:
+    """Write ``city-check.json``, the file ``city check`` and the desk's Check button both save."""
+    data: dict[str, Any] = {
+        "checked": date.today().isoformat(),
+        "results": [p.to_json() for p in proofs],
+    }
+    out = folder / PROOF_FILE
+    out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return out
 
 
 def _check(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:

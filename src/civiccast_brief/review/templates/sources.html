@@ -14,6 +14,11 @@
 <p><a href="/sources/find">Find a city's sources</a>: search the city's website and the meeting platforms, then pick what to add.</p>
 
 {% if sources %}
+<form method="post" action="/sources/check">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit" data-busy="Checking… this reads each source once and can take a minute">Check all sources</button>
+  <span class="muted">Reads the newest meeting of each body, the same as <code>city check</code>.</span>
+</form>
 <table>
   <thead><tr><th>Kind</th><th>Address</th><th>Bodies</th><th></th></tr></thead>
   <tbody>
@@ -24,6 +29,11 @@
       <td>{{ s.bodies|join(", ") }}</td>
       <td>
         <a href="/sources?edit={{ s.id|urlencode }}">Edit</a>
+        <form method="post" action="/sources/check">
+          <input type="hidden" name="token" value="{{ token }}">
+          <input type="hidden" name="source_id" value="{{ s.id }}">
+          <button type="submit" data-busy="Checking… this reads the source once and can take a minute">Check</button>
+        </form>
         <form method="post" action="/sources/remove">
           <input type="hidden" name="token" value="{{ token }}">
           <input type="hidden" name="source_id" value="{{ s.id }}">
@@ -57,9 +67,9 @@
       {{ field_error("url") }}
     </div>
     <div data-kind="youtube">
-      <p><label for="channel_id">YouTube channel id (starts with UC, 24 characters) or channel address</label><br>
+      <p><label for="channel_id">YouTube channel id (starts with UC, 24 characters), or paste the channel's address or @handle</label><br>
         <input class="wide" id="channel_id" type="text" name="channel_id" value="{{ form.get("channel_id", "") }}"
-               placeholder="UCxxxxxxxxxxxxxxxxxxxxxx" {{ invalid("channel_id") }}></p>
+               placeholder="UCxxxxxxxxxxxxxxxxxxxxxx or https://www.youtube.com/@YourCity" {{ invalid("channel_id") }}></p>
       {{ field_error("channel_id") }}
     </div>
     <div data-kind="granicus">
