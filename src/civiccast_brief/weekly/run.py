@@ -315,16 +315,28 @@ def _record(state: State, entry: dict[str, Any], error: str) -> None:
 
 
 def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> str:
-    """The roundup of every meeting done in the window. Returns a line for the log."""
-    meetings = [
-        m
-        for m in state.data["meetings"].values()
-        if m.get("status") == "done" and m.get("week") == last.isoformat()
-    ]
+    """The roundup of the meetings done in the window that no earlier roundup covered. A meeting
+    posted twice (two videos of one body on one day) counts once. Returns a line for the log."""
+    key = last.isoformat()
+    covered = {
+        meeting
+        for other, roundup in state.data["roundups"].items()
+        if other != key
+        for meeting in roundup.get("meetings", [])
+    }
+    meetings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for meeting_key, m in sorted(state.data["meetings"].items()):
+        if m.get("status") != "done" or m.get("week") != key or meeting_key in covered:
+            continue
+        if (m.get("body", ""), m.get("day", "")) in seen:
+            continue
+        seen.add((m.get("body", ""), m.get("day", "")))
+        meetings.append({**m, "key": meeting_key})
     if len(meetings) < 2:
         return f"roundup: not made ({len(meetings)} meeting(s) done this week; it needs 2)"
-    key = last.isoformat()
     entry = state.data["roundups"].setdefault(key, {})
+    entry.setdefault("meetings", [m["key"] for m in meetings])
     done: list[str] = entry.setdefault("done", [])
     folder = settings.work / f"{key}-roundup"
     folder.mkdir(parents=True, exist_ok=True)

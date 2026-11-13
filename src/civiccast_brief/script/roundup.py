@@ -49,7 +49,7 @@ def combine(recaps: list[Recap]) -> Recap:
     return Recap(
         city=recaps[0].city,
         body=" and ".join(bodies),
-        meeting_date=" and ".join(r.meeting_date for r in recaps),
+        meeting_date=" and ".join(dict.fromkeys(r.meeting_date for r in recaps)),
         video_id=ROUNDUP_ID,
         claims=tuple(claims),
         video_place=recaps[0].video_place,
