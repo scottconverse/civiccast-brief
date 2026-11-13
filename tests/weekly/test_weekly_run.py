@@ -711,3 +711,19 @@ def test_a_killed_copy_that_shares_an_episode_name_does_not_stay_on_the_site(tmp
     assert state.data["built"] == {"kqArjgcjLF0": "2026-11-05-hpc"}
     # The kept copy is built again, so its episode replaces the killed one's in the file.
     assert "kqArjgcjLF0" not in state.data["built_from"]
+
+
+def test_a_meeting_run_before_keeps_its_run_when_it_would_not_be_run_now(tmp_path):
+    """Live on 13 November 2026: a preservation commission video already run was found again as
+    the second video of its meeting; its entry became 'not run' and its published episode could
+    not be built ("no run of it is in this work folder")."""
+    from dataclasses import replace
+
+    settings = _settings(tmp_path)
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    second = replace(COUNCIL_MEETING, reason="another video of this meeting runs (XXXXXXXXXXX)")
+    report = run_week(settings, [second], LAST, Fake().steps())
+
+    entry = json.loads((settings.work / STATE_NAME).read_text())["meetings"][COUNCIL_MEETING.key]
+    assert entry["status"] == "done"
+    assert f"{COUNCIL_MEETING.day} {COUNCIL_MEETING.title}: done in an earlier run" in report.lines

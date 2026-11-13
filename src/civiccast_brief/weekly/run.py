@@ -655,13 +655,15 @@ def run_week(
     for meeting in meetings:
         entry = state.meeting(meeting.key)
         entry.update(title=meeting.title, week=last.isoformat())
+        # A meeting run before keeps its run, even when it would not be run now: its episode
+        # and story are on the desk and are built from that run's folder.
+        if entry.get("status") == "done":
+            report.add(f"{meeting.day} {meeting.title}: done in an earlier run")
+            continue
         if meeting.reason:
             entry.update(status="not run", error=meeting.reason)
             state.save()
             report.add(f"{meeting.day} {meeting.title}: not run: {meeting.reason}")
-            continue
-        if entry.get("status") == "done":
-            report.add(f"{meeting.day} {meeting.title}: done in an earlier run")
             continue
         try:
             run_meeting(steps, settings, meeting, entry)
