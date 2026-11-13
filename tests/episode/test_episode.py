@@ -174,6 +174,8 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
     recap = json.loads((meeting_dir / "recap.json").read_text())
     recap["video_id"] = "roundup"
     recap["meeting_date"] = "October 6, 2026 and October 20, 2026"
+    # Seven bodies joined, as on 10 November 2026: past the site's 120-character board limit.
+    recap["body"] = " and ".join(f"Longmont Advisory Board Number {n}" for n in range(7))
     (meeting_dir / "recap.json").write_text(json.dumps(recap))
     (meeting_dir / "transcript.json").unlink()
     (meeting_dir / "speakers.json").unlink()
@@ -190,6 +192,7 @@ def test_roundup_stages_and_assembles_without_a_transcript(tmp_path, meeting, mo
     # The dates are a range, not every date strung together.
     assert episode["headline"] == "Longmont weekly roundup, Oct. 6 – Oct. 20"
     assert episode["video_url"] is None and episode["transcript"] is None
+    assert episode["board"] == "Weekly roundup"
 
 
 def _roundup(tmp_path, meeting_dir):

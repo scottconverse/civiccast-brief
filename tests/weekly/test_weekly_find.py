@@ -308,3 +308,24 @@ def test_a_channel_video_with_no_meeting_day_in_its_title_is_not_run():
     videos = [NS(video_id="GGGGGGGGGGG", title="Senior Citizens Advisory Board - November 2026", published="2026-11-06T00:00:00Z")]  # fmt: skip
     found, _ = find_meetings([channel], FIRST, LAST, Listers(youtube=lambda cid: videos))
     assert [m.reason for m in found] == ["the title names no meeting day"]
+
+
+def test_a_video_with_no_meeting_day_stays_unrun_when_another_source_names_its_body():
+    """Longmont, 13 November 2026: the channel covers only the council, the portal lists the
+    Senior Citizens Advisory Board, and the 'November 2026' video ran and failed."""
+    senior = "Senior Citizens Advisory Board"
+    portal = Source(kind="primegov", bodies=(COUNCIL, senior), url="https://longmont.primegov.com")
+    videos = [NS(video_id="GGGGGGGGGGG", title=f"{senior} - November 2026", published="2026-11-06T00:00:00Z")]  # fmt: skip
+    listers = Listers(primegov=lambda url, first, last: [], youtube=lambda cid: videos)
+    found, _ = find_meetings([portal, CHANNEL], FIRST, LAST, listers)
+    assert [(m.body, m.reason) for m in found] == [(senior, "the title names no meeting day")]
+
+
+def test_a_live_stream_listed_before_its_meeting_is_not_run_yet():
+    """Longmont's channel listed the 17 November council stream on 12 November; the run asked
+    for its captions and yt-dlp said the live event would begin in 4 days."""
+    videos = [NS(video_id="QgImQ9GxWYo", title="City Council Regular Session - November 17, 2026", published="2026-11-09T00:00:00Z")]  # fmt: skip
+    found, _ = find_meetings([CHANNEL], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    assert [(m.body, m.reason) for m in found] == [
+        (COUNCIL, "the meeting is on 2026-11-17, after this run")
+    ]

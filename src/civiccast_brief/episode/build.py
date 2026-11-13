@@ -259,7 +259,8 @@ def assemble(
         "city": city_slug,
         "approved": True,
         "approved_by": f"editor desk, {published_at}",
-        "board": recap.body,
+        # A roundup's bodies joined run past the site's limit and would each make a board.
+        "board": "Weekly roundup" if roundup else recap.body,
         "meeting_title": "Weekly roundup" if roundup else str(data.get("title") or recap.body),
         "meeting_date": day,
         "published": published,
