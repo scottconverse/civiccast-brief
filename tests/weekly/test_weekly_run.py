@@ -727,3 +727,26 @@ def test_a_meeting_run_before_keeps_its_run_when_it_would_not_be_run_now(tmp_pat
     entry = json.loads((settings.work / STATE_NAME).read_text())["meetings"][COUNCIL_MEETING.key]
     assert entry["status"] == "done"
     assert f"{COUNCIL_MEETING.day} {COUNCIL_MEETING.title}: done in an earlier run" in report.lines
+
+
+def test_publish_site_builds_the_site_from_the_desk_without_running_any_meeting(tmp_path):
+    from civiccast_brief.weekly.run import publish_site
+
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    # The weekly run made the story; nothing is published yet, so no site.
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    assert not list(site.episodes.glob("stories/*.json"))
+
+    # The editor publishes it on the desk; the publish run builds the site and runs no meeting.
+    fake = Fake()
+    fake.exported = {
+        "0002-article": {"kind": "article", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+    report = publish_site(settings, fake.steps(), published="2026-11-13T15:00:00-07:00")
+    assert report.failed == 0, report.lines
+    assert "oWZpzjzjwnE: built story owzpzjzjwne.json" in report.lines
+    assert not any(step in ("meeting", "script", "audio", "article") for step, _ in fake.calls)
+    assert fake.names()[0] == ("review", "export")
+    assert fake.names()[-1] == ("site", "build")
+    assert (site.episodes / "stories" / "owzpzjzjwne.json").is_file()

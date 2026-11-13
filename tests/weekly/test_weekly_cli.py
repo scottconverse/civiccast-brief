@@ -88,3 +88,12 @@ def test_the_portal_client_stays_open_while_the_week_runs(tmp_path, monkeypatch,
     assert cli._run(_args(tmp_path)) == 0
     assert open_during_run == [True]
     assert clients[0].is_closed
+
+
+def test_publish_needs_the_site_settings(tmp_path, capsys):
+    args = cli.build_parser().parse_args(
+        ["publish", "--city", str(_city(tmp_path)), "--work", str(tmp_path / "w"),
+         "--db", str(tmp_path / "d.db")]
+    )  # fmt: skip
+    assert cli._publish(args) == 1
+    assert "publish needs the site settings" in capsys.readouterr().err

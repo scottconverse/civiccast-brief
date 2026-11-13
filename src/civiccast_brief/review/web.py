@@ -207,8 +207,11 @@ class DeskApp:
         self.templates.filters["localtime"] = local_time
         self.templates.filters["when"] = lambda v: v.strftime("%a %Y-%m-%d %H:%M %Z")
         self.templates.filters["duration"] = _duration
+        self.templates.filters["trigger"] = lambda v: TRIGGER_LABELS.get(v, v)
         #: True in the station, which adds the Weekly job page.
         self.has_station = False
+        #: Called after a desk action changes what readers see (the station queues a publish).
+        self.on_public_change: Callable[[], None] | None = None
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
     def page(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
@@ -465,6 +468,10 @@ def _route_path(request: Request) -> str:
     return path[len(root) :] if root and path.startswith(root) else path
 
 
+#: How a run started, as the Weekly job page says it.
+TRIGGER_LABELS: Final = {"manual": "Run now", "schedule": "Schedule", "publish": "Publish"}
+
+
 def _redirect(location: str) -> RedirectResponse:
     return RedirectResponse(location, status_code=303)
 
@@ -665,6 +672,7 @@ def make_desk_app(
 
     if station is not None:
         state.has_station = True
+        state.on_public_change = station.request_publish
         _add_run_routes(app, state, station, read_form, bad_token)
 
     @app.get("/", response_class=HTMLResponse)
@@ -710,6 +718,7 @@ def make_desk_app(
         item = store.get_item(item_id)
         if item is None:
             return PlainTextResponse(f"No item with id {item_id}.\n", status_code=404)
+        was_public = item.status == "published"
         try:
             code = state.run_action(action, item, form)
         except ReviewError as exc:
@@ -720,6 +729,11 @@ def make_desk_app(
                 status=400,
                 shown=state.shown_after_error(action, fresh, form),
             )
+        after = store.get_item(item_id)
+        if state.on_public_change is not None and (
+            was_public or (after is not None and after.status == "published")
+        ):
+            state.on_public_change()
         return _redirect(f"/items/{item_id}?notice={code}")
 
     @app.get("/settings", response_class=HTMLResponse)

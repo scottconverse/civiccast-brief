@@ -1,7 +1,15 @@
 """The weekly job on a schedule, with a record of every run.
 
-The job is a list of commands (find and run the week's meetings, then publish). The station
-runs them in order and stops at the first that fails. Every run is a row in ``station_runs``
+The job is a list of commands (find and run the week's meetings); the publish steps (build
+the site from the desk, deploy it) follow. The station runs the job's commands in order and
+stops at the first that fails; the publish steps run even then, because they only put out
+what the desk already published. A run fails if any step failed.
+
+Publish is immediate: when an editor publishes, edits or kills a public item on the desk, the
+station queues a publish run (the publish steps only) that starts ``PUBLISH_DELAY_SECONDS``
+later, so a few clicks in a row make one deploy. A full run that reaches its publish steps
+covers every request made before them. The request is kept in the database, so a restart does
+not lose it. Every run is a row in ``station_runs``
 in the desk's own database, with its output, so the desk can show the last run, the next run
 and each run's log.
 
@@ -36,6 +44,8 @@ MAX_LOG_CHARS: Final = 200_000
 LOG_FLUSH_SECONDS: Final = 2.0
 #: The longest the scheduler sleeps before it looks at the clock again.
 MAX_WAIT_SECONDS: Final = 60.0
+#: How long a queued publish waits, so several desk actions in a row make one deploy.
+PUBLISH_DELAY_SECONDS: Final = 30.0
 WEEKDAYS: Final = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 RUN_STATES: Final = ("running", "ok", "failed", "interrupted")
 
@@ -120,6 +130,8 @@ class StationStatus:
     running: Run | None
     last: Run | None
     runs: list[Run]
+    #: When the queued publish run starts, or None when none is queued.
+    publish_at: datetime | None = None
 
 
 #: Runs one command; calls ``output`` with each line; returns the exit code.
@@ -165,13 +177,13 @@ class Station:
         cwd: str | Path = ".",
         clock: Callable[[], datetime] = _now,
         runner: CommandRunner = run_command,
+        publish: Sequence[Sequence[str]] = (),
     ) -> None:
         if not steps:
             raise StationError("the job has no commands")
         self.db = Path(db)
-        self.steps = [
-            [sys.executable if part == "{python}" else str(part) for part in step] for step in steps
-        ]
+        self.steps = _commands(steps)
+        self.publish_steps = _commands(publish)
         self.schedule = schedule
         self.cwd = Path(cwd)
         self.clock = clock
@@ -225,13 +237,54 @@ class Station:
         runs = self.runs()
         running = next((r for r in runs if r.status == "running"), None)
         last = next((r for r in runs if r.status != "running"), None)
+        queued = self._publish_requested()
+        ready = queued + timedelta(seconds=PUBLISH_DELAY_SECONDS) if queued else None
         return StationStatus(
             schedule=self.schedule.describe(),
             next_at=self.schedule.next_after(self.clock()),
             running=running,
             last=last,
             runs=runs,
+            publish_at=ready.astimezone(self.schedule.zone) if ready else None,
         )
+
+    # ----- the publish queue -------------------------------------------------------------------
+
+    def _publish_requested(self) -> datetime | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM station_meta WHERE key = 'publish_requested'"
+            ).fetchone()
+        return datetime.fromisoformat(row[0]) if row else None
+
+    def request_publish(self) -> None:
+        """Queue a publish run (the desk calls this). Later requests join the queued one."""
+        if not self.publish_steps:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO station_meta (key, value) VALUES ('publish_requested', ?)",
+                (self.clock().isoformat(),),
+            )
+        self._wake.set()
+
+    def _publish_covered(self, began: datetime) -> None:
+        """Publish steps that began at ``began`` cover every request made before then."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM station_meta WHERE key = 'publish_requested'"
+            ).fetchone()
+            if row and datetime.fromisoformat(row[0]) <= began:
+                conn.execute(
+                    "DELETE FROM station_meta WHERE key = 'publish_requested' AND value = ?",
+                    (row[0],),
+                )
+
+    def publish_due(self) -> bool:
+        queued = self._publish_requested()
+        if queued is None:
+            return False
+        return self.clock() >= queued + timedelta(seconds=PUBLISH_DELAY_SECONDS)
 
     # ----- running -----------------------------------------------------------------------------
 
@@ -258,7 +311,7 @@ class Station:
         with self._connect() as conn:
             conn.execute("UPDATE station_runs SET log = ? WHERE id = ?", (text, run_id))
 
-    def _execute(self, run_id: int) -> None:
+    def _execute(self, run_id: int, trigger: str = "manual") -> None:
         lines: list[str] = []
         flushed = _time.monotonic()
 
@@ -271,12 +324,24 @@ class Station:
 
         code = 0
         try:
-            for step in self.steps:
-                output("> " + " ".join(step))
-                code = self.runner(step, self.cwd, output)
+            if trigger != "publish":
+                for step in self.steps:
+                    output("> " + " ".join(step))
+                    code = self.runner(step, self.cwd, output)
+                    if code != 0:
+                        output(f"stopped: that step ended with code {code}")
+                        break
+            if self.publish_steps:
                 if code != 0:
-                    output(f"stopped: that step ended with code {code}")
-                    break
+                    output("publishing what the desk already published:")
+                self._publish_covered(self.clock())
+                for step in self.publish_steps:
+                    output("> " + " ".join(step))
+                    step_code = self.runner(step, self.cwd, output)
+                    if step_code != 0:
+                        output(f"stopped: that step ended with code {step_code}")
+                        code = code or step_code
+                        break
         except Exception as exc:  # noqa: BLE001 - a run must end with a record, whatever broke
             output(f"stopped: {type(exc).__name__}: {exc}")
             code = code or 1
@@ -297,7 +362,7 @@ class Station:
         """Run the job now, in this thread. None when a run is already going."""
         run_id = self._begin(trigger)
         if run_id is not None:
-            self._execute(run_id)
+            self._execute(run_id, trigger)
         return run_id
 
     def run_now(self) -> int | None:
@@ -324,8 +389,12 @@ class Station:
         return slot > max(marks)
 
     def tick(self) -> int | None:
-        """Start the scheduled run if it is due. The scheduler calls this; so can a test."""
-        return self.run_once("schedule") if self.due() else None
+        """Start the scheduled run, or else a queued publish, when due. The scheduler calls this."""
+        if self.due():
+            return self.run_once("schedule")
+        if self.publish_due():
+            return self.run_once("publish")
+        return None
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -334,6 +403,10 @@ class Station:
             except Exception as exc:  # noqa: BLE001 - keep the schedule alive; the next look may work
                 print(f"station: the scheduled run could not start: {exc}", file=sys.stderr)
             wait = (self.schedule.next_after(self.clock()) - self.clock()).total_seconds()
+            queued = self._publish_requested()
+            if queued is not None:
+                ready = queued + timedelta(seconds=PUBLISH_DELAY_SECONDS)
+                wait = min(wait, (ready - self.clock()).total_seconds())
             self._wake.wait(max(1.0, min(wait, MAX_WAIT_SECONDS)))
             self._wake.clear()
 
@@ -354,6 +427,10 @@ class Station:
         for worker in self._workers:
             worker.join(timeout)
         self._workers = [w for w in self._workers if w.is_alive()]
+
+
+def _commands(steps: Sequence[Sequence[str]]) -> list[list[str]]:
+    return [[sys.executable if part == "{python}" else str(part) for part in s] for s in steps]
 
 
 def _run(row: Sequence[object], zone: ZoneInfo) -> Run:
