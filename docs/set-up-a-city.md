@@ -561,3 +561,6 @@ Options:
 - `--work DIR` sets where the PC keeps its files (by default `~/.civiccast-brief/worker`).
 
 To start it with Windows, add a scheduled task "At log on" that runs the command.
+
+To run the station on Hostinger instead of Cloudflare, see [run-on-hostinger.md](run-on-hostinger.md)
+(not tested on Linux).
