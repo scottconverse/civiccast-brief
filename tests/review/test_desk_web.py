@@ -149,8 +149,28 @@ def test_an_article_is_edited_on_its_page(store, article):
     assert bad.status_code == 400 and "needs a headline" in bad.text
 
 
+def test_settings_lists_the_city_s_own_bodies_not_a_made_up_city_council(store, city):
+    """Loveland has no body named "City Council"; Settings showed one anyway (2026-11-12)."""
+    sources.add_source(
+        city,
+        sources.make_source(
+            "civicweb",
+            {
+                "tenant": "cilovelandco",
+                "bodies": "LOVELAND CITY COUNCIL MEETING; Planning Commission",
+            },
+        ),
+    )
+    page = client_for(store, city).get("/settings")
+    assert "LOVELAND CITY COUNCIL MEETING" in page.text
+    assert "City Council</label>" not in page.text
+    empty = client_for(store, city=None).get("/settings")
+    assert empty.status_code == 200
+
+
 def test_settings_save_model_picks_and_auto_publish(store, city):
-    add_episode(store, body="Planning Commission")
+    add_episode(store)
+    add_episode(store, meeting_id="m2", body="Planning Commission")
     client = client_for(store, city)
     page = client.get("/settings")
     assert page.status_code == 200 and "Planning Commission" in page.text
