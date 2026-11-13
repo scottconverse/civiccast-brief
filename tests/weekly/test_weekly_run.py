@@ -625,3 +625,27 @@ def test_one_meeting_published_twice_reaches_the_site_once(tmp_path):
         for line in report.lines
     ), report.lines
     assert fake.calls[-1][0] == "site"  # the site is still built
+
+
+def test_a_meeting_posted_twice_is_in_the_roundup_once(tmp_path):
+    """Council's November 3 meeting has two videos; the roundup took both."""
+    twice = Found(COUNCIL, date(2026, 11, 3), "City Council Regular Session", "p", "Q3Cpd52hWa4")
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    report = run_week(settings, [COUNCIL_MEETING, twice, PZ_MEETING], LAST, fake.steps())
+
+    assert "roundup: done (2 meetings)" in report.lines
+    roundup = next(argv for step, argv in fake.calls if step == "script" and argv[0] == "roundup")
+    assert roundup.count("--recap") == 2
+
+
+def test_next_weeks_roundup_leaves_out_what_this_weeks_covered(tmp_path):
+    """The run looks back 14 days, so each week's roundup repeated the week before."""
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    run_week(settings, [COUNCIL_MEETING, PZ_MEETING], LAST, fake.steps())
+    later = Found(COUNCIL, date(2026, 11, 12), "City Council Regular Session", "p", "NEWNEWNEW01")
+    fake.calls.clear()
+    report = run_week(settings, [PZ_MEETING, later], date(2026, 11, 17), fake.steps())
+
+    assert "roundup: not made (1 meeting(s) done this week; it needs 2)" in report.lines

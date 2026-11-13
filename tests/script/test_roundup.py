@@ -63,3 +63,14 @@ def test_a_roundup_line_may_name_its_meeting_date_from_the_claim():
     ]
     report = check_script(r, lines)
     assert report.passed, report.render()
+
+
+def test_two_meetings_on_one_day_name_the_day_once():
+    """Council and the Historic Preservation Commission both met on November 5: the date line
+    said "November 5, 2026 and November 5, 2026"."""
+    other = recap("November 5, 2026", "B.")
+    other = Recap(
+        other.city, "Historic Preservation Commission", other.meeting_date, "w", other.claims
+    )
+    r = combine([recap("November 3, 2026", "A."), recap("November 5, 2026", "C."), other])
+    assert r.meeting_date == "November 3, 2026 and November 5, 2026"
