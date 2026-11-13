@@ -146,7 +146,7 @@ Scott's decisions: the desk works like TownReporter and runs in the cloud and on
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | D1 | Desk sign-in ported from TownReporter to Python | done | scottconverse/civiccast-brief#76, merge 5417cb4 (2026-11-13). Checks passed: test (windows-latest) 14m20s, test (ubuntu-latest) 3m0s, signup-worker. First account at /sign-up, then sign-in; walked in the browser before merge |
-| D2 | One always-on app with the desk at /desk that runs the weekly job on a schedule: last run, next run, Run now | open | |
+| D2 | One always-on app with the desk at /desk that runs the weekly job on a schedule: last run, next run, Run now | done | scottconverse/civiccast-brief#77, merge 1fad6af (2026-11-13). Checks passed: test (windows-latest) 20m34s, test (ubuntu-latest) 3m23s, signup-worker. Weekly job page with last run, next run and Run now walked in the browser before merge |
 | D3 | Publish deploys in minutes | open | |
 | D4 | Control room: Edit, Unpublish, Kill, a Problems list; the per-board auto switches removed | open | |
 | D5 | A desk link in the site footer leads to sign-in | open | |
