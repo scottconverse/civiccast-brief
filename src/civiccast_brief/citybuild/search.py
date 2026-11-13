@@ -116,6 +116,11 @@ COMMON_BODIES: Final = (
 KEYWORDS: Final = ("agenda", "meeting", "minutes", "board", "commission", "council", "video")
 #: How many of the city site's own pages are read after the home page.
 MAX_PAGES: Final = 8
+#: Words in a link's text that point at a page of meetings, agendas or video: read before the
+#: other pages with a keyword (a city's menu lists many pages, and only the first MAX_PAGES are read).
+_FIRST_WORDS: Final = ("meeting", "agenda", "minutes", "video", "watch", "council")
+#: One event on a calendar widget (a page for a single meeting), not a page that lists meetings.
+_ONE_EVENT: Final = re.compile(r"/calendar/event/", re.IGNORECASE)
 _MAX_LINK_TEXT: Final = 60
 _PLATFORM_URL: Final = re.compile(
     r"https?://[A-Za-z0-9.-]+\.(?:primegov\.com|legistar\.com|granicus\.com|cablecast\.tv|civicclerk\.com|"
@@ -153,6 +158,8 @@ class Unread:
     platform: str
     url: str
     note: str = ""
+    #: A YouTube channel id, when the channel is known, so the editor can add it anyway.
+    channel: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return {"platform": self.platform, "url": self.url, "note": self.note}
@@ -267,6 +274,11 @@ def search_city(
     home = _find_website(result, website, fetcher, open_in_browser)
     found: dict[tuple[str, str, str], detect.Found] = {}
     if home is not None:
+        if not parse(home.text, home.url)[1]:
+            result.notes.append(
+                f"{home.url} opened but lists no links, so no other page of the site was read. "
+                "Search again; if it repeats, add the sources by hand on the Sources page"
+            )
         for url, text in _crawl(home, fetcher, open_in_browser):
             for item in _platform_links(text, url):
                 found.setdefault((item.platform, item.key.casefold(), item.extra.casefold()), item)
@@ -287,12 +299,7 @@ def search_city(
         if item.platform in _LISTED:
             _LISTED[item.platform](result, item, fetcher, today, None)
         elif item.platform == "cablecast":
-            host = (urlsplit(item.url).hostname or "").lower()
-            note = (
-                f"the program can read it: on the Sources page, add a Cablecast source "
-                f"with host {host} and the bodies it carries"
-            )
-            result.unread.append(Unread(item.label, item.url, note))
+            _cablecast(result, item)
         elif item.platform not in ("primegov", "legistar", "granicus", "youtube", "gdrive"):
             result.unread.append(Unread(item.label, item.url))
     for body, url in extra:
@@ -363,6 +370,7 @@ def _crawl(
     domain = _site_domain(home.url)
     _, links, _ = parse(home.text, home.url)
     picked: list[str] = []
+    first: dict[str, bool] = {}
     for link in links:
         text = link.text.casefold()
         host = _site_domain(link.url)
@@ -373,8 +381,12 @@ def _crawl(
         if len(link.text) > _MAX_LINK_TEXT or not any(k in text for k in KEYWORDS):
             continue
         url = link.url.split("#", 1)[0]
+        if _ONE_EVENT.search(url):
+            continue
         if url not in picked and url.rstrip("/") != home.url.rstrip("/"):
             picked.append(url)
+            first[url] = any(k in text for k in _FIRST_WORDS) and "reserve" not in text
+    picked.sort(key=lambda url: not first[url])  # stable: menu order within each group
     for url in picked[:MAX_PAGES]:
         page, _ = _read_site(url, fetcher, open_in_browser)
         if page is not None:
@@ -520,18 +532,52 @@ def _youtube(result: Search, item: detect.Found, fetcher: Fetcher, body: str | N
     try:
         videos = feed_entries(channel, fetcher)
     except FetchError as exc:
-        result.unread.append(Unread("YouTube", item.url, f"the channel feed did not answer: {exc}"))
+        result.unread.append(
+            Unread("YouTube", item.url, f"the channel feed did not answer: {exc}", channel)
+        )
         return
     titles = " | ".join(title for _, title, _ in videos)
     bodies = [b for b in _known_bodies(result, body) if body_matches(b, titles, result.name)]
     if not bodies:
         result.unread.append(
-            Unread("YouTube", item.url, f"none of its {len(videos)} newest titles names a body")
+            Unread(
+                "YouTube",
+                item.url,
+                f"none of its {len(videos)} newest titles names a body",
+                channel,
+            )
         )
         return
     result.add(
         make_source("youtube", {"channel_id": channel, "bodies": bodies}),
         f"channel {channel}; its newest video titles name these bodies",
+    )
+
+
+def _cablecast(result: Search, item: detect.Found) -> None:
+    """Offer a Cablecast archive linked from the city's site, with the bodies its newest show
+    titles name. When its show list cannot be read, it is listed with how to add it by hand."""
+    from civiccast_brief.meeting import cablecast
+
+    host = (urlsplit(item.url).hostname or "").lower()
+    by_hand = (
+        f"on the Sources page, add a Cablecast source with host {host} and the bodies it carries"
+    )
+    try:
+        shows = cablecast.list_shows(host)
+    except cablecast.CablecastError as exc:
+        note = f"its show list did not answer: {exc}; {by_hand}"
+        result.unread.append(Unread(item.label, item.url, note))
+        return
+    titles = " | ".join(show.name for show in shows)
+    bodies = [b for b in _known_bodies(result, None) if body_matches(b, titles, result.name)]
+    if not bodies:
+        note = f"none of its {len(shows)} newest shows names a body; {by_hand}"
+        result.unread.append(Unread(item.label, item.url, note))
+        return
+    result.add(
+        make_source("cablecast", {"host": host, "bodies": bodies}),
+        f"linked from the city site; its {len(shows)} newest show titles name these bodies",
     )
 
 

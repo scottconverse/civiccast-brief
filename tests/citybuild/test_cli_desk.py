@@ -279,3 +279,50 @@ def test_the_desk_closes_chrome_in_the_thread_that_opened_it(web, desk, monkeypa
     )
     assert saved.status_code == 303 or saved.status_code == 200
     assert threads["build"] and threads["close"][1:] == threads["build"]
+
+
+def test_a_youtube_channel_find_did_not_offer_can_be_added_anyway(web, desk):
+    from .conftest import CHANNEL, feed
+
+    client, city = desk
+    t = client.app.state.desk.token
+    web.add(
+        "https://city.test/",
+        f'<html><a href="https://www.youtube.com/channel/{CHANNEL}">Our channel</a></html>',
+    )
+    web.add(
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL}",
+        feed(("aaaaaaaaaaa", "Parade highlights", "2026-10-29T03:00:00+00:00")),
+    )
+    found = client.post(
+        "/sources/find",
+        data={"token": t, "name": "Longmont", "state": "CO", "website": "https://city.test/"},
+    )
+    assert "names a body" in found.text and "Add anyway" in found.text
+    assert 'data-busy="Adding the channel' in found.text
+    (search_id,) = client.app.state.desk.searches
+    assert load_sources(city) == []
+    none = client.post(
+        "/sources/find/add-anyway",
+        data={"token": t, "search": search_id, "index": "0", "bodies": " "},
+    )
+    assert none.status_code == 400 and "Not added" in none.text and "Add anyway" in none.text
+    assert load_sources(city) == []
+    added = client.post(
+        "/sources/find/add-anyway",
+        data={"token": t, "search": search_id, "index": "0", "bodies": "City Council"},
+    )
+    assert added.status_code == 200
+    assert "Added 1 source: YouTube channel" in added.text
+    (source,) = load_sources(city)
+    assert (source.kind, source.channel_id, source.bodies) == (
+        "youtube",
+        CHANNEL,
+        ("City Council",),
+    )
+    stale = client.post(
+        "/sources/find/add-anyway",
+        data={"token": t, "search": "gone", "index": "0", "bodies": "x"},
+    )
+    assert stale.status_code == 400 and "Search again" in stale.text
+    assert client.post("/sources/find/add-anyway", data={"token": "wrong"}).status_code == 403

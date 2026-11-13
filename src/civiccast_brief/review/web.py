@@ -5,6 +5,7 @@ Pages:
   - ``/items/<id>``: one episode or article, with Save, Publish, Hold, Kill, Redraft and, for an
     episode, Regenerate audio;
   - ``/settings``: which model writes each task, per body, and auto-publish per body;
+  - ``/city``: the city's name, short web name, state and contact emails (city.json).
   - ``/sources``: the city's meeting sources (add, edit, remove).
   - ``/sources/find``: search a city's site and the meeting platforms, then add what was found.
 
@@ -38,6 +39,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from jinja2 import Environment, FileSystemLoader
 from starlette.concurrency import run_in_threadpool
 
+from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
@@ -566,6 +568,52 @@ def make_desk_app(
         rosters = rosterfill.loaded_rosters(state.city_dir) if state.city_dir else []
         return state.page("roster.html", title="Roster", rosters=rosters)
 
+    def city_page(
+        form: Mapping[str, str] | None = None,
+        *,
+        notice: str = "",
+        error: str = "",
+        error_field: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        if form is None and state.city_dir is not None:
+            try:
+                form = city_file.read_identity(state.city_dir)
+            except city_file.CityError as exc:
+                error = f"{state.city_dir / city_file.CITY_FILE} cannot be read: {exc}"
+        return state.page(
+            "city.html",
+            status=status,
+            title="City",
+            form=dict(form or {}),
+            notice=notice,
+            error=error,
+            error_field=error_field,
+            path=(state.city_dir / city_file.CITY_FILE) if state.city_dir else None,
+        )
+
+    @app.get("/city", response_class=HTMLResponse)
+    def city(saved: str = "") -> HTMLResponse:
+        notice = ""
+        if saved and state.city_dir is not None:
+            notice = f"Saved to {state.city_dir / city_file.CITY_FILE}."
+        return city_page(notice=notice)
+
+    @app.post("/city")
+    async def save_city(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return city_page(form, error="Start the desk with --city to save the city.", status=400)
+        try:
+            city_file.save_identity(state.city_dir, form)
+        except city_file.CityFieldError as exc:
+            return city_page(form, error=f"Not saved: {exc}", error_field=exc.field, status=400)
+        except (city_file.CityError, OSError) as exc:
+            return city_page(form, error=f"Not saved: {exc}", status=400)
+        return _redirect("/city?saved=1")
+
     @app.get("/sources", response_class=HTMLResponse)
     def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:
         form: dict[str, str] = {}
@@ -736,6 +784,75 @@ def make_desk_app(
         state.found_lines = built.notice + [
             f"Filled in during the weekly run: {line}" for line in built.to_fill
         ]
+        return _redirect("/sources?" + urlencode({"done": "found"}))
+
+    @app.post("/sources/find/add-anyway")
+    async def find_add_anyway(request: Request) -> Response:
+        """Add a YouTube channel the search spotted but did not offer, the way an offered
+        source is added (same writer, same notice)."""
+        from civiccast_brief.citybuild import browser
+        from civiccast_brief.citybuild.build import build_city
+
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.sources_page(
+                error="Start the desk with --city to save sources.", status=400
+            )
+        search_id = form.get("search", "")
+        found = state.searches.get(search_id)
+        if found is None:
+            return state.page(
+                "find.html",
+                status=400,
+                title="Find sources",
+                form=_city_names(state.city_dir),
+                found=None,
+                error_field="",
+                error="That search is no longer kept. Search again, then add.",
+            )
+
+        def again(error: str) -> HTMLResponse:
+            return state.page(
+                "find.html",
+                status=400,
+                title="Find sources",
+                form={},
+                found=found,
+                search_id=search_id,
+                error_field="",
+                kind_labels=city_sources.KIND_LABELS,
+                error=error,
+            )
+
+        try:
+            unread = found.unread[int(form.get("index", ""))]
+        except (ValueError, IndexError):
+            return again("That channel is not on the list any more. Search again.")
+        if not unread.channel:
+            return again("Only a YouTube channel can be added this way.")
+        try:
+            source = city_sources.make_source(
+                "youtube", {"channel_id": unread.channel, "bodies": form.get("bodies", "")}
+            )
+        except city_sources.SourceError as exc:
+            return again(f"Not added: {exc}")
+        found.unread.remove(unread)
+        found.add(source, f"added anyway ({unread.note})")
+        try:
+            built = await run_in_threadpool(
+                _then_close_chrome,
+                build_city,
+                state.city_dir,
+                found,
+                chosen=[source.id],
+                fetcher=state.make_fetcher(),
+                open_in_browser=browser.open_page,
+            )
+        except (OSError, city_sources.SourceError) as exc:
+            return state.sources_page(error=f"Not saved: {exc}", status=400)
+        state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
         return _redirect("/sources?" + urlencode({"done": "found"}))
 
     @app.post("/sources/check")

@@ -25,6 +25,8 @@ from civiccast_brief.citybuild.fetch import FetchError, Page
 #: pages are read.
 MAX_BYTES: Final = 150_000_000
 TIMEOUT_MS: Final = 60_000
+#: The longest a page is given to finish its own requests after it loads, before it is read.
+SETTLE_MS: Final = 8_000
 #: Seconds between requests to a site, so the reader asks no faster than a person clicks.
 PAUSE_S: Final = 1.0
 _CHALLENGE: Final = ("just a moment", "attention required", "cf-chl")
@@ -226,6 +228,13 @@ class Chrome:
         try:
             response = page.goto(url, wait_until="load")
             status = response.status if response is not None else 0
+            # A site that builds its menus with scripts can still be a bare shell at "load"
+            # (lovgov.org gave a 1,853-character page with no links twice on 2026-11-12), so
+            # wait, a little, for the page's own requests to settle before reading it.
+            try:
+                page.wait_for_load_state("networkidle", timeout=SETTLE_MS)
+            except Error:
+                pass  # a page that never goes quiet is read as it stands
             text = page.content()
         except Error as exc:
             raise FetchError(f"{url} did not open in Chrome: {exc}") from exc

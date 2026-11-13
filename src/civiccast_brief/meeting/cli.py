@@ -35,6 +35,8 @@ def _city_defaults(args: argparse.Namespace) -> None:
         return
     city = load_city(args.city)
     args.roster = args.roster or city.roster_path
+    if city.platform == "cablecast" and not args.cablecast:
+        args.cablecast = city.cablecast_host
     if city.platform == "granicus" and not args.granicus:
         args.granicus = city.granicus_host
         args.view_id = args.view_id if args.view_id is not None else city.granicus_view_id
