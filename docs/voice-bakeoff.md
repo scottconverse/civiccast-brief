@@ -61,8 +61,13 @@ On the voice PC (Windows, NVIDIA GPU, reached over ssh), as plain Windows Python
 1. ffmpeg on PATH (`winget install --scope user Gyan.FFmpeg`).
 2. `git clone https://github.com/nari-labs/dia2 C:\dev\civiccast-brief-bakeoff\dia2`, then `uv sync` in it
    (torch 2.9.1+cu128 on 2026-11-12).
-3. In `C:\dev\civiccast-brief-bakeoff\dia2tune`: the chunked renderer `render_dia2_chunked.py` and the two
-   reference voices `ref_s1.wav` (Maya) and `ref_s2.wav` (Theo).
+3. Make the folder `C:\dev\civiccast-brief-bakeoff\dia2tune` and put three files in it:
+   - The chunked renderer. Copy `src/civiccast_brief/audio/box/render_dia2_chunked.py` from this repo to
+     `C:\dev\civiccast-brief-bakeoff\dia2tune\render_dia2_chunked.py` (the `Dia2Config.renderer` path). It
+     runs in the Dia2 venv from step 2, not in the CivicCast Brief environment.
+   - Two reference voice clips, `ref_s1.wav` (host 1, Maya) and `ref_s2.wav` (host 2, Theo), at the
+     `Dia2Config.ref_s1` and `Dia2Config.ref_s2` paths. The repo does not include clips. Bring your own: two
+     clean, single-speaker WAV clips of about 10 seconds each, one per host, that you have the right to use.
 4. The Dia2-2B and Whisper small models download on the first render.
 
 The paths are the defaults in `Dia2Config` in `src/civiccast_brief/audio/engines.py`; a `--config` file
