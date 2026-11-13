@@ -44,8 +44,8 @@
 {% if page.published %}<meta property="article:published_time" content="{{ page.published }}">
 {% endif %}
 <link rel="alternate" type="application/rss+xml" title="{{ city.podcast.name }} podcast feed" href="{{ feed_href }}">
-<link rel="stylesheet" href="{{ href('/assets/site.css') }}">
-<link rel="stylesheet" href="{{ href('/assets/print.css') }}" media="print">
+<link rel="stylesheet" href="{{ asset('/assets/site.css') }}">
+<link rel="stylesheet" href="{{ asset('/assets/print.css') }}" media="print">
 {% for block in page.json_ld %}
 {{ block|safe }}
 {% endfor %}
@@ -109,7 +109,7 @@
 </footer>
 </div>
 {% for script in scripts %}
-<script src="{{ href(script) }}" defer></script>
+<script src="{{ asset(script) }}" defer></script>
 {% endfor %}
 <script defer src="{{ analytics.script }}" data-cf-beacon='{"token": "{{ analytics.token }}"}'></script>
 </body>
