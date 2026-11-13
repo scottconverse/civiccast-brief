@@ -220,10 +220,18 @@ apply. Code gets a writer for a task with
 `civiccast_brief.models.complete_for(city_dir, task, body)`, which returns a function that takes a
 prompt and returns the text and a receipt (provider, model, seconds).
 
-## 2. Fill in the roster
+## 2. The roster fills itself from the records
 
-Open the city's own council page and add each member to `roster.json`, with the name exactly as the
-page prints it, and set `retrieved` to today's date:
+You do not type the council or a board in. For each meeting, the weekly run reads the members from
+that meeting's own records (the roll call in the minutes in the packet, a member list on the agenda)
+and adds them to the body's roster file (`roster.json`, or `rosters/<body>.json`) before any speaker
+is named. Each member keeps where a record printed them: the document and page, the line, and the
+meeting date. A member already in the file is never changed or removed; a name no record prints in
+full is not added; and when no record lists the members, the run says "no member list found in the
+records" and leaves the roster as it is. The desk's **Roster** page shows each member and the record
+they came from.
+
+A member line in the file looks like this (`seen` and `records` are added by the run):
 
 ```json
 {"name": "Jane Doe", "first": "Jane", "last": "Doe", "role": "Mayor"}
