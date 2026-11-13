@@ -2,7 +2,7 @@
 
 import json
 
-from fastapi.testclient import TestClient
+from desk_signin import signed_in
 
 from civiccast_brief.citybuild.build import build_city
 from civiccast_brief.citybuild.search import Search
@@ -49,7 +49,7 @@ def test_no_platform_found_writes_none(tmp_path):
 def test_several_platforms_are_left_to_the_city_page(tmp_path):
     assert _capture(tmp_path, YOUTUBE, CABLE) == {"platform": "none"}
     with ReviewStore(tmp_path / "d.db") as store:
-        client = TestClient(make_desk_app(store, city_dir=tmp_path), base_url="http://127.0.0.1")
+        client = signed_in(make_desk_app(store, city_dir=tmp_path))
         page = client.get("/city")
         assert "Find found more than one video platform (youtube, cablecast)" in page.text
         reply = client.post(

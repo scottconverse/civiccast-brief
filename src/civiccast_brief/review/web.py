@@ -13,9 +13,14 @@ Jinja2 autoescaping is on, so editor text is shown as text. A small script (``/s
 shows "Working..." on the pressed button; every action also ends on a page that says what
 happened, so the desk works without the script.
 
-Two guards keep other pages open in the same browser from using the desk:
+Every page but ``/sign-in`` needs a signed-in editor (see ``auth.py``, ported from
+TownReporter). The first account made on a desk owns it; after that, sign-up is closed.
+
+Three guards keep other pages open in the same browser from using the desk:
   - every POST must carry the form token that the desk prints in its forms. The token is random
     and is made when the app starts. A page on another site cannot read it;
+  - a browser request from another site or a sibling subdomain (Sec-Fetch-Site other than
+    same-origin or none, unless it is a top-level GET) is refused, as TownReporter refuses it;
   - the Host header must name 127.0.0.1 or localhost, which stops DNS-rebinding pages.
 The desk also refuses to be framed, so a page cannot place its buttons over this one.
 """
@@ -44,6 +49,7 @@ from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
 from civiccast_brief.review import desk
+from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.weekly import rosterfill
 
@@ -53,6 +59,8 @@ BIND_HOST: Final = "127.0.0.1"
 DEFAULT_PORT: Final = 8765
 ALLOWED_HOSTNAMES: Final = frozenset({"127.0.0.1", "localhost"})
 MAX_FORM_BYTES: Final = 2 * 1024 * 1024
+#: Paths a visitor reaches before signing in.
+OPEN_PATHS: Final = frozenset({"/sign-in", "/sign-up", "/static/desk.js"})
 HERE: Final = Path(__file__).parent
 TEMPLATE_DIR: Final = HERE / "templates"
 STATIC_DIR: Final = HERE / "static"
@@ -112,6 +120,29 @@ def item_notice(code: str, item: DeskItem) -> tuple[str, bool] | None:
     return None
 
 
+def _cross_site(request: Request) -> bool:
+    """A scripted request from another site or a sibling subdomain (TownReporter's rule)."""
+    site = request.headers.get("sec-fetch-site")
+    if not site or site in ("same-origin", "none"):
+        return False
+    dest = request.headers.get("sec-fetch-dest")
+    top_level_get = (
+        request.headers.get("sec-fetch-mode") == "navigate"
+        and request.method in ("GET", "HEAD")
+        and dest not in ("object", "embed")
+    )
+    return not top_level_get
+
+
+def _address(request: Request) -> str:
+    """The visitor's address: Cloudflare's header, then the proxy's, then the socket."""
+    for header in ("cf-connecting-ip", "x-forwarded-for"):
+        value = request.headers.get(header, "").split(",")[0].strip()
+        if value:
+            return value
+    return request.client.host if request.client else ""
+
+
 def _host_allowed(request: Request) -> bool:
     host = request.headers.get("host", "")
     return host.rsplit(":", 1)[0].lower() in ALLOWED_HOSTNAMES if host else False
@@ -161,6 +192,7 @@ class DeskApp:
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
     def page(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
+        context.setdefault("signed_in", True)
         html = self.templates.get_template(name).render(
             token=self.token, city_dir=self.city_dir, **context
         )
@@ -412,9 +444,14 @@ def make_desk_app(
     city_dir: str | Path | None = None,
     writer: desk.Writer | None = None,
     regenerate: RegenerateCallback | None = None,
+    auth: DeskAuth | None = None,
 ) -> FastAPI:
-    """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio."""
+    """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio.
+
+    ``auth`` holds the accounts and sessions; by default they live in the desk's own file.
+    """
     state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate)
+    accounts = auth if auth is not None else DeskAuth(store.path)
     app = FastAPI(
         title="CivicCast Brief editor desk", docs_url=None, redoc_url=None, openapi_url=None
     )
@@ -432,8 +469,21 @@ def make_desk_app(
             )
         elif int(request.headers.get("content-length") or 0) > MAX_FORM_BYTES:
             response = PlainTextResponse("The form is too large.\n", status_code=413)
-        else:
+        elif _cross_site(request):
+            response = PlainTextResponse(
+                "Forbidden: cross-site request blocked.\n", status_code=403
+            )
+        elif request.url.path in OPEN_PATHS:
             response = await call_next(request)
+        else:
+            user = await run_in_threadpool(accounts.user_for, request.cookies.get(SESSION_COOKIE))
+            if user is not None:
+                request.state.user = user
+                response = await call_next(request)
+            elif request.method == "POST":
+                response = PlainTextResponse("Sign in first: /sign-in\n", status_code=401)
+            else:
+                response = _redirect("/sign-in")
         response.headers.update(SECURITY_HEADERS)
         return response
 
@@ -446,6 +496,82 @@ def make_desk_app(
             "The form token is missing or wrong. Reload the desk and try again.\n",
             status_code=403,
         )
+
+    def sign_in_page(error: str = "", email: str = "", status: int = 200) -> HTMLResponse:
+        return state.page(
+            "signin.html",
+            status=status,
+            title="Sign in",
+            signed_in=False,
+            first=not accounts.has_owner(),
+            error=error,
+            email=email,
+        )
+
+    def with_session(token: str) -> Response:
+        response = _redirect("/")
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            max_age=SESSION_SECONDS,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
+    def refused(exc: AuthError, email: str) -> HTMLResponse:
+        response = sign_in_page(error=str(exc), email=email, status=exc.status)
+        if exc.retry_after is not None:
+            response.headers["Retry-After"] = str(exc.retry_after)
+        return response
+
+    @app.get("/sign-in", response_class=HTMLResponse)
+    def sign_in_get(request: Request) -> Response:
+        if accounts.user_for(request.cookies.get(SESSION_COOKIE)) is not None:
+            return _redirect("/")
+        return sign_in_page()
+
+    @app.post("/sign-in")
+    async def sign_in_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        email = form.get("email", "")
+        try:
+            token = await run_in_threadpool(
+                accounts.sign_in, email, form.get("password", ""), _address(request)
+            )
+        except AuthError as exc:
+            return refused(exc, email)
+        return with_session(token)
+
+    @app.post("/sign-up")
+    async def sign_up_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        email = form.get("email", "")
+        if form.get("password", "") != form.get("confirm", ""):
+            return sign_in_page(error="The two passwords differ.", email=email, status=400)
+        try:
+            token = await run_in_threadpool(
+                accounts.create_owner, email, form.get("password", ""), _address(request)
+            )
+        except AuthError as exc:
+            return refused(exc, email)
+        return with_session(token)
+
+    @app.post("/sign-out")
+    async def sign_out_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        accounts.sign_out(request.cookies.get(SESSION_COOKIE))
+        response = _redirect("/sign-in")
+        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True)
+        return response
 
     @app.get("/static/desk.js")
     def script() -> Response:
