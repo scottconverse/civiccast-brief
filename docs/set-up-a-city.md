@@ -38,7 +38,9 @@ Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization 
 
 `city find` reads the city's website and asks the meeting platforms what they list. It uses no AI
 model, only plain web requests. Give it the city's name and state, and its website when you know it
-(otherwise it guesses addresses like `www.yourcitystate.gov`):
+(otherwise it guesses addresses like `www.yourcitystate.gov`). When no guess works it says so: search
+the web for the city's official website (Loveland, CO is `lovgov.org`, which no guess reaches) and
+give that address as `--website` (the **City website** box in the desk):
 
 ```
 python -m civiccast_brief city find --name "Your City" --state CO --website https://yourcity.gov/ --dry-run
@@ -74,6 +76,10 @@ reads each source once (without YouTube captions) and lists each body as READ, w
 date, title and document link, or NOT READ with the reason. Checking all sources saves
 `city-check.json` as the command does; checking one source does not change that file. It can take
 a minute, and the button says it is working until the result page opens.
+
+A body's name matches a show or video title that leaves off the city's name (from `city.json`) and a
+trailing "Meeting": `LOVELAND CITY COUNCIL MEETING` finds "City Council Meeting November 4, 2026".
+On the desk's Sources page, **Show recent titles** lists the body names a Cablecast host's shows use.
 
 The editor desk has the same search under **Sources > Find a city's sources**. It shows what it
 found with a checkbox for each source, and saves only the sources you leave checked.

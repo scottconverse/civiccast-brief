@@ -27,7 +27,7 @@ import json
 import logging
 import re
 import secrets
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
@@ -353,6 +353,7 @@ class DeskApp:
         form: Mapping[str, str] | None = None,
         editing: str = "",
         status: int = 200,
+        cablecast_titles: Sequence[tuple[str, int]] = (),
     ) -> HTMLResponse:
         rows: list[city_sources.Source] = []
         load_error = ""
@@ -373,6 +374,7 @@ class DeskApp:
             error_field=error_field,
             form=dict(form or {}),
             editing=editing,
+            cablecast_titles=list(cablecast_titles),
             path=(self.city_dir / city_sources.SETTINGS_NAME) if self.city_dir else None,
         )
 
@@ -773,6 +775,34 @@ def make_desk_app(
             read=sum(p.ok for p in proofs),
             saved=saved,
             one_source=source_id is not None,
+        )
+
+    @app.post("/sources/cablecast-titles")
+    async def cablecast_titles(request: Request) -> Response:
+        """One public read of a Cablecast host's show list, when the user asks for it."""
+        from civiccast_brief.citybuild.read import title_body_names
+        from civiccast_brief.meeting import cablecast
+
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        try:
+            host = city_sources.make_source("cablecast", {**form, "bodies": "x"}).host
+            shows = await run_in_threadpool(cablecast.list_shows, host)
+        except city_sources.SourceError as exc:
+            return state.sources_page(
+                error=exc.args[0], error_field="cablecast_host", form=form, status=400
+            )
+        except cablecast.CablecastError as exc:
+            return state.sources_page(
+                error=f"Could not read the show list: {exc}", form=form, status=400
+            )
+        names = title_body_names([show.name for show in shows])
+        return state.sources_page(
+            form=form,
+            editing=form.get("source_id", ""),
+            cablecast_titles=names,
+            notice="" if names else f"{host} lists no shows with video.",
         )
 
     @app.post("/sources/{action}")

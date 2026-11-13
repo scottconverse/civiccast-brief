@@ -77,3 +77,48 @@ def test_city_find_notices_a_cablecast_link_on_a_city_page():
     # The same address in a script's JSON, with escaped slashes, is found too.
     script = r'{"video":"https:\/\/' + HOST + r'\/internetchannel"}'
     assert [i.platform for i in search._platform_links(script, "https://x.gov/")] == ["cablecast"]
+
+
+def test_city_check_finds_a_civicweb_style_body_name_in_cablecast_titles(web, monkeypatch):
+    monkeypatch.setattr(cablecast, "list_shows", lambda host: _shows())
+    source = make_source("cablecast", {"host": HOST, "bodies": ["LOVELAND CITY COUNCIL MEETING"]})
+    body = "LOVELAND CITY COUNCIL MEETING"
+    bare = read_latest(source, body, web.fetcher(), today=TODAY)
+    assert not bare.ok and "names 'LOVELAND CITY COUNCIL MEETING'" in bare.problem
+    proof = read_latest(source, body, web.fetcher(), today=TODAY, city="Loveland")
+    assert proof.ok, proof.problem
+    assert proof.title == "City Council Meeting November 4, 2026"
+
+
+def test_city_check_passes_the_name_in_city_json_to_the_reader(web, monkeypatch, tmp_path):
+    import json
+
+    from civiccast_brief.citybuild.cli import check_city
+
+    monkeypatch.setattr(cablecast, "list_shows", lambda host: _shows())
+    (tmp_path / "city.json").write_text(json.dumps({"name": "Loveland"}), encoding="utf-8")
+    (tmp_path / "sources.json").write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {"kind": "cablecast", "host": HOST, "bodies": ["LOVELAND CITY COUNCIL MEETING"]}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (proof,) = check_city(tmp_path, fetcher=web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+
+
+def test_title_body_names_drop_the_date_and_count_the_shows():
+    from civiccast_brief.citybuild.read import title_body_names
+
+    titles = [s.name for s in _shows()]
+    names = dict(title_body_names(titles))
+    assert "City Council Meeting" in names and "Planning Commission" in names
+    assert "Council Study Session" in names
+    assert all(not any(ch.isdigit() for ch in name) for name in names)
+    assert title_body_names(["City Council - Oct 20 2026", "City Council Oct 6 2026"]) == [
+        ("City Council", 2)
+    ]

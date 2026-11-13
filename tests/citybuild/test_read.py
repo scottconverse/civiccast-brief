@@ -47,6 +47,39 @@ def test_body_names_match_with_or_without_the_part_in_parentheses():
     assert committee_for("Library Advisory Board", rows) is None
 
 
+def test_a_title_may_leave_off_the_city_name_and_the_word_meeting():
+    body = "LOVELAND CITY COUNCIL MEETING"
+    for title in (
+        "City Council Meeting November 4, 2026",
+        "City Council - Oct 20 2026",
+        "City Council 11-10-2026",
+        "City Council",
+    ):
+        assert body_matches(body, title, "Loveland"), title
+    assert body_matches(
+        "Loveland Planning Commission Meeting", "Planning Commission Nov 9, 2026", "Loveland"
+    )
+    assert body_matches(
+        "City of Loveland Planning Commission", "Planning Commission Nov 9, 2026", "Loveland"
+    )
+    # Another board, a longer name, or a name cut to one word is not a match.
+    assert not body_matches(body, "Council Study Session 11-10-2026", "Loveland")
+    assert not body_matches(body, "City Council Study Session November 4, 2026", "Loveland")
+    assert not body_matches(body, "City Council Marketing Plan", "Loveland")
+    assert not body_matches(
+        "Loveland Council Meeting", "Council Study Session 11-10-2026", "Loveland"
+    )
+    assert not body_matches(
+        "Loveland Planning Commission", "Historic Preservation Commission", "Loveland"
+    )
+    assert not body_matches(
+        "Planning Commission Meeting", "Historic Preservation Commission Nov 4 2026"
+    )
+    # Without the city's name only the trailing word goes.
+    assert not body_matches(body, "City Council Meeting November 4, 2026")
+    assert body_matches("City Council Meeting", "City Council - Oct 20 2026")
+
+
 def test_primegov_reads_the_newest_past_meetings_html_agenda(web):
     add_primegov(web)
     # The same meeting's PDF agenda answers too: the HTML agenda is still the one read.

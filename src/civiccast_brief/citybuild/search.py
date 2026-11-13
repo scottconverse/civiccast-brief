@@ -344,8 +344,9 @@ def _find_website(
             result.notes.append(f"website guessed from the name: {page.url}")
             return page
     result.notes.append(
-        "no website found from the name; give the city's website "
-        "(City website in the desk, --website on the command line)"
+        "no website found from the name. Search the web for the city's official website, "
+        "then paste its address into City website (in the desk) or give it as --website "
+        "(on the command line)"
     )
     return None
 
@@ -476,7 +477,7 @@ def _granicus(result: Search, item: detect.Found, fetcher: Fetcher, body: str | 
         result.unread.append(Unread("Granicus", item.url, "the archive page did not answer"))
         return
     text = page_text(page.text)
-    bodies = [b for b in _known_bodies(result, body) if body_matches(b, text)]
+    bodies = [b for b in _known_bodies(result, body) if body_matches(b, text, result.name)]
     if not bodies:
         result.unread.append(Unread("Granicus", item.url, "the archive names none of the bodies"))
         return
@@ -522,7 +523,7 @@ def _youtube(result: Search, item: detect.Found, fetcher: Fetcher, body: str | N
         result.unread.append(Unread("YouTube", item.url, f"the channel feed did not answer: {exc}"))
         return
     titles = " | ".join(title for _, title, _ in videos)
-    bodies = [b for b in _known_bodies(result, body) if body_matches(b, titles)]
+    bodies = [b for b in _known_bodies(result, body) if body_matches(b, titles, result.name)]
     if not bodies:
         result.unread.append(
             Unread("YouTube", item.url, f"none of its {len(videos)} newest titles names a body")
