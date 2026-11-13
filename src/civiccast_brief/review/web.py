@@ -403,6 +403,20 @@ def _city_names(city_dir: Path | None) -> dict[str, str]:
     return out
 
 
+def _then_close_chrome(work: Any, *args: Any, **kw: Any) -> Any:
+    """Run ``work``, then close the shared Chrome in this same worker thread.
+
+    Playwright objects belong to the thread that made them. Closing Chrome from the server's
+    loop thread broke that loop and stopped the desk after a Find search.
+    """
+    from civiccast_brief.citybuild import browser
+
+    try:
+        return work(*args, **kw)
+    finally:
+        browser.close_shared()
+
+
 def _redirect(location: str) -> RedirectResponse:
     return RedirectResponse(location, status_code=303)
 
@@ -636,18 +650,16 @@ def make_desk_app(
         except ValueError as exc:
             return again(str(exc).replace("--also ", "The line "), "also")
         fetcher = state.make_fetcher()
-        try:
-            found = await run_in_threadpool(
-                search_city,
-                name,
-                region,
-                website=form.get("website", "").strip() or None,
-                extra=extra,
-                fetcher=fetcher,
-                open_in_browser=browser.open_page,
-            )
-        finally:
-            browser.close_shared()
+        found = await run_in_threadpool(
+            _then_close_chrome,
+            search_city,
+            name,
+            region,
+            website=form.get("website", "").strip() or None,
+            extra=extra,
+            fetcher=fetcher,
+            open_in_browser=browser.open_page,
+        )
         search_id = secrets.token_urlsafe(9)
         state.searches[search_id] = found
         while len(state.searches) > MAX_SEARCHES:
@@ -702,6 +714,7 @@ def make_desk_app(
             )
         try:
             built = await run_in_threadpool(
+                _then_close_chrome,
                 build_city,
                 state.city_dir,
                 found,
@@ -711,8 +724,6 @@ def make_desk_app(
             )
         except (OSError, city_sources.SourceError) as exc:
             return state.sources_page(error=f"Not saved: {exc}", status=400)
-        finally:
-            browser.close_shared()
         state.found_lines = built.notice + [f"Still to fill in: {line}" for line in built.to_fill]
         return _redirect("/sources?" + urlencode({"done": "found"}))
 

@@ -234,3 +234,48 @@ def test_the_find_screen_reads_a_site_that_answers_403_in_chrome(web, desk, monk
     assert opened == [home]
     assert closed
     assert "primegov:loveland.primegov.com" in found.text
+
+
+def test_the_desk_closes_chrome_in_the_thread_that_opened_it(web, desk, monkeypatch):
+    """Playwright objects belong to the thread that made them. Closing Chrome on the server's
+    loop thread killed the desk after every Find search (newcomer test, 2026-11-12)."""
+    import threading
+
+    from civiccast_brief.citybuild import build
+
+    client, _city = desk
+    home = "https://www.lovgov.org"
+    web.add(home, "<html>Access Denied</html>", status=403)
+    add_primegov(web, "https://loveland.primegov.com")
+    threads: dict[str, list[int]] = {"open": [], "close": [], "build": []}
+
+    def open_page(url: str) -> Page:
+        threads["open"].append(threading.get_ident())
+        html = '<html><a href="https://loveland.primegov.com/">Agendas</a></html>'
+        return Page(url=url, status=200, content=html.encode(), content_type="text/html")
+
+    real_build = build.build_city
+
+    def build_city(*args, **kw):
+        threads["build"].append(threading.get_ident())
+        return real_build(*args, **kw)
+
+    monkeypatch.setattr(browser, "open_page", open_page)
+    monkeypatch.setattr(
+        browser, "close_shared", lambda: threads["close"].append(threading.get_ident())
+    )
+    monkeypatch.setattr(build, "build_city", build_city)
+    t = client.app.state.desk.token
+    found = client.post(
+        "/sources/find",
+        data={"token": t, "name": "Loveland", "state": "CO", "website": home},
+    )
+    assert found.status_code == 200
+    assert threads["open"] and threads["close"] == threads["open"][:1]
+    (search_id,) = client.app.state.desk.searches
+    saved = client.post(
+        "/sources/find/save",
+        data={"token": t, "search": search_id, "chosen": "primegov:loveland.primegov.com"},
+    )
+    assert saved.status_code == 303 or saved.status_code == 200
+    assert threads["build"] and threads["close"][1:] == threads["build"]
