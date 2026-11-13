@@ -55,6 +55,18 @@ def test_the_desk_starter_is_a_command_the_desk_reads():
     assert f"http://127.0.0.1:{args.port}/" in TEXT
 
 
+def test_the_desk_starter_opens_a_city_folder_so_sources_and_find_work():
+    # Without --city the desk shows "Start the desk with --city" on Sources, Find and Settings,
+    # yet the installer tells the user to set up a city in the desk.
+    serve = re.search(r'-m civiccast_brief\.review (serve [^\n]*)"\r?$', TEXT, re.MULTILINE)
+    assert serve, "desk.cmd no longer starts the desk"
+    argv = [a.strip('`"') for a in re.findall(r'`"[^`]*`"|\S+', serve.group(1))]
+    args = review_cli.build_parser().parse_args(argv)
+    assert args.city == Path(r"%WORK%\city")
+    mkdir = r"""'if not exist "%WORK%\city" mkdir "%WORK%\city"'"""
+    assert mkdir in TEXT, "the desk refuses a missing city folder, so desk.cmd must make it"
+
+
 def test_the_city_setup_it_points_to_is_a_command_the_program_reads():
     hint = re.search(
         r"civiccast_brief (city find) --name `\"Your City`\" --state CO --dry-run", TEXT
