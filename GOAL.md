@@ -119,3 +119,22 @@ An item is done only when its "done when" is shown, not claimed. FAILED, BLOCKED
 | 22 | Phase 10: per-city config, setup command, docs, GitHub release | done | commit 9bf8e74 (city folders, `setup` command), docs/set-up-a-city.md, San Mateo County walk-through. Released v0.1.0 on 2026-11-07 at commit 2e7f06f (CI green): https://github.com/scottconverse/civiccast-brief/releases/tag/v0.1.0 |
 | 23 | Push the 2 local docs commits | done | pushed 1300c6e to origin/main, 2026-11-05 |
 | 24 | Commit + push Phase 0/2/3 code once tested | done | commits 6b801b1, a695138 on origin/main |
+
+## Goal: Bozeman-style rebuild and the 10 desk gaps (set by Scott, 2026-11-12)
+
+Scott: "Make finishing the bozeman style rebuild AND ALL 10 ITEMS ABOVE a /goal."
+Same rule: an item is done only when it is shown, not claimed. FAILED, BLOCKED or SKIPPED never count.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| G0 | Site rebuilt to match bozeman.civiccast.ai: lead story with video still, story cards, Latest articles with board filter and search, podcast sidebar (RSS only), boards list with counts, email block kept off; stand-alone stories; short roundup titles; no "[date meeting]" recap prefixes. Deployed to longmont.civiccastbrief.org, walked at desktop and phone width against Bozeman (this is the reopened 22-item row 5) | open | |
+| G1 | Council and board members filled in during story writing from the meeting's own records (agenda, minutes, roll call, packet), the way TownReporter and TownRecord do it. Scott 2026-11-12: he did not pass on rosters; he wants them filled from records, not typed in a roster page | open | |
+| G2 | A desk page for the city itself: name, short web name, state, contact emails; saves city.json | open | |
+| G3 | Find: "add anyway" button for a YouTube channel it spotted but did not offer | open | |
+| G4 | Find points to the city's Cablecast archive when the city site has one; find why run 3 missed it when run 2 found it | open | |
+| G5 | Cablecast row in the docs' source-type table | open | |
+| G6 | Setup docs say first that the desk's Find page is where to start; commands come after | open | |
+| G7 | README says what the program does and introduces the desk before the Townlight importer section (lines 4-13 kept word for word) | open | |
+| G8 | Docs say desk.cmd keeps its window open while the desk runs and opens the browser by itself | open | |
+| G9 | Command-line setup asks for the video platform (or picks from what was found) instead of making YouTube the default | open | |
+| G10 | Docs say plainly where the program installs: %LOCALAPPDATA%\CivicCastBrief\app normally, or inside a copy you already downloaded | open | |
