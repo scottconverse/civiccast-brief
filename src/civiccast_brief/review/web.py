@@ -256,8 +256,7 @@ class DeskApp:
     # ----- settings -------------------------------------------------------------------------
 
     def known_bodies(self) -> list[str]:
-        names: set[str] = {"City Council"}
-        names |= {i.body for i in self.store.list_items() if i.body}
+        names: set[str] = {i.body for i in self.store.list_items() if i.body}
         if self.city_dir is not None:
             try:
                 for source in city_sources.load_sources(self.city_dir):
@@ -273,7 +272,8 @@ class DeskApp:
                     names |= set(picks.bodies)
             except model_settings.ModelSettingsError:
                 pass
-        return sorted(names, key=lambda n: (n != "City Council", n.casefold()))
+        # "City Council" stands in only until the city names its own bodies.
+        return sorted(names or {"City Council"}, key=lambda n: (n != "City Council", n.casefold()))
 
     def settings_page(
         self, *, notice: str = "", error: str = "", status: int = 200
