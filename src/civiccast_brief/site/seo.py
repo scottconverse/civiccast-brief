@@ -6,8 +6,9 @@ import json
 from xml.sax.saxutils import escape
 
 from civiccast_brief.site.feed import FEED_PATH, artwork_path
-from civiccast_brief.site.model import City, Episode
+from civiccast_brief.site.model import City, Episode, Story
 from civiccast_brief.site.timecode import iso_duration
+from civiccast_brief.site.titles import split_meeting_label
 from civiccast_brief.site.urls import Urls
 
 
@@ -29,8 +30,10 @@ def _publisher(city: City) -> dict[str, object]:
     return {"@type": "Organization", "name": city.publisher}
 
 
-def episode_news_article(city: City, urls: Urls, episode: Episode) -> dict[str, object]:
-    page = urls.absolute(urls.page_path("episodes", episode.id))
+def episode_news_article(
+    city: City, urls: Urls, episode: Episode | Story, section: str = "episodes"
+) -> dict[str, object]:
+    page = urls.absolute(urls.page_path(section, episode.id))
     published = episode.published.isoformat()
     return {
         "@context": "https://schema.org",
@@ -107,25 +110,35 @@ def robots_txt(urls: Urls) -> str:
     return f"User-agent: *\nAllow: /\n\nSitemap: {urls.absolute('/sitemap.xml')}\n"
 
 
-def search_index(urls: Urls, episodes: tuple[Episode, ...]) -> list[dict[str, object]]:
-    """One record per episode for the search page. Recap text is included; the full transcript is not."""
+def search_index(
+    urls: Urls, episodes: tuple[Episode, ...], stories: tuple[Story, ...] = ()
+) -> list[dict[str, object]]:
+    """One record per story for the search page, newest first. Recap text is included; the full
+    transcript is not. ``audio`` says whether the story has an episode to listen to."""
+    items: list[Episode | Story] = [*episodes, *stories]
+    items.sort(key=lambda item: (item.meeting_date, item.published, item.id), reverse=True)
     records: list[dict[str, object]] = []
-    for episode in episodes:
+    for item in items:
         records.append(
             {
-                "id": episode.id,
-                "title": episode.display_headline,
-                "url": urls.href(urls.page_path("episodes", episode.id)),
-                "date": episode.meeting_date.isoformat(),
-                "board": episode.board,
-                "dek": episode.dek,
-                "tags": list(episode.tags),
-                "sample": episode.sample,
-                "text": " ".join(claim.text for claim in episode.claims),
+                "id": item.id,
+                "title": item.display_headline,
+                "url": urls.href(
+                    urls.page_path("episodes" if isinstance(item, Episode) else "stories", item.id)
+                ),
+                "date": item.meeting_date.isoformat(),
+                "board": item.board,
+                "dek": item.display_dek,
+                "tags": list(item.tags),
+                "sample": item.sample,
+                "audio": isinstance(item, Episode),
+                "text": " ".join(split_meeting_label(claim.text)[1] for claim in item.claims),
             }
         )
     return records
 
 
-def search_index_json(urls: Urls, episodes: tuple[Episode, ...]) -> str:
-    return json.dumps(search_index(urls, episodes), ensure_ascii=False, indent=1) + "\n"
+def search_index_json(
+    urls: Urls, episodes: tuple[Episode, ...], stories: tuple[Story, ...] = ()
+) -> str:
+    return json.dumps(search_index(urls, episodes, stories), ensure_ascii=False, indent=1) + "\n"

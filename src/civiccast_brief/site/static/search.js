@@ -67,11 +67,11 @@
       list.appendChild(item);
     });
     if (matches.length === 0) {
-      status.textContent = 'No episodes match "' + query + '".';
+      status.textContent = 'No stories match "' + query + '".';
     } else if (matches.length > MAX_RESULTS) {
-      status.textContent = "Showing the first " + MAX_RESULTS + " of " + matches.length + " episodes for “" + query + "”.";
+      status.textContent = "Showing the first " + MAX_RESULTS + " of " + matches.length + " stories for “" + query + "”.";
     } else {
-      status.textContent = matches.length + (matches.length === 1 ? " episode" : " episodes") + " for “" + query + "”.";
+      status.textContent = matches.length + (matches.length === 1 ? " story" : " stories") + " for “" + query + "”.";
     }
   }
 
@@ -95,7 +95,7 @@
       })
       .catch(function () {
         list.textContent = "";
-        status.textContent = "Search is unavailable right now. Browse the latest episodes instead.";
+        status.textContent = "Search is unavailable right now. Browse the latest stories instead.";
       });
   }
 

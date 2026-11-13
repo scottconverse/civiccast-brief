@@ -51,7 +51,7 @@
         {% for claim in claims %}
         <li class="claim" id="claim-{{ claim.id }}">
           {% if claim.topic %}<p class="claim-topic">{{ claim.topic }}</p>{% endif %}
-          <p class="t">{{ claim.text }}
+          <p class="t">{% if claim.meeting %}<span class="meeting-tag">{{ claim.meeting }}</span> {% endif %}{{ claim.text }}
             {% if claim.link %}
             <a class="cite" href="{{ claim.link }}" target="_blank" rel="noopener">Video at {{ claim.timestamp }}<span class="visually-hidden"> (opens the meeting video in a new tab)</span></a>
             {% else %}
@@ -77,6 +77,7 @@
     <p><a href="{{ video_url }}" target="_blank" rel="noopener">Watch the full meeting video<span class="visually-hidden"> (opens in a new tab)</span></a></p>
     {% endif %}
 
+    {% if script %}
     <section class="script" aria-labelledby="script-title">
       <details>
         <summary id="script-title">Podcast transcript: what the hosts say</summary>
@@ -88,6 +89,7 @@
         </ol>
       </details>
     </section>
+    {% endif %}
 
     {% if transcript_href %}
     <p><a href="{{ transcript_href }}">Read the meeting transcript, with timestamps</a></p>
@@ -99,7 +101,8 @@
     </section>
   </div>
 
-  <aside class="side" aria-label="Listen and more">
+  <aside class="side" aria-label="{{ 'Listen and more' if audio else 'More about this story' }}">
+    {% if audio %}
     <section class="player" id="listen" data-player aria-labelledby="listen-title">
       <h2 id="listen-title">Listen · {{ audio.length }}</h2>
       <audio class="player__audio" controls preload="metadata" src="{{ audio.url }}">
@@ -131,6 +134,7 @@
       {% if chapters_url %}<p class="player-meta"><a href="{{ chapters_url }}">Chapter file (JSON)</a></p>{% endif %}
       {% endif %}
     </section>
+    {% endif %}
 
     {% if topics %}
     <section class="box" aria-labelledby="topics-title">

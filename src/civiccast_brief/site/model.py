@@ -1,7 +1,8 @@
 """Input model: the city settings and the episode JSON files that one site build reads.
 
-A build reads one directory. It holds ``city.json`` (the site and podcast settings) and one JSON
-file per episode. An episode holds the approved recap (claims with transcript timestamps), the
+A build reads one directory. It holds ``city.json`` (the site and podcast settings), one JSON
+file per episode and, in ``stories/``, one JSON file per published news story (a story reaches the
+site with or without an episode). An episode holds the approved recap (claims with transcript timestamps), the
 two-host script, the MP3 facts, chapters, and the links to the chapter file, the VTT transcript and
 the source video. Only episodes with ``"approved": true`` reach the site. Every problem is collected
 and reported together, so one bad file does not hide the others.
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -19,10 +20,13 @@ from urllib.parse import urlparse
 
 from civiccast_brief.site import directories
 from civiccast_brief.site.timecode import parse_seconds
+from civiccast_brief.site.titles import shorten_roundup_title
 
 CITY_FILE = "city.json"
 #: The city folder's roster (see civiccast_brief/city.py); not an episode.
 ROSTER_FILE = "roster.json"
+#: Folder (inside the episodes directory) of stories that have no episode yet.
+STORIES_DIR = "stories"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 SCRIPT_LINE_RE = re.compile(r"^\[([A-Za-z0-9_ -]{1,24})\]\s*(\S.*)$")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -214,12 +218,59 @@ class Episode:
 
 
 @dataclass(frozen=True)
+class Story:
+    """A published news story for a meeting that has no published episode (no audio yet).
+
+    It has its own page, appears in every list and in search, and has no player. Its id is the
+    id the meeting's episode would get, so when the episode is published the story is merged
+    into it and the story's address redirects to the episode page.
+    """
+
+    id: str
+    city: str
+    board: str
+    meeting_title: str
+    meeting_date: date
+    published: datetime
+    approved_by: str
+    claims: tuple[Claim, ...]
+    article: Article
+    video_url: str | None
+    sample: bool = False
+    tags: tuple[str, ...] = ()
+
+    @property
+    def headline(self) -> str:
+        return self.article.headline
+
+    @property
+    def dek(self) -> str:
+        return self.article.dek
+
+    @property
+    def meeting_name(self) -> str:
+        return _without_day(self.meeting_title, self.meeting_date)
+
+    @property
+    def display_headline(self) -> str:
+        return f"SAMPLE: {self.headline}" if self.sample else self.headline
+
+    @property
+    def display_dek(self) -> str:
+        return self.article.dek
+
+
+@dataclass(frozen=True)
 class SiteInput:
     city: City
     episodes: tuple[Episode, ...]
     """Approved episodes, newest first."""
     excluded: tuple[tuple[str, str], ...]
     """(episode id, reason) for each file that was valid but not approved."""
+    stories: tuple[Story, ...] = ()
+    """Approved stories with no episode of the same id, newest first."""
+    merged_stories: tuple[str, ...] = ()
+    """Ids of stories whose meeting has an episode: the story's address redirects to it."""
 
 
 class _Checker:
@@ -373,8 +424,99 @@ def load_site_input(directory: Path) -> SiteInput:
 
     if problems:
         raise InputError(problems)
+    stories = _load_stories(directory / STORIES_DIR, city, problems)
+    if problems:
+        raise InputError(problems)
     approved.sort(key=lambda item: (item.published, item.meeting_date, item.id), reverse=True)
-    return SiteInput(city=city, episodes=tuple(approved), excluded=tuple(excluded))
+    approved, alone, merged = _merge_stories(approved, stories)
+    return SiteInput(
+        city=city,
+        episodes=tuple(approved),
+        excluded=tuple(excluded),
+        stories=alone,
+        merged_stories=merged,
+    )
+
+
+def _merge_stories(
+    episodes: list[Episode], stories: list[Story]
+) -> tuple[list[Episode], tuple[Story, ...], tuple[str, ...]]:
+    """Give an episode the story of its meeting when it has none; keep the rest as stories."""
+    episodes = list(episodes)
+    position = {episode.id: index for index, episode in enumerate(episodes)}
+    alone: list[Story] = []
+    merged: list[str] = []
+    for story in stories:
+        index = position.get(story.id)
+        if index is None:
+            alone.append(story)
+            continue
+        merged.append(story.id)
+        if episodes[index].article is None:
+            episodes[index] = replace(episodes[index], article=story.article)
+    alone.sort(key=lambda item: (item.published, item.meeting_date, item.id), reverse=True)
+    return episodes, tuple(alone), tuple(sorted(merged))
+
+
+def _load_stories(directory: Path, city: City, problems: list[str]) -> list[Story]:
+    stories: list[Story] = []
+    if not directory.is_dir():
+        return stories
+    seen: set[str] = set()
+    for path in sorted(directory.glob("*.json")):
+        story = _load_story(path, problems)
+        if story is None:
+            continue
+        if story.id in seen:
+            problems.append(f"{STORIES_DIR}/{path.name}: id {story.id!r} is used twice")
+            continue
+        seen.add(story.id)
+        if story.city != city.slug:
+            problems.append(
+                f"{STORIES_DIR}/{path.name}: city {story.city!r} does not match "
+                f"city.json ({city.slug!r})"
+            )
+            continue
+        stories.append(story)
+    return stories
+
+
+def _load_story(path: Path, problems: list[str]) -> Story | None:
+    data = _read_object(path, problems)
+    if data is None:
+        return None
+    before = len(problems)
+    check = _Checker(f"{STORIES_DIR}/{path.name}", problems)
+    story_id = check.slug(data, "id")
+    city = check.slug(data, "city")
+    approved_by = check.text(data, "approved_by", limit=120)
+    board = check.text(data, "board", required=False, limit=120) or DEFAULT_BOARD
+    meeting_title = check.text(data, "meeting_title", limit=200)
+    meeting_date = check.day(data, "meeting_date")
+    published = check.moment(data, "published")
+    sample = check.boolean(data, "sample", False)
+    claims = _claims(check, data)
+    video_url = check.url(data, "video_url", required=False)
+    if data.get("article") is None:
+        check.fail("article", "is required in a story file")
+        return None
+    article = _article(check, data, len(claims))
+    if len(problems) > before or article is None:
+        return None
+    assert meeting_date is not None and published is not None
+    return Story(
+        id=story_id,
+        city=city,
+        board=board,
+        meeting_title=meeting_title,
+        meeting_date=meeting_date,
+        published=published,
+        approved_by=approved_by,
+        claims=claims,
+        article=article,
+        video_url=video_url,
+        sample=sample,
+    )
 
 
 def _read_object(path: Path, problems: list[str]) -> dict[str, Any] | None:
@@ -521,7 +663,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
     meeting_title = check.text(data, "meeting_title", limit=200)
     meeting_date = check.day(data, "meeting_date")
     published = check.moment(data, "published")
-    headline = check.text(data, "headline", limit=200)
+    headline = shorten_roundup_title(check.text(data, "headline", limit=200))
     dek = check.text(data, "dek", required=False, limit=400)
     tags = _tags(check, data)
     sample = check.boolean(data, "sample", False)
@@ -899,6 +1041,7 @@ __all__ = [
     "PodcastInfo",
     "ScriptLine",
     "SiteInput",
+    "Story",
     "TranscriptLine",
     "load_site_input",
 ]

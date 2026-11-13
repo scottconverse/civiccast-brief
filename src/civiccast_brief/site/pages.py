@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -11,9 +12,11 @@ from urllib.parse import urlparse
 
 from civiccast_brief.site import seo
 from civiccast_brief.site.feed import FEED_PATH, artwork_path
-from civiccast_brief.site.model import Article, City, Episode, SiteInput
+from civiccast_brief.site.model import Article, City, Claim, Episode, SiteInput, Story
 from civiccast_brief.site.render import date_long, file_size
+from civiccast_brief.site.stills import youtube_id
 from civiccast_brief.site.timecode import clock, timecode
+from civiccast_brief.site.titles import MONTHS_SHORT, split_meeting_label
 from civiccast_brief.site.topics import TOPICS, slugify, topics_for
 from civiccast_brief.site.urls import Urls, timestamp_link
 
@@ -44,22 +47,15 @@ REPUBLISH_NOTICE = (
     "and a link to this page."
 )
 
-MONTHS_SHORT = (
-    "Jan.",
-    "Feb.",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "Aug.",
-    "Sept.",
-    "Oct.",
-    "Nov.",
-    "Dec.",
-)
-ALSO_COUNT = 3
+TOP_CARDS = 2
+"""Story cards under the lead story on the front page."""
 MORE_COUNT = 3
+SIDEBAR_EPISODES = 4
+SIDEBAR_BOARDS = 6
+BOARD_COLORS = 6
+"""Plain color blocks for stories with no still image; one class per board (c0 to c5)."""
+
+Item = Episode | Story
 
 
 @dataclass(frozen=True)
@@ -72,6 +68,15 @@ class PageSpec:
 
 def episode_path(urls: Urls, episode: Episode, *parts: str) -> str:
     return urls.page_path("episodes", episode.id, *parts)
+
+
+def story_path(urls: Urls, story: Story, *parts: str) -> str:
+    return urls.page_path("stories", story.id, *parts)
+
+
+def item_path(urls: Urls, item: Item) -> str:
+    """The page of a story or an episode: /episodes/<id>/ when there is audio, else /stories/<id>/."""
+    return episode_path(urls, item) if isinstance(item, Episode) else story_path(urls, item)
 
 
 def board_path(urls: Urls, board: str) -> str:
@@ -199,26 +204,67 @@ def _article_view(article: Article, video: str | None) -> dict[str, Any]:
     }
 
 
-def _topic_chips(urls: Urls, episode: Episode) -> list[dict[str, str]]:
+def _topic_chips(urls: Urls, item: Item) -> list[dict[str, str]]:
     return [
         {"name": topic.short, "href": urls.href(topic_path(urls, topic.slug)), "slug": topic.slug}
-        for topic in topics_for(episode)
+        for topic in topics_for(item)
     ]
+
+
+def _claims_view(claims: tuple[Claim, ...], video: str | None) -> list[dict[str, Any]]:
+    """The recap lines. A roundup line that starts "[September 22, 2026 meeting]" gets that
+    meeting as a label of its own, not as a bracketed start of the sentence."""
+    view = []
+    for claim in claims:
+        meeting, text = split_meeting_label(claim.text)
+        view.append(
+            {
+                "id": claim.id,
+                "topic": claim.topic,
+                "meeting": f"{meeting} meeting" if meeting else None,
+                "text": text,
+                "quote": claim.quote,
+                **_cite(video, claim.seconds),
+            }
+        )
+    return view
+
+
+def _story_page_view(
+    urls: Urls, item: Item, video: str | None, claims: tuple[Claim, ...]
+) -> dict[str, Any]:
+    return {
+        "episode": item,
+        "headline": item.display_headline,
+        "dek": item.display_dek,
+        "article": _article_view(item.article, video) if item.article is not None else None,
+        "claims": _claims_view(claims, video),
+        "video_url": video,
+        "meeting_date": date_long(item.meeting_date),
+        "published_date": date_long(item.published),
+        "board_href": urls.href(board_path(urls, item.board)),
+        "topics": _topic_chips(urls, item),
+        "republish": REPUBLISH_NOTICE,
+    }
+
+
+def _story_view(urls: Urls, story: Story) -> dict[str, Any]:
+    """The story page context for a story with no episode: no audio, chapters or script."""
+    return {
+        **_story_page_view(urls, story, story.video_url, story.claims),
+        "tags": [],
+        "chapters": [],
+        "script": [],
+        "audio": None,
+        "chapters_url": None,
+        "vtt_url": None,
+        "transcript_href": None,
+    }
 
 
 def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:
     audio_url = urls.resolve(episode.audio.url)
     video = episode.video_url
-    claims = [
-        {
-            "id": claim.id,
-            "topic": claim.topic,
-            "text": claim.text,
-            "quote": claim.quote,
-            **_cite(video, claim.seconds),
-        }
-        for claim in episode.claims
-    ]
     chapters = [
         {
             "title": chapter.title,
@@ -233,11 +279,7 @@ def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:
         for line in episode.script
     ]
     return {
-        "episode": episode,
-        "headline": episode.display_headline,
-        "dek": episode.display_dek,
-        "article": _article_view(episode.article, video) if episode.article is not None else None,
-        "claims": claims,
+        **_story_page_view(urls, episode, video, episode.claims),
         "chapters": chapters,
         "script": script,
         "audio": {
@@ -246,7 +288,6 @@ def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:
             "duration_s": round(episode.audio.duration_s, 2),
             "size": file_size(episode.audio.bytes),
         },
-        "video_url": video,
         "chapters_url": urls.resolve(episode.chapters_url) if episode.chapters_url else None,
         "vtt_url": urls.resolve(episode.vtt_url) if episode.vtt_url else None,
         "transcript_href": (
@@ -254,39 +295,46 @@ def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:
             if episode.transcript is not None
             else None
         ),
-        "meeting_date": date_long(episode.meeting_date),
-        "published_date": date_long(episode.published),
-        "board_href": urls.href(board_path(urls, episode.board)),
-        "topics": _topic_chips(urls, episode),
         "tags": list(episode.tags),
-        "republish": REPUBLISH_NOTICE,
     }
 
 
-def _card(urls: Urls, episode: Episode) -> dict[str, Any]:
-    """One episode as a list row or a lead story."""
+def _card(
+    urls: Urls,
+    item: Item,
+    *,
+    stills: Mapping[str, str] | None = None,
+    colors: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
+    """One story or episode as a list row, a story card or the lead story."""
     first_vote = None
-    if episode.article is not None and episode.article.votes:
-        vote = episode.article.votes[0]
+    if item.article is not None and item.article.votes:
+        vote = item.article.votes[0]
         first_vote = vote_badge(vote.result, vote.tally)
+    audio = item.audio if isinstance(item, Episode) else None
+    still = (stills or {}).get(youtube_id(item.video_url) or "")
     return {
-        "id": episode.id,
-        "headline": episode.display_headline,
-        "href": urls.href(episode_path(urls, episode)),
-        "board": episode.board,
-        "board_href": urls.href(board_path(urls, episode.board)),
-        "meeting_title": episode.meeting_name,
-        "meeting_date": date_long(episode.meeting_date),
-        "iso_date": episode.meeting_date.isoformat(),
-        "short_date": short_date(episode.meeting_date),
-        "day": f"{MONTHS_SHORT[episode.meeting_date.month - 1]} {episode.meeting_date.day:02d}",
-        "published_date": date_long(episode.published),
-        "dek": episode.display_dek,
-        "length": clock(episode.audio.duration_s),
-        "sample": episode.sample,
-        "claims": len(episode.claims),
+        "id": item.id,
+        "headline": item.display_headline,
+        "href": urls.href(item_path(urls, item)),
+        "board": item.board,
+        "board_href": urls.href(board_path(urls, item.board)),
+        "meeting_title": item.meeting_name,
+        "meeting_date": date_long(item.meeting_date),
+        "iso_date": item.meeting_date.isoformat(),
+        "short_date": short_date(item.meeting_date),
+        "day": f"{MONTHS_SHORT[item.meeting_date.month - 1]} {item.meeting_date.day:02d}",
+        "published_date": date_long(item.published),
+        "dek": item.display_dek,
+        "has_audio": audio is not None,
+        "length": clock(audio.duration_s) if audio is not None else None,
+        "sample": item.sample,
+        "claims": len(item.claims),
         "vote": first_vote,
-        "month": month_key(episode.meeting_date),
+        "month": month_key(item.meeting_date),
+        "still": urls.href(still) if still else None,
+        "color": (colors or {}).get(item.board, 0),
+        "top": False,
     }
 
 
@@ -343,22 +391,52 @@ def _list_page(
     return PageSpec(path, "list.html", context)
 
 
-def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSpec], list[str]]:
+def _newest_first(item: Item) -> tuple[date, bool, datetime, str]:
+    """Newest meeting first; on the same day a written story comes before a roundup's recap."""
+    return (item.meeting_date, item.article is not None, item.published, item.id)
+
+
+def _month_groups(
+    urls: Urls, cards: list[dict[str, Any]], newest_month: str | None
+) -> list[dict[str, Any]]:
+    """Month groups for the front page list. The newest month reads "Earlier in October"; a group
+    whose stories are all shown above the list has no rows to show (``has_rows`` is False)."""
+    groups = _by_month(urls, cards)
+    for group in groups:
+        earlier = group["key"] == newest_month
+        group["label"] = f"Earlier in {group['name'].split()[0]}" if earlier else group["name"]
+        group["has_rows"] = any(not row["top"] for row in group["rows"])
+    return groups
+
+
+def build_pages(
+    site: SiteInput,
+    urls: Urls,
+    now: datetime,
+    stills: Mapping[str, str] | None = None,
+) -> tuple[list[PageSpec], list[str]]:
     """Return every HTML page and the sitemap paths for the site.
 
-    The second value is the list of page paths that the sitemap lists.
+    The second value is the list of page paths that the sitemap lists. ``stills`` maps a YouTube
+    video id to the site path of its still image.
     """
     city = site.city
     episodes = site.episodes
     pages: list[PageSpec] = []
-    cards = [_card(urls, episode) for episode in episodes]
+    items: list[Item] = sorted([*episodes, *site.stories], key=_newest_first, reverse=True)
+    colors = {
+        name: index % BOARD_COLORS for index, name in enumerate(sorted({i.board for i in items}))
+    }
+    cards = [_card(urls, item, stills=stills, colors=colors) for item in items]
+    for card in cards[: 1 + TOP_CARDS]:
+        card["top"] = True
     card_by_id = {card["id"]: card for card in cards}
 
-    # Topics with at least one episode, in the fixed order, with their episodes.
+    # Topics with at least one story, in the fixed order, with their stories.
     topic_cards: dict[str, list[dict[str, Any]]] = {topic.slug: [] for topic in TOPICS}
-    for episode in episodes:
-        for topic in topics_for(episode):
-            topic_cards[topic.slug].append(card_by_id[episode.id])
+    for item in items:
+        for topic in topics_for(item):
+            topic_cards[topic.slug].append(card_by_id[item.id])
     used_topics = [
         {
             "slug": topic.slug,
@@ -386,6 +464,8 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
         for name, rows in boards.items()
     ]
 
+    episode_cards = [card_by_id[episode.id] for episode in episodes]
+
     # Front page.
     home = _base(
         city,
@@ -397,15 +477,21 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
     home["page"]["nav"] = "meetings"
     home["page"]["json_ld"] = [seo.script_block(seo.home_podcast_series(city, urls))]
     home["lead"] = cards[0] if cards else None
-    home["also"] = cards[1 : 1 + ALSO_COUNT]
-    home["months"] = _by_month(urls, cards)
+    home["top"] = cards[1 : 1 + TOP_CARDS]
+    home["months"] = _month_groups(urls, cards, cards[0]["month"] if cards else None)
     home["chips"] = used_topics
     home["boards"] = board_list
+    by_size = sorted(board_list, key=lambda b: (-b["count"], b["name"]))
+    home["boards_shown"] = by_size[:SIDEBAR_BOARDS]
+    home["boards_more"] = by_size[SIDEBAR_BOARDS:]
+    home["boards_href"] = urls.href(PAGE_BOARDS)
+    home["board_names"] = [board["name"] for board in board_list]
+    home["podcast_episodes"] = episode_cards[:SIDEBAR_EPISODES]
     home["podcast_links"] = _podcast_links(city, urls)
     home["podcast_href"] = urls.href(PAGE_PODCAST)
     home["archive_href"] = urls.href(PAGE_ARCHIVE)
     home["republish"] = REPUBLISH_NOTICE
-    pages.append(PageSpec("/", "home.html", home))
+    pages.append(PageSpec("/", "home.html", home, ("/assets/front.js",)))
 
     for episode in episodes:
         path = episode_path(urls, episode)
@@ -460,6 +546,27 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
             pages.append(
                 PageSpec(episode_path(urls, episode, "transcript"), "transcript.html", transcript)
             )
+
+    for story in site.stories:
+        path = story_path(urls, story)
+        context = _base(
+            city,
+            urls,
+            path=path,
+            title=f"{story.display_headline} | {city.site_title}",
+            description=story.display_dek or city.tagline,
+        )
+        context["page"]["og_type"] = "article"
+        context["page"]["published"] = story.published.isoformat()
+        context["page"]["nav"] = "episode"
+        context["page"]["json_ld"] = [
+            seo.script_block(seo.episode_news_article(city, urls, story, section="stories"))
+        ]
+        context.update(_story_view(urls, story))
+        context["more"] = [card for card in boards[story.board] if card["id"] != story.id][
+            :MORE_COUNT
+        ]
+        pages.append(PageSpec(path, "episode.html", context))
 
     # Boards.
     boards_index = _base(
@@ -579,7 +686,7 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
     )
     podcast["page"]["nav"] = "podcast"
     podcast["podcast_links"] = _podcast_links(city, urls)
-    podcast["episodes"] = cards
+    podcast["episodes"] = episode_cards
     podcast["artwork_href"] = urls.href(artwork_path(city))
     pages.append(PageSpec(PAGE_PODCAST, "podcast.html", podcast))
 
@@ -628,4 +735,21 @@ def build_pages(site: SiteInput, urls: Urls, now: datetime) -> tuple[list[PageSp
     )
     missing["page"]["noindex"] = True
     pages.append(PageSpec(PAGE_NOT_FOUND, "notfound.html", missing))
+
+    # A story whose meeting now has an episode: its old address goes to the episode page.
+    by_id = {episode.id: episode for episode in episodes}
+    for story_id in site.merged_stories:
+        target = urls.page_path("episodes", by_id[story_id].id)
+        pages.append(
+            PageSpec(
+                urls.page_path("stories", story_id),
+                "redirect.html",
+                {"target": urls.href(target), "canonical": urls.absolute(target)},
+            )
+        )
+
+    for page in pages:
+        if page.template != "redirect.html":
+            page.context["topic_chips"] = used_topics
+            page.context["today"] = f"{now:%A}, {date_long(now)}"
     return pages, sitemap_paths

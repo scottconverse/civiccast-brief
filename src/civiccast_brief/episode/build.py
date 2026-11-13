@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ from civiccast_brief.review.desk import stage_item
 from civiccast_brief.script.checker import check_script
 from civiccast_brief.script.recap import Recap, load_recap
 from civiccast_brief.script.writer import ROUNDUP_ID, load_script, render_txt
+from civiccast_brief.site.titles import roundup_title
 
 UNKNOWN = "unknown"
 
@@ -107,19 +108,6 @@ def _iso_date(long_date: str) -> str:
     return datetime.strptime(last, "%B %d, %Y").date().isoformat()
 
 
-def _date_range(long_dates: str) -> str:
-    """A roundup's dates ("A and B and C") as a range: "September 22 to November 3, 2026"."""
-    days = [datetime.strptime(d.strip(), "%B %d, %Y").date() for d in long_dates.split(" and ")]
-    first, last = min(days), max(days)
-
-    def long(day: date, year: bool) -> str:
-        return f"{day:%B} {day.day}, {day.year}" if year else f"{day:%B} {day.day}"
-
-    if first == last:
-        return long(last, True)
-    return f"{long(first, first.year != last.year)} to {long(last, True)}"
-
-
 def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
     """The written title from title.json when there is one and it passes, else the dated one."""
     path = meeting_dir / "title.json"
@@ -130,7 +118,11 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
             raise EpisodeError(f"{path} fails the check: {render_issues(issues)}")
         return title.text
     if roundup:
-        return f"{recap.city} weekly roundup: {_date_range(recap.meeting_date)}"
+        days = [
+            datetime.strptime(d.strip(), "%B %d, %Y").date()
+            for d in recap.meeting_date.split(" and ")
+        ]
+        return roundup_title(recap.city, days)
     return f"{recap.city} {recap.body}, {recap.meeting_date}"
 
 
@@ -165,6 +157,67 @@ def _article(
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
 
+def episode_slug(recap: Recap, city_slug: str) -> str:
+    """The id of a meeting's episode, and of its story: "2026-11-03-longmont-city-council"."""
+    kind = (
+        "weekly-roundup" if recap.video_id == ROUNDUP_ID else recap.body.lower().replace(" ", "-")
+    )
+    return f"{_iso_date(recap.meeting_date)}-{city_slug}-{kind}"
+
+
+def assemble_story(
+    *,
+    article_dir: Path,
+    meeting_dir: Path,
+    city_slug: str,
+    published: str,
+) -> dict[str, Any]:
+    """A published story as a stand-alone site file: no audio, no script. The story is checked
+    again against the recap, exactly as when it is added to an episode.
+
+    ``published`` is used when the item has no publish time of its own.
+    """
+    recap, data = _meeting(meeting_dir)
+    if recap.video_id == ROUNDUP_ID:
+        raise EpisodeError("a roundup has no stand-alone story")
+    segments = transcript_mod.from_json(data)
+    article = _article(article_dir, recap, data, segments, meeting_dir / "documents.json")
+    meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
+    published_at = str(meta.get("published_at") or "")
+    return {
+        "id": episode_slug(recap, city_slug),
+        "city": city_slug,
+        "approved": True,
+        "approved_by": f"editor desk, {published_at or published}",
+        "board": recap.body,
+        "meeting_title": str(data.get("title") or recap.body),
+        "meeting_date": _iso_date(recap.meeting_date),
+        "published": _aware(published_at) or published,
+        "recap": {
+            "claims": [
+                {
+                    "id": c.id,
+                    "topic": c.topic,
+                    "text": c.text,
+                    "timestamp": c.timestamp,
+                    "quote": c.quote,
+                }
+                for c in recap.claims
+            ]
+        },
+        "video_url": _video_url(data),
+        "article": article,
+    }
+
+
+def _aware(text: str) -> str | None:
+    """The text when it is an ISO time with a zone offset, else None."""
+    try:
+        return text if datetime.fromisoformat(text).tzinfo is not None else None
+    except ValueError:
+        return None
+
+
 def assemble(
     *,
     item_dir: Path,
@@ -191,8 +244,7 @@ def assemble(
     chapters = json.loads((audio_dir / "chapters.json").read_text(encoding="utf-8"))
     roundup = recap.video_id == ROUNDUP_ID
     day = _iso_date(recap.meeting_date)
-    kind = "weekly-roundup" if roundup else recap.body.lower().replace(" ", "-")
-    slug = f"{day}-{city_slug}-{kind}"
+    slug = episode_slug(recap, city_slug)
     base = media_base_url.rstrip("/")
     names = meta.get("speakers") or {}
     segments = [] if roundup else transcript_mod.from_json(data)

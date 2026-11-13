@@ -11,6 +11,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from civiccast_brief.site import stills
 from civiccast_brief.site.build import build_site
 from civiccast_brief.site.home import DEFAULT_CITIES, build_home
 from civiccast_brief.site.model import InputError
@@ -33,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         required=True,
         help="public address of the site, such as https://longmont.civiccastbrief.org",
+    )
+    build.add_argument(
+        "--stills",
+        action="store_true",
+        help="download each meeting video's still image once (kept in <episodes>/stills) "
+        "and serve it from the site",
     )
     home = commands.add_parser("home", help="write the civiccastbrief.org home page")
     home.add_argument(
@@ -72,7 +79,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command != "build":
         return 2
     try:
-        report = build_site(args.episodes, args.out, args.base_url)
+        report = build_site(
+            args.episodes,
+            args.out,
+            args.base_url,
+            fetch_still=stills.download if args.stills else None,
+        )
     except InputError as exc:
         for problem in exc.problems:
             print(f"input error: {problem}", file=sys.stderr)
@@ -80,7 +92,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"built {report.episodes} approved episode(s) into {report.out_dir}")
+    print(
+        f"built {report.episodes} approved episode(s) and {report.stories} story(ies) "
+        f"without audio into {report.out_dir}"
+    )
     for episode_id, reason in report.excluded:
         print(f"left out {episode_id}: {reason}")
     print(

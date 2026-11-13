@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from civiccast_brief.site import images, seo
+from civiccast_brief.site import images, seo, stills
 from civiccast_brief.site.feed import artwork_path, build_feed
 from civiccast_brief.site.model import InputError, SiteInput, load_site_input
 from civiccast_brief.site.pages import (
@@ -29,6 +29,7 @@ MARKER = ".civiccast-site-output"
 class BuildReport:
     out_dir: Path
     episodes: int
+    stories: int
     excluded: tuple[tuple[str, str], ...]
     pages: tuple[str, ...]
     feed_items: int
@@ -57,6 +58,7 @@ def prepare_output(out_dir: Path) -> None:
 # no-transform stops the host from rewriting pages or adding its own scripts. The only
 # analytics script is the Cloudflare Web Analytics beacon the templates add themselves.
 HEADERS_PATH = "/_headers"
+REDIRECTS_PATH = "/_redirects"
 HEADERS_FILE = "/*\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n"
 
 
@@ -109,16 +111,30 @@ def build_site(
     base_url: str,
     *,
     now: datetime | None = None,
+    fetch_still: stills.Fetch | None = None,
 ) -> BuildReport:
-    """Build the site. Raises InputError for bad input and ValueError for an unsafe output folder."""
+    """Build the site. Raises InputError for bad input and ValueError for an unsafe output folder.
+
+    ``fetch_still`` downloads a meeting video's still image (see :mod:`stills`); without it only
+    stills already in the cache folder are used."""
     urls = Urls.from_base(base_url)
     site = load_site_input(episodes_dir)
-    if not site.episodes:
-        raise InputError([f"{episodes_dir}: no approved episodes to build"])
+    if not site.episodes and not site.stories:
+        raise InputError([f"{episodes_dir}: no approved episodes or stories to build"])
     stamp = now or datetime.now().astimezone()
-    pages, sitemap_paths = build_pages(site, urls, stamp)
+    video_ids = [
+        video_id
+        for item in (*site.episodes, *site.stories)
+        if (video_id := stills.youtube_id(item.video_url))
+    ]
+    found = stills.collect(video_ids, episodes_dir / stills.CACHE_DIR, fetch_still)
+    still_paths = {video_id: stills.still_path(video_id) for video_id in found}
+    pages, sitemap_paths = build_pages(site, urls, stamp, still_paths)
     prepare_output(out_dir)
     files = _write_assets(site, out_dir)
+    for video_id, data in found.items():
+        write_file(out_dir, still_paths[video_id], data)
+        files += 1
 
     env = make_environment(urls)
     for spec in pages:
@@ -129,14 +145,23 @@ def build_site(
 
     write_file(out_dir, SITEMAP_PATH, seo.sitemap_xml(urls, sitemap_paths))
     write_file(out_dir, ROBOTS_PATH, seo.robots_txt(urls))
-    write_file(out_dir, SEARCH_INDEX_PATH, seo.search_index_json(urls, site.episodes))
+    write_file(out_dir, SEARCH_INDEX_PATH, seo.search_index_json(urls, site.episodes, site.stories))
     write_file(out_dir, "feed.xml", build_feed(site.city, urls, site.episodes, stamp))
     write_file(out_dir, HEADERS_PATH, HEADERS_FILE)
     files += 5
+    if site.merged_stories:
+        # Hosts that read a _redirects file send a story's old address to its episode page.
+        lines = [
+            f"{urls.page_path('stories', story_id)} {urls.page_path('episodes', story_id)} 301"
+            for story_id in site.merged_stories
+        ]
+        write_file(out_dir, REDIRECTS_PATH, "\n".join(lines) + "\n")
+        files += 1
 
     return BuildReport(
         out_dir=out_dir,
         episodes=len(site.episodes),
+        stories=len(site.stories),
         excluded=site.excluded,
         pages=tuple(spec.path for spec in pages),
         feed_items=len(site.episodes),

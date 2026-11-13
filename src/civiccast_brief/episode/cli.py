@@ -8,7 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from civiccast_brief.episode.build import EpisodeError, assemble, stage
+from civiccast_brief.episode.build import EpisodeError, assemble, assemble_story, stage
 from civiccast_brief.review.store import ReviewError
 
 
@@ -30,6 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--published", required=True, help="publish time, ISO 8601 with offset")
     a.add_argument("--out", type=Path, required=True, help="episode JSON file to write")
     a.add_argument("--article", type=Path, help="exported, published article item folder")
+    t = commands.add_parser(
+        "story", help="write one stand-alone story file (no audio) from a published article"
+    )
+    t.add_argument("--article", type=Path, required=True, help="exported, published article item")
+    t.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
+    t.add_argument("--city", required=True, help="city slug, e.g. longmont")
+    t.add_argument("--published", required=True, help="publish time if the item has none")
+    t.add_argument("--out", type=Path, required=True, help="story JSON file to write")
     return parser
 
 
@@ -38,6 +46,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "stage":
             print(f"staged item {stage(args.db, args.meeting, args.script, args.city)}")
+            return 0
+        if args.command == "story":
+            story = assemble_story(
+                article_dir=args.article,
+                meeting_dir=args.meeting,
+                city_slug=args.city,
+                published=args.published,
+            )
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(
+                json.dumps(story, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            print(f"wrote {args.out} ({story['id']})")
             return 0
         episode = assemble(
             item_dir=args.item,
