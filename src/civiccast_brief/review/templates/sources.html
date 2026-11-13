@@ -72,6 +72,12 @@
                placeholder="2" inputmode="numeric" {{ invalid("view_id") }}></p>
       {{ field_error("view_id") }}
     </div>
+    <div data-kind="cablecast">
+      <p><label for="cablecast_host">Cablecast host</label><br>
+        <input class="wide" id="cablecast_host" type="text" name="cablecast_host" value="{{ form.get("cablecast_host", "") }}"
+               placeholder="reflect-yourcity.cablecast.tv" {{ invalid("cablecast_host") }}></p>
+      {{ field_error("cablecast_host") }}
+    </div>
     <div data-kind="webpage">
       <p><label for="page_url">Address of the page that links the meeting documents</label><br>
         <input class="wide" id="page_url" type="text" name="page_url" value="{{ form.get("page_url", "") }}"

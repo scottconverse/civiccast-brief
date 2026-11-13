@@ -33,7 +33,7 @@ HTML_AGENDA = 3
 
 def real_listers(client: Any) -> Listers:
     """The readers for live portals, channels and archives, over one ``httpx.Client``."""
-    from civiccast_brief.meeting import granicus
+    from civiccast_brief.meeting import cablecast, granicus
     from civiccast_brief.record.adapters.primegov import PrimeGovAdapter
     from civiccast_brief.record.video.youtube.channel import channel_lister
 
@@ -82,6 +82,7 @@ def real_listers(client: Any) -> Listers:
         primegov_documents=primegov_documents,
         youtube=channel.list_videos,
         granicus=granicus.list_clips,
+        cablecast=cablecast.list_shows,
         documents=documents,
         read_documents=read_listed,
     )

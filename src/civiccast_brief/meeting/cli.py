@@ -21,6 +21,7 @@ from pathlib import Path
 
 from civiccast_brief import models
 from civiccast_brief.city import CityError, load_city
+from civiccast_brief.meeting import cablecast as cablecast_mod
 from civiccast_brief.meeting import capture as capture_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
@@ -95,10 +96,12 @@ def _run(args: argparse.Namespace) -> int:
             diarize=args.diarize,
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
+            cablecast_host=args.cablecast,
         )
     except (
         capture_mod.CaptureError,
         granicus_mod.GranicusError,
+        cablecast_mod.CablecastError,
         CityError,
         PipelineError,
         llm.ModelError,
@@ -120,13 +123,19 @@ def main(argv: list[str] | None = None) -> int:
 
     run_cmd = commands.add_parser("run", help="capture, speakers and recap for one video")
     run_cmd.add_argument(
-        "video_id", help="the YouTube video id (e.g. uHFuCfd5MVQ), or with --granicus the clip id"
+        "video_id",
+        help="the YouTube video id (e.g. uHFuCfd5MVQ), or with --granicus the clip id, or with --cablecast the show id",
     )
     run_cmd.add_argument(
         "--granicus", metavar="HOST", help="Granicus host, e.g. oakland.granicus.com"
     )
     run_cmd.add_argument(
         "--view-id", type=int, help="Granicus ViewPublisher view_id that lists the clip"
+    )
+    run_cmd.add_argument(
+        "--cablecast",
+        metavar="HOST",
+        help="Cablecast host, e.g. reflect-yourcity.cablecast.tv; the video id is the show id",
     )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")

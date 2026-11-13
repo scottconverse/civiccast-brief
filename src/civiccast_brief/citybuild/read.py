@@ -108,6 +108,7 @@ def read_latest(
         "primegov": _primegov,
         "youtube": _youtube,
         "granicus": _granicus,
+        "cablecast": _cablecast,
         "webpage": _webpage,
         "gdrive": _gdrive,
         "civicclerk": _civicclerk,
@@ -408,6 +409,33 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     proof.title = clip.name
     proof.what = "video clip (captions read by the meeting command)"
     proof.document = granicus.video_url(source.host, int(source.view_id), clip.clip_id)
+
+
+# ----- Cablecast --------------------------------------------------------------------------------
+
+
+def _cablecast(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    from civiccast_brief.meeting import cablecast
+
+    try:
+        shows = cablecast.list_shows(source.host)
+    except cablecast.CablecastError as exc:
+        raise FetchError(str(exc)) from exc
+    dated = []
+    for show in shows:
+        if body_matches(proof.body, show.name):
+            when = datetime.strptime(show.date, "%B %d, %Y").date()
+            if when <= today:
+                dated.append((when, show))
+    if not dated:
+        proof.problem = f"no show on {source.host} names {proof.body!r} in its title"
+        return
+    when, show = max(dated, key=lambda pair: pair[0])
+    proof.ok = True
+    proof.meeting_date = when
+    proof.title = show.name
+    proof.what = "video show (captions read by the meeting command)"
+    proof.document = cablecast.video_url(source.host, show.show_id)
 
 
 # ----- Web page ---------------------------------------------------------------------------------

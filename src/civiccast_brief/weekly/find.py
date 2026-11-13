@@ -7,6 +7,8 @@
   and name one of the source's bodies, or another body the city's sources list: a city's channel
   carries all its bodies' meetings, and setup names only the bodies its newest titles showed.
 - A **Granicus** archive lists its clips with their names and dates.
+- A **Cablecast** site lists its shows that have a video; a title must name one of the source's
+  bodies (the site also carries shows that are not meetings).
 - A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **CivicWeb**, **web page** or **Google Drive**
   source lists a body's agendas, packets and minutes by date, and no video
   (:mod:`civiccast_brief.weekly.listed`). They go with the video meeting of the same body on the
@@ -58,6 +60,7 @@ class Found:
     video: str = ""
     granicus_host: str = ""
     granicus_view_id: int | None = None
+    cablecast_host: str = ""
     agenda: Agenda | None = None
     #: Fetches the meeting's documents when called: (documents.json data, report lines). None
     #: when the source lists no documents (a channel or an archive).
@@ -71,6 +74,8 @@ class Found:
     def key(self) -> str:
         if self.granicus_host:
             return f"granicus:{self.granicus_host}/{self.video}"
+        if self.cablecast_host:
+            return f"cablecast:{self.cablecast_host}/{self.video}"
         if self.video:
             return f"youtube:{self.video}"
         return f"{self.source_id}:{self.day.isoformat()}:{self.title}"
@@ -90,6 +95,8 @@ class Listers:
     youtube: Callable[[str], Sequence[Any]] | None = None
     #: (host, view id) -> clips with .clip_id, .name, .date ("October 6, 2026")
     granicus: Callable[[str, int], Sequence[Any]] | None = None
+    #: (host) -> shows with .show_id, .name, .date ("October 6, 2026"); only shows with a video
+    cablecast: Callable[[str], Sequence[Any]] | None = None
     #: (source, first day, last day) -> listed.Doc rows, for the kinds in listed.KINDS
     documents: Callable[[Source, date, date], Sequence[Any]] | None = None
     #: (one meeting's listed.Doc rows) -> (documents.json data, report lines); fetched when called
@@ -226,6 +233,31 @@ def _granicus(source: Source, first: date, last: date, listers: Listers) -> list
     return found
 
 
+def _cablecast(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
+    found: list[Found] = []
+    for show in listers.cablecast(source.host):  # type: ignore[misc]
+        day = _day(show.date)
+        if day is None or not first <= day <= last:
+            continue
+        title = str(show.name)
+        # A Cablecast site carries every body's meetings and its shows too, so a title must
+        # name one of the source's bodies; a show that names none is not a meeting of theirs.
+        body = match_body(title, source.bodies)
+        if not body:
+            continue
+        found.append(
+            Found(
+                body,
+                day,
+                title,
+                source.id,
+                str(show.show_id),
+                cablecast_host=source.host,
+            )
+        )
+    return found
+
+
 NO_VIDEO = "only the meeting's documents are listed; no source lists its video"
 
 
@@ -260,7 +292,12 @@ def _chain(*fetches: Callable[[], tuple[dict[str, Any], list[str]]] | None) -> A
     return fetch
 
 
-READERS = {"primegov": _primegov, "youtube": _youtube, "granicus": _granicus}
+READERS = {
+    "primegov": _primegov,
+    "youtube": _youtube,
+    "granicus": _granicus,
+    "cablecast": _cablecast,
+}
 LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
 
 

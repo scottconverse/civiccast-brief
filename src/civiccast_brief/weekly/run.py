@@ -271,6 +271,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
                 "--view-id",
                 str(meeting.granicus_view_id),
             ]
+        if meeting.cablecast_host:
+            argv += ["--cablecast", meeting.cablecast_host]
         if settings.diarize:
             argv.append("--diarize")
         _call(steps.meeting, argv, "meeting run")
