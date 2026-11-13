@@ -467,3 +467,30 @@ def test_an_episode_id_has_only_what_the_site_accepts():
         claims=(),
     )
     assert B.episode_slug(council, "longmont") == "2026-11-03-longmont-city-council"
+
+
+def test_a_written_title_starts_with_a_capital(tmp_path, meeting, monkeypatch):
+    """The 10 November 2026 roundup went live as 'city council advances ordinance ...'."""
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 10.0)
+    item_dir = _roundup(tmp_path, meeting_dir)
+    (meeting_dir / "title.json").write_text(
+        json.dumps({"title": "council passes its consent agenda", "claim_ids": ["m2-c01"]})
+    )
+    assert _assemble(item_dir, meeting_dir, audio)["headline"] == (
+        "Council passes its consent agenda"
+    )
+
+
+def test_a_dated_headline_does_not_name_the_city_twice(tmp_path):
+    """Live on 13 November 2026: 'Longmont Longmont Housing Authority Advisory Board, ...'."""
+    from types import SimpleNamespace as NS
+
+    def headline(body):
+        recap = NS(city="Longmont", body=body, meeting_date="November 10, 2026")
+        return B._headline(recap, tmp_path, roundup=False)
+
+    assert headline("Longmont Housing Authority Advisory Board") == (
+        "Longmont Housing Authority Advisory Board, November 10, 2026"
+    )
+    assert headline("City Council") == "Longmont City Council, November 10, 2026"

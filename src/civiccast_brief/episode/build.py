@@ -116,14 +116,18 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
         issues = check_title(recap, title)
         if issues:
             raise EpisodeError(f"{path} fails the check: {render_issues(issues)}")
-        return title.text
+        # A written title is a headline; the model sometimes starts one lowercase.
+        return title.text[:1].upper() + title.text[1:]
     if roundup:
         days = [
             datetime.strptime(d.strip(), "%B %d, %Y").date()
             for d in recap.meeting_date.split(" and ")
         ]
         return roundup_title(recap.city, days)
-    return f"{recap.city} {recap.body}, {recap.meeting_date}"
+    # "Longmont Housing Authority Board" already names the city.
+    named = recap.body.lower().startswith(f"{recap.city.lower()} ")
+    body = recap.body if named else f"{recap.city} {recap.body}"
+    return f"{body}, {recap.meeting_date}"
 
 
 def _article(
