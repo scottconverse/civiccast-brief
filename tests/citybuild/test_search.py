@@ -140,7 +140,22 @@ def test_the_website_is_guessed_from_the_name_and_state(web):
 def test_a_city_with_no_website_says_so(web):
     found = search_city("Nowhere", "CO", fetcher=web.fetcher(), today=TODAY)
     assert found.candidates == []
-    assert "give it with --website" in found.notes[0]
+    # The desk shows this note too, where the website is a form box, not a flag.
+    assert "City website" in found.notes[0] and "--website" in found.notes[0]
+
+
+def test_a_cablecast_archive_says_which_host_to_add_on_the_sources_page(web):
+    gallery = (
+        "https://reflect-cityofloveland-co.cablecast.tv/CablecastPublicSite/gallery/2?channel=1"
+    )
+    web.add("https://city.test/", f'<html><a href="{gallery}">Watch meetings</a></html>')
+    found = search_city(
+        "Loveland", "CO", website="https://city.test/", fetcher=web.fetcher(), today=TODAY
+    )
+    (cable,) = [u for u in found.unread if u.platform == "Cablecast"]
+    assert "host reflect-cityofloveland-co.cablecast.tv" in cable.note
+    assert "Sources page" in cable.note
+    assert not any("no reader" in line for line in found.report())
 
 
 def test_a_given_page_with_nothing_to_read_is_named(web):

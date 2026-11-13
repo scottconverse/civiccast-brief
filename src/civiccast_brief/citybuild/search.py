@@ -148,7 +148,7 @@ class Candidate:
 
 @dataclass
 class Unread:
-    """A meeting platform that was found but has no reader in this program."""
+    """A meeting platform that was found but is not offered to add; ``note`` says why."""
 
     platform: str
     url: str
@@ -212,7 +212,7 @@ class Search:
             out.append(f"            bodies: {', '.join(c.source.bodies)}")
             out.append(f"            found: {c.how}")
         if self.unread:
-            out.append(f"Found, no reader in this program yet ({len(self.unread)}):")
+            out.append(f"Found, not offered to add ({len(self.unread)}):")
             out += [
                 f"  {u.platform}: {u.url}" + (f" ({u.note})" if u.note else "") for u in self.unread
             ]
@@ -287,7 +287,11 @@ def search_city(
         if item.platform in _LISTED:
             _LISTED[item.platform](result, item, fetcher, today, None)
         elif item.platform == "cablecast":
-            note = "the program can read it; add it on the Sources page with the bodies it carries"
+            host = (urlsplit(item.url).hostname or "").lower()
+            note = (
+                f"the program can read it: on the Sources page, add a Cablecast source "
+                f"with host {host} and the bodies it carries"
+            )
             result.unread.append(Unread(item.label, item.url, note))
         elif item.platform not in ("primegov", "legistar", "granicus", "youtube", "gdrive"):
             result.unread.append(Unread(item.label, item.url))
@@ -339,7 +343,10 @@ def _find_website(
             result.website = page.url
             result.notes.append(f"website guessed from the name: {page.url}")
             return page
-    result.notes.append("no website found from the name; give it with --website")
+    result.notes.append(
+        "no website found from the name; give the city's website "
+        "(City website in the desk, --website on the command line)"
+    )
     return None
 
 

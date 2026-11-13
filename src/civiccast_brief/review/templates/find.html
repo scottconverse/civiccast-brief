@@ -57,7 +57,8 @@ sources below and press Add.</p>
 <p>No source the program can read was found.</p>
 {% endif %}
 {% if found.unread %}
-<h3>Found, but this program has no reader for it yet</h3>
+<h3>Found, but not offered to add</h3>
+<p class="muted">Each line says why, and what to do.</p>
 <ul>
 {% for u in found.unread %}<li>{{ u.platform }}: {{ u.url }}{% if u.note %} ({{ u.note }}){% endif %}</li>{% endfor %}
 </ul>
