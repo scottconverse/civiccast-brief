@@ -21,6 +21,7 @@ from xml.sax.saxutils import escape
 from civiccast_brief.site.directories import EPISODE_DESCRIPTION_MAX_CHARS
 from civiccast_brief.site.model import City, Episode
 from civiccast_brief.site.timecode import clock
+from civiccast_brief.site.titles import split_meeting_label
 from civiccast_brief.site.urls import Urls, timestamp_link
 
 PODCAST_GUID_NAMESPACE = uuid.UUID("ead4c236-bf58-58c6-a2c6-a6b28d128cb6")
@@ -58,7 +59,9 @@ def _item_html(city: City, urls: Urls, episode: Episode) -> str:
             link = timestamp_link(episode.video_url, claim.seconds)
             if link:
                 cite = f' (<a href="{_attr(link)}">video at {clock(claim.seconds)}</a>)'
-        parts.append(f"<p>{escape(claim.text)}{cite}</p>")
+        meeting, text = split_meeting_label(claim.text)
+        lead_in = f"{meeting} meeting: " if meeting else ""
+        parts.append(f"<p>{escape(lead_in + text)}{cite}</p>")
     parts.append(f'<p><a href="{_attr(page)}">Episode page</a></p>')
     return "".join(parts)
 

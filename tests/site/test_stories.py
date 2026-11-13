@@ -179,3 +179,17 @@ def test_roundup_recap_lines_show_the_meeting_as_a_label(tmp_path: Path) -> None
     page = _read(out, "episodes/2026-10-20-example-council/index.html")
     assert '<span class="meeting-tag">October 6, 2026 meeting</span> The annexation passed.' in page
     assert "[October 6, 2026 meeting]" not in page
+
+
+def test_roundup_show_notes_in_the_feed_have_no_bracketed_meeting_prefix(tmp_path: Path) -> None:
+    episodes = tmp_path / "episodes"
+    shutil.copytree(FIXTURES, episodes)
+    path = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["recap"]["claims"][0]["text"] = "[October 6, 2026 meeting] The annexation passed."
+    path.write_text(json.dumps(data), "utf-8")
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+    feed = _read(out, "feed.xml")
+    assert "[October 6, 2026 meeting]" not in feed
+    assert "October 6, 2026 meeting: The annexation passed." in feed

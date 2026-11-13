@@ -148,7 +148,7 @@ code { font-family: var(--mono); font-size: .85em; overflow-wrap: anywhere; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; align-items: start; }
 .home-main { display: grid; gap: 28px; min-width: 0; }
 .home-side { display: grid; gap: 16px; align-content: start; min-width: 0; }
-.lead { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+.lead { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 24px; background: var(--docket-soft); border: 1px solid var(--rule); border-radius: 12px; }
 .lead-text { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .kicker { font: 500 .75rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--docket); }
 .kicker a { color: inherit; text-decoration: none; }
