@@ -206,10 +206,11 @@ $lines = @(
     'rem Starts the CivicCast Brief editor desk at http://127.0.0.1:8765/ . Written by install.ps1.',
     'set "WORK=%USERPROFILE%\Documents\CivicCast Brief"',
     'if not exist "%WORK%" mkdir "%WORK%"',
+    'if not exist "%WORK%\city" mkdir "%WORK%\city"',
     'set PYTHONIOENCODING=utf-8',
     'rem The browser opens a few seconds later, once the desk answers.',
     'start "" /min powershell -NoProfile -Command "Start-Sleep 4; Start-Process http://127.0.0.1:8765/"',
-    "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`""
+    "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`" --city `"%WORK%\city`""
 )
 Set-Content -Path $launcher -Value $lines -Encoding ascii
 Ok "wrote $launcher"
