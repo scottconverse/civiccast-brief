@@ -200,6 +200,18 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
     return found
 
 
+def _day_reason(title: str, last: date) -> str:
+    """Why a channel video of a known body cannot run yet, or ''."""
+    named = title_day(title)
+    if named is None:
+        # The meeting run takes the date from the title, so it would fail ("November 2026").
+        return "the title names no meeting day"
+    if named > last:
+        # A live stream is listed days before it starts; it has no captions yet.
+        return f"the meeting is on {named.isoformat()}, after this run"
+    return ""
+
+
 def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
     found: list[Found] = []
     for video in listers.youtube(source.channel_id):  # type: ignore[misc]
@@ -214,10 +226,10 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
         if day is None or not in_days or not listers.classifier.is_meeting(title):
             continue
         body = match_body(title, source.bodies, listers.city)
-        reason = "" if body else f"the title names no body this source covers ({body_name(title)})"
-        if not reason and named is None:
-            # The meeting run takes the date from the title, so it would fail ("November 2026").
-            reason = "the title names no meeting day"
+        if body:
+            reason = _day_reason(title, last)
+        else:
+            reason = f"the title names no body this source covers ({body_name(title)})"
         found.append(Found(body, day, title, source.id, str(video.video_id), reason=reason))
     return found
 
@@ -317,12 +329,14 @@ READERS = {
 LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
 
 
-def _city_body(meeting: Found, city_bodies: Sequence[str], city: str = "") -> Found:
+def _city_body(meeting: Found, city_bodies: Sequence[str], last: date, city: str = "") -> Found:
     """A channel video whose title names a body another of the city's sources lists."""
     if meeting.body:
         return meeting
     body = match_body(meeting.title, city_bodies, city)
-    return replace(meeting, body=body, reason="") if body else meeting
+    if not body:
+        return meeting
+    return replace(meeting, body=body, reason=_day_reason(meeting.title, last))
 
 
 def find_meetings(
@@ -349,7 +363,7 @@ def find_meetings(
             listed += meetings
             continue
         if source.kind == "youtube":
-            meetings = [_city_body(m, city_bodies, listers.city) for m in meetings]
+            meetings = [_city_body(m, city_bodies, last, listers.city) for m in meetings]
         for meeting in meetings:
             held = by_key.get(meeting.key)
             if held is None:
