@@ -49,9 +49,17 @@ def _setup(args: argparse.Namespace) -> int:
         return 1
     for path in written:
         print(f"wrote {path}")
+    platform = "granicus" if args.granicus else "youtube"
     print(
-        f"next: add the members to {args.folder / 'roster.json'} from the city's own page, "
-        "then run one meeting (see docs/set-up-a-city.md)"
+        f"capture.platform is set to {platform!r} in {args.folder / 'city.json'}. Only the "
+        "single-meeting command (`meeting run --city`) uses it; edit city.json to change it."
+    )
+    print(
+        "next, in this order (see docs/set-up-a-city.md):\n"
+        "  1. add the city's sources: `city find --out` or the desk's Sources screen, then "
+        "`city check`\n"
+        f"  2. add the members to {args.folder / 'roster.json'} from the city's own page\n"
+        "  3. run one meeting"
     )
     return 0
 
@@ -113,7 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("folder", type=Path, help="the new city folder, e.g. cities/oakland")
     cmd.add_argument("--slug", required=True, help="short web name, e.g. oakland")
     cmd.add_argument("--name", required=True, help="the city's name, e.g. Oakland")
-    cmd.add_argument("--state", required=True, help="the state's name, e.g. California")
+    cmd.add_argument(
+        "--state",
+        required=True,
+        help="the state, e.g. California or CA (a code is stored as the full name)",
+    )
     cmd.add_argument(
         "--body", default="City Council", help="the meeting body (default: %(default)s)"
     )

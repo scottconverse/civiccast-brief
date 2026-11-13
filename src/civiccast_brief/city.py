@@ -163,6 +163,9 @@ def setup(
         raise CityError(f"slug {slug!r} must be lowercase letters, digits and single hyphens")
     if granicus_host and granicus_view_id is None:
         raise CityError("a Granicus city needs --view-id as well as --granicus")
+    from civiccast_brief.citybuild.search import state_name
+
+    state = state_name(state)  # "CO" is stored as "Colorado"
     folder = Path(folder)
     targets = {
         folder / CITY_FILE: city_settings(

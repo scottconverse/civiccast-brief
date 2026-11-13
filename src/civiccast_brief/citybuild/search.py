@@ -84,6 +84,22 @@ STATES: Final = {
     "WY": "wyoming",
     "DC": "dc",
 }
+
+
+def state_name(state: str) -> str:
+    """The full name for a two-letter state code ("CO" gives "Colorado"); anything else as typed."""
+    text = state.strip()
+    slug = STATES.get(text.upper()) if len(text) == 2 else None
+    if slug is None:
+        return text
+    if slug == "dc":
+        return "District of Columbia"
+    for first in ("new", "north", "south", "west", "rhode"):
+        if slug.startswith(first) and slug != first:
+            return f"{first.title()} {slug[len(first) :].title()}"
+    return slug.title()
+
+
 #: Body names a video title or archive page is checked for when no platform listed the bodies.
 COMMON_BODIES: Final = (
     "City Council",
