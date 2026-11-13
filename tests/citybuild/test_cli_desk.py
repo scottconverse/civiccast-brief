@@ -60,7 +60,7 @@ def test_find_prints_and_writes_only_with_out(web, tmp_path, capsys, monkeypatch
     assert cli._find(find_args(out=folder, also=also), web.fetcher()) == 0
     out = capsys.readouterr().out
     assert f"wrote {folder / 'city.json'}" in out
-    assert "to fill in: roster.json members: the City Council members (no page on" in out
+    assert "filled in later: the City Council members: nothing to type, the weekly run fills" in out
     assert "contact_email" not in out  # the podcast address is the publisher's
     assert [s.kind for s in load_sources(folder)] == ["primegov", "youtube", "webpage"]
 
@@ -160,8 +160,8 @@ def test_the_find_screen_searches_then_adds_only_the_checked_sources(web, desk, 
     assert "Added 2 sources: PrimeGov portal (" in saved.text
     assert "Google Drive folder (1 body)" in saved.text
     assert "Kept city.json (already there)." in saved.text
-    assert "Wrote roster.json with no members." in saved.text
-    assert "Still to fill in: roster.json members" in saved.text
+    assert "Wrote roster.json with no members yet: the weekly run fills them in" in saved.text
+    assert "Filled in during the weekly run: the City Council members" in saved.text
     assert "saved the search to" not in saved.text  # the notice names files, not paths
     assert "added https://longmont.primegov.com" not in saved.text
     assert sorted(s.kind for s in load_sources(city)) == ["gdrive", "primegov"]

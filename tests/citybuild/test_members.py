@@ -264,7 +264,10 @@ def test_a_town_with_no_website_lists_the_roster_with_the_reason(web, tmp_path):
     found = Search(name="Ward", state="Colorado", website="")
     built = build_city(tmp_path, found, fetcher=web.fetcher())
     assert built.to_fill == [
-        "roster.json members: the City Council members (the city has no website the search found)"
+        (
+            "the City Council members: nothing to type, the weekly run fills them in from the "
+            "meeting records (the city has no website the search found)"
+        )
     ]
 
 

@@ -58,7 +58,9 @@ python -m civiccast_brief city find --name Longmont --state CO --website https:/
 
 With `--out`, it writes `sources.json`, plus `city.json` and `roster.json` stubs when the folder has
 none. It never overwrites a city.json or roster.json you already have. A source already in
-sources.json gains only the bodies it lacked. It ends with the fields still to fill in.
+sources.json gains only the bodies it lacked. The council and board members are not typed in: the weekly run fills each body's roster from the
+meeting's own records (the roll call in the minutes, member lists on the agenda), keeps each
+member's source, and the desk's Roster page shows who came from which record.
 
 Then check that each body really reads:
 

@@ -71,7 +71,7 @@ def _find(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     for line in built.lines:
         print(line)
     for line in built.to_fill:
-        print(f"to fill in: {line}")
+        print(f"filled in later: {line}")
     return 0 if found.candidates else 1
 
 

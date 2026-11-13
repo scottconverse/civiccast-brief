@@ -6,7 +6,8 @@ A city folder holds two files:
   that says where the city's meeting videos are: ``{"platform": "youtube"}`` or
   ``{"platform": "granicus", "host": "oakland.granicus.com", "view_id": 2}``.
 * ``roster.json``: the council members as the city's own page prints their names. It is the only
-  source of speaker names. ``setup`` writes it with no members; the operator fills it in.
+  source of speaker names. ``setup`` writes it with no members; the weekly run fills them in from each meeting's own
+  records (``civiccast_brief.weekly.rosterfill``), and a member added by hand is kept.
 
 ``python -m civiccast_brief.meeting run ... --city DIR`` reads the roster and the capture settings
 from the folder.
@@ -137,8 +138,9 @@ def roster_template(*, name: str, state: str, body: str, roster_page: str) -> di
         "retrieved": "",
         "sources": [roster_page] if roster_page else [],
         "note": (
-            "Add one entry per member, with the name exactly as the city's page prints it, and "
-            "set retrieved to the date you copied it. Example entry: "
+            "Nothing to type here. The weekly run fills the members in from each meeting's own "
+            "records (the roll call in the minutes, member lists on the agenda), with each "
+            "member's source. A member you add by hand stays. Entry format: "
             '{"name": "Jane Doe", "first": "Jane", "last": "Doe", "role": "Mayor"}'
         ),
         "members": [],
