@@ -63,7 +63,7 @@ On the voice PC (Windows, NVIDIA GPU, reached over ssh), as plain Windows Python
    (torch 2.9.1+cu128 on 2026-11-12).
 3. Make the folder `C:\dev\civiccast-brief-bakeoff\dia2tune` and put three files in it:
    - The chunked renderer. Copy `src/civiccast_brief/audio/box/render_dia2_chunked.py` from this repo to
-     `C:\dev\civiccast-brief-bakeoff\dia2tuneender_dia2_chunked.py` (the `Dia2Config.renderer` path). It
+     `C:\dev\civiccast-brief-bakeoff\dia2tune\render_dia2_chunked.py` (the `Dia2Config.renderer` path). It
      runs in the Dia2 venv from step 2, not in the CivicCast Brief environment.
    - Two reference voice clips, `ref_s1.wav` (host 1, Maya) and `ref_s2.wav` (host 2, Theo), at the
      `Dia2Config.ref_s1` and `Dia2Config.ref_s2` paths. The repo does not include clips. Bring your own: two
