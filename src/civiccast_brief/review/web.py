@@ -56,7 +56,7 @@ STATIC_DIR: Final = HERE / "static"
 RegenerateCallback = Callable[[DeskItem], None]
 
 _SOURCE_ID: Final = re.compile(
-    r"^(primegov|youtube|granicus|webpage|gdrive|civicclerk|escribe|civicplus|laserfiche):[A-Za-z0-9._/:~%?=&-]{1,500}$"
+    r"^(primegov|youtube|granicus|webpage|gdrive|civicclerk|escribe|civicweb|civicplus|laserfiche):[A-Za-z0-9._/:~%?=&-]{1,500}$"
 )
 _ITEM_ACTIONS: Final = ("save", "publish", "hold", "kill", "redraft", "regenerate")
 _CSP: Final = (
@@ -569,6 +569,8 @@ def make_desk_app(
                 form["clerk_tenant"] = form.pop("tenant", "")
             if found[0].kind == "escribe":
                 form["escribe_tenant"] = form.pop("tenant", "")
+            if found[0].kind == "civicweb":
+                form["civicweb_tenant"] = form.pop("tenant", "")
             if found[0].kind == "laserfiche":
                 form["laserfiche_url"] = form.pop("url", "")
         return state.sources_page(form=form, editing=edit, notice=source_notice(done, id, rows))

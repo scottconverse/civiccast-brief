@@ -235,3 +235,29 @@ def add_boulder_county(web: Web) -> None:
         f"{base}/Meeting.aspx?Id={BOCC_1105}&Agenda=Agenda&lang=English",
         "escribe-bocc-agenda-2026-11-05.html",
     )
+
+
+LOVELAND = "cilovelandco"
+#: Meetings of Loveland's CivicWeb portal and their documents, trimmed from the live answers of
+#: 2026-11-12 (the agenda HTML is cut after its first items and the cover text is blanked).
+LOVELAND_DOCS = (18421, 18423, 18182, 18353, 18077, 18195)
+
+
+def add_loveland(web: Web, today, docs: tuple[int, ...] = LOVELAND_DOCS) -> None:
+    """Loveland's CivicWeb portal: its meeting types, 18 meetings (13 Oct - 23 Nov and a few
+    older), and the document lists of the meetings in ``docs``."""
+    from civiccast_brief.citybuild import platforms
+
+    base = platforms.civicweb_base(LOVELAND)
+    web.fixture(base + "/Portal/MeetingTypeList.aspx", "civicweb-loveland-meeting-types.html")
+    web.fixture(
+        platforms.civicweb_meetings_url(LOVELAND, today),
+        "civicweb-loveland-meetings.json",
+        "application/json",
+    )
+    for meeting in docs:
+        web.fixture(
+            platforms.civicweb_documents_url(LOVELAND, meeting),
+            f"civicweb-loveland-docs-{meeting}.json",
+            "application/json",
+        )

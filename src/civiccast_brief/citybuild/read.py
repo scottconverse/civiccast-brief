@@ -112,6 +112,7 @@ def read_latest(
         "gdrive": _gdrive,
         "civicclerk": _civicclerk,
         "escribe": _escribe,
+        "civicweb": _civicweb,
         "civicplus": _civicplus,
         "laserfiche": _laserfiche,
     }
@@ -515,7 +516,7 @@ def _gdrive(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None
     proof.problem = "; ".join(errors + notes)
 
 
-# ----- CivicClerk, eScribe and CivicPlus --------------------------------------------------------
+# ----- CivicClerk, eScribe, CivicWeb and CivicPlus --------------------------------------------------------
 
 _NOTICE: Final = re.compile(r"\bnotice\b", re.IGNORECASE)
 
@@ -593,6 +594,55 @@ def _escribe(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> Non
             proof.what = what
             proof.lines = [f"{len(items)} {what} items"] + [item[:160] for item in items[:3]]
             return
+    proof.problem = "; ".join(tried)
+
+
+def _civicweb(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> None:
+    """The newest past, published, uncancelled meeting of the body whose agenda is posted.
+
+    The agenda is read from the HTML the portal's own answer holds, so a check does not download
+    the agenda packet (Loveland's 4 November 2026 council packet is 88 MB).
+    """
+    meetings = [
+        m
+        for m in platforms.civicweb_meetings(source.tenant, fetcher, today)
+        if body_matches(proof.body, m["Name"])
+    ]
+    if not meetings:
+        proof.problem = (
+            f"no published {proof.body!r} meeting in the portal's last {platforms.CIVICWEB_DAYS} "
+            f"days up to {today}"
+        )
+        return
+    tried: list[str] = []
+    for meeting in meetings[:TRIES]:
+        day = meeting["day"]
+        try:
+            rows = platforms.civicweb_rows(source.tenant, meeting, fetcher)
+        except FetchError as exc:
+            tried.append(f"{day}: {exc}")
+            continue
+        agenda = rows.get(1)
+        if agenda is None or not agenda.get("Html"):
+            tried.append(f"{day}: no agenda posted")
+            continue
+        _title, items = platforms.civicweb_items(str(agenda["Html"]))
+        if items:
+            lines = [f"{len(items)} agenda items"] + [item[:160] for item in items[:3]]
+        else:
+            lines = [line[:160] for line in platforms.civicweb_lines(str(agenda["Html"]))[:4]]
+        if not lines:
+            tried.append(f"{day}: the agenda has no text")
+            continue
+        proof.ok = True
+        proof.meeting_date = day
+        proof.title = meeting["Name"]
+        proof.document = platforms.civicweb_document_url(
+            source.tenant, int(agenda["Id"]), meeting["Name"], ".html"
+        )
+        proof.what = "agenda"
+        proof.lines = lines
+        return
     proof.problem = "; ".join(tried)
 
 

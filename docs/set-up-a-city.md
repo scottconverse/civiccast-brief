@@ -114,6 +114,7 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | Granicus video archive | the host and the `view_id` number | `yourcity.granicus.com`, `2` |
 | Web page of meeting documents | the page that links the agendas, packets or minutes; optionally the path its meeting pages start with | `https://www.svcmontessori.org/board-meetings`; `/boardmeetings/` |
 | Google Drive folder | the public folder's address or id | `https://drive.google.com/drive/folders/15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2` |
+| CivicWeb portal | the portal's address or its tenant, the part before `.civicweb.net` | `https://yourtown.civicweb.net` |
 
 A web page source reads the newest dated document it links. When the page links one page per
 meeting instead (a school district's board calendar, for example), give the path those pages start

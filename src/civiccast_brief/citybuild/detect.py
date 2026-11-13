@@ -21,6 +21,7 @@ READABLE: Final = (
     "gdrive",
     "civicclerk",
     "escribe",
+    "civicweb",
     "civicplus",
 )
 

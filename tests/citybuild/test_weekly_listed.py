@@ -22,6 +22,7 @@ from .conftest import (
     BOULDER_COUNTY,
     ERIE,
     LAFAYETTE,
+    LOVELAND,
     LYONS,
     SVVSD,
     SVVSD_180,
@@ -30,6 +31,7 @@ from .conftest import (
     TPCA_ROOT,
     add_boulder_county,
     add_erie,
+    add_loveland,
     add_tpca_drive,
     text_pdf,
 )
@@ -239,3 +241,67 @@ def test_a_listed_file_that_is_not_a_document_is_reported_not_read_as_pages(web)
     assert data["documents"] == []
     assert lines[0].startswith("agenda: not read: ")
     assert "application/octet-stream" in lines[0]
+
+
+def test_civicweb_lists_the_listed_bodys_documents_in_the_days(web):
+    add_loveland(web, date(2026, 11, 12))
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": ["City Council"]})
+    docs = listed.list_docs(source, date(2026, 11, 1), date(2026, 11, 12), web.fetcher())
+    # The 9 November Planning Commission meeting is not the listed body's, and is not asked for;
+    # the 17 and 19 November council meetings are after the run's last day.
+    assert _days(docs) == [
+        ("City Council", date(2026, 11, 4)),
+        ("City Council", date(2026, 11, 10)),
+    ]
+    assert [(d.day, d.what) for d in docs] == [
+        (date(2026, 11, 10), "agenda"),
+        (date(2026, 11, 10), "packet"),
+        (date(2026, 11, 4), "agenda"),
+        (date(2026, 11, 4), "packet"),
+    ]
+    portal = "https://cilovelandco.civicweb.net"
+    assert docs[1].url == (
+        f"{portal}/document/522975/"
+        "LOVELAND%20CITY%20COUNCIL%20STUDY%20SESSION%20-%2010%20Nov%202026.pdf"
+    )
+    assert not any("18182" in url for url in web.asked)
+
+
+def test_civicweb_lists_the_adopted_minutes_of_a_meeting(web):
+    last = date(2026, 8, 25)
+    add_loveland(web, last)
+    source = make_source("civicweb", {"tenant": LOVELAND, "bodies": ["City Council"]})
+    docs = listed.list_docs(source, date(2026, 8, 19), last, web.fetcher())
+    assert [(d.day, d.what) for d in docs] == [
+        (date(2026, 8, 19), "agenda"),
+        (date(2026, 8, 19), "packet"),
+        (date(2026, 8, 19), "minutes"),
+    ]
+    assert docs[2].url.startswith("https://cilovelandco.civicweb.net/document/520275/")
+    assert docs[2].url.endswith(".pdf")
+
+
+def test_a_civicweb_agenda_page_is_read_as_its_lines_of_text(web):
+    import json
+
+    import pytest
+
+    from civiccast_brief.citybuild.fetch import FetchError
+
+    from .conftest import HERE
+
+    rows = json.loads((HERE / "civicweb-loveland-docs-18182.json").read_text("utf-8"))
+    (agenda,) = [row for row in rows if row["DocumentType"] == 1]
+    url = f"https://cilovelandco.civicweb.net/document/{agenda['Id']}/Agenda.html"
+    web.add(url, agenda["Html"])
+    doc = listed.Doc("Planning Commission", date(2026, 11, 9), "Agenda", url, "agenda")
+    sha, pages, unread = listed.read_pages(doc, web.fetcher())
+    assert len(sha) == 64 and unread == []
+    assert len(pages) == 1
+    assert "I. CALL TO ORDER\nII. PLEDGE OF ALLEGIANCE\nIII. ROLL CALL" in pages[0]
+    # A web page that is not a CivicWeb document is still not taken for one.
+    other_url = "https://cilovelandco.civicweb.net/other"
+    web.add(other_url, "<html><body>Sign in</body></html>")
+    other = listed.Doc("Planning Commission", date(2026, 11, 9), "x", other_url, "agenda")
+    with pytest.raises(FetchError, match="web page, not the document"):
+        listed.read_pages(other, web.fetcher())

@@ -171,6 +171,7 @@ def test_merging_adds_new_sources_and_only_the_missing_bodies(tmp_path):
         ("webpage:https://x.org/index.jsp?uREC_ID=560576&type=d", True),
         ("civicclerk:erieco", True),
         ("escribe:bouldercounty", True),
+        ("civicweb:cilovelandco", True),
         ("civicplus:www.townoflyons.com", True),
         ("rss:https://x.org/", False),
         ("webpage:https://x.org/<script>", False),
@@ -199,6 +200,13 @@ def test_the_desk_knows_the_new_source_ids(source_id, ok):
             "https://pub-bouldercounty.escribemeetings.com",
         ),
         (
+            "civicweb",
+            {"civicweb_tenant": "https://CILovelandCO.civicweb.net/Portal/MeetingTypeList.aspx"},
+            "civicweb:cilovelandco",
+            "https://cilovelandco.civicweb.net",
+        ),
+        ("civicweb", {"tenant": " cilovelandco "}, "civicweb:cilovelandco", None),
+        (
             "civicplus",
             {"site": "https://www.townoflyons.com/AgendaCenter"},
             "civicplus:www.townoflyons.com",
@@ -225,6 +233,9 @@ def test_meeting_platform_sources_take_an_address_or_a_tenant(
         ("civicclerk", {"clerk_tenant": "https://erie.primegov.com"}, "clerk_tenant", "not that"),
         ("civicclerk", {"clerk_tenant": "erie co"}, "clerk_tenant", "not a tenant name"),
         ("escribe", {"escribe_tenant": "bouldercounty.escribe.com"}, "escribe_tenant", "not that"),
+        ("civicweb", {}, "civicweb_tenant", "enter the tenant"),
+        ("civicweb", {"civicweb_tenant": "https://x.primegov.com"}, "civicweb_tenant", "not that"),
+        ("civicweb", {"civicweb_tenant": "love land"}, "civicweb_tenant", "not a tenant name"),
         ("civicplus", {"site": ""}, "site", "enter the town site"),
         ("civicplus", {"site": "https://lyons"}, "site", "not a site address"),
     ],
@@ -267,3 +278,17 @@ def test_a_bad_laserfiche_address_names_the_field(value, match):
     with pytest.raises(S.SourceError, match=match) as info:
         S.make_source("laserfiche", {"laserfiche_url": value, "bodies": "Board"})
     assert info.value.field == "laserfiche_url"
+
+
+def test_a_civicweb_source_is_written_with_its_tenant_and_read_back(tmp_path):
+    source = S.make_source("civicweb", {"tenant": "cilovelandco", "bodies": "City Council"})
+    S.add_source(tmp_path, source)
+    row = json.loads((tmp_path / "sources.json").read_text(encoding="utf-8"))["sources"][0]
+    assert row == {
+        "id": "civicweb:cilovelandco",
+        "kind": "civicweb",
+        "tenant": "cilovelandco",
+        "bodies": ["City Council"],
+    }
+    assert S.load_sources(tmp_path) == [source]
+    assert S.KIND_LABELS["civicweb"] == "CivicWeb portal"

@@ -297,3 +297,51 @@ def test_a_laserfiche_source_opens_for_editing_with_its_folder_filled_in(store, 
     page = client.get("/sources", params={"edit": f"laserfiche:{url}"})
     assert page.status_code == 200
     assert 'name="laserfiche_url" value="' + url.replace("&", "&amp;") + '"' in page.text
+
+
+def test_a_civicweb_source_is_added_edited_and_its_tenant_error_names_the_field(store, city):
+    client = client_for(store, city)
+    t = token(client)
+    bad = client.post(
+        "/sources/add",
+        data={
+            "token": t,
+            "kind": "civicweb",
+            "civicweb_tenant": "https://yourtown.primegov.com",
+            "bodies": "City Council",
+        },
+    )
+    assert bad.status_code == 400
+    assert 'id="civicweb_tenant-error"' in bad.text
+    assert 'placeholder="https://yourtown.civicweb.net"' in bad.text
+    added = client.post(
+        "/sources/add",
+        data={
+            "token": t,
+            "kind": "civicweb",
+            "civicweb_tenant": "https://cilovelandco.civicweb.net/Portal/",
+            "bodies": "City Council",
+        },
+    )
+    assert added.status_code == 200
+    assert "Added https://cilovelandco.civicweb.net for City Council" in added.text
+    assert sources.load_sources(city)[0].id == "civicweb:cilovelandco"
+    page = client.get("/sources", params={"edit": "civicweb:cilovelandco"})
+    assert page.status_code == 200
+    assert 'name="civicweb_tenant" value="cilovelandco"' in page.text
+    saved = client.post(
+        "/sources/edit",
+        data={
+            "token": t,
+            "source_id": "civicweb:cilovelandco",
+            "kind": "civicweb",
+            "civicweb_tenant": "cilovelandco",
+            "bodies": "City Council\nPlanning Commission",
+        },
+    )
+    assert saved.status_code == 200
+    assert sources.load_sources(city)[0].bodies == ("City Council", "Planning Commission")
+    removed = client.post(
+        "/sources/remove", data={"token": t, "source_id": "civicweb:cilovelandco"}
+    )
+    assert removed.status_code == 200 and sources.load_sources(city) == []

@@ -20,6 +20,8 @@ The desk's Sources screen adds, edits and removes them. The file::
          "bodies": ["Planning Commission"]},
         {"id": "escribe:bouldercounty", "kind": "escribe", "tenant": "bouldercounty",
          "bodies": ["Board of County Commissioners"]},
+        {"id": "civicweb:cilovelandco", "kind": "civicweb", "tenant": "cilovelandco",
+         "bodies": ["City Council"]},
         {"id": "civicplus:www.townoflyons.com", "kind": "civicplus",
          "site": "www.townoflyons.com", "bodies": ["Board of Trustees"]},
         {"id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville",
@@ -42,6 +44,8 @@ Kinds and what each needs:
   ``https://erieco.portal.civicclerk.com``.
 - ``escribe``: an eScribe meetings site, by its tenant: ``bouldercounty`` in
   ``https://pub-bouldercounty.escribemeetings.com``.
+- ``civicweb``: a CivicWeb (iCompass) portal, by its tenant: ``cilovelandco`` in
+  ``https://cilovelandco.civicweb.net``.
 - ``civicplus``: a CivicPlus town site with an Agenda Center or an Archive Center, by its host:
   ``www.townoflyons.com``.
 - ``laserfiche``: one body's folder in a Laserfiche WebLink records site, by its Browse.aspx
@@ -73,6 +77,7 @@ KINDS: Final = (
     "gdrive",
     "civicclerk",
     "escribe",
+    "civicweb",
     "civicplus",
     "laserfiche",
 )
@@ -84,6 +89,7 @@ KIND_LABELS: Final = {
     "gdrive": "Google Drive folder",
     "civicclerk": "CivicClerk portal",
     "escribe": "eScribe meetings site",
+    "civicweb": "CivicWeb portal",
     "civicplus": "CivicPlus Agenda Center or Archive Center",
     "laserfiche": "Laserfiche WebLink folder (read in Chrome)",
 }
@@ -96,6 +102,7 @@ _VIEW_ID: Final = re.compile(r"^[0-9]{1,6}$")
 _FOLDER_ID: Final = re.compile(r"^[A-Za-z0-9_-]{10,100}$")
 _CLERK_HOST: Final = re.compile(rf"^({_LABEL})\.(?:portal|api)\.civicclerk\.com$")
 _ESCRIBE_HOST: Final = re.compile(rf"^pub-({_LABEL})\.escribemeetings\.com$")
+_CIVICWEB_HOST: Final = re.compile(rf"^({_LABEL})\.civicweb\.net$")
 _TENANT: Final = re.compile(rf"^{_LABEL}$")
 _SITE: Final = re.compile(rf"^(?:{_LABEL}\.)+[a-z]{{2,24}}$")
 _FOLLOW: Final = re.compile(r"^/[A-Za-z0-9._~%/-]{1,200}$")
@@ -121,7 +128,7 @@ class Source:
     view_id: str = ""
     follow: str = ""
     folder_id: str = ""
-    #: The CivicClerk or eScribe tenant.
+    #: The CivicClerk, eScribe or CivicWeb tenant.
     tenant: str = ""
     #: The CivicPlus site's host.
     site: str = ""
@@ -136,7 +143,7 @@ class Source:
             return f"{self.kind}:{self.url}"
         if self.kind == "gdrive":
             return f"gdrive:{self.folder_id}"
-        if self.kind in ("civicclerk", "escribe"):
+        if self.kind in ("civicclerk", "escribe", "civicweb"):
             return f"{self.kind}:{self.tenant}"
         if self.kind == "civicplus":
             return f"civicplus:{self.site}"
@@ -155,6 +162,8 @@ class Source:
             return f"https://{self.tenant}.portal.civicclerk.com"
         if self.kind == "escribe":
             return f"https://pub-{self.tenant}.escribemeetings.com"
+        if self.kind == "civicweb":
+            return f"https://{self.tenant}.civicweb.net"
         if self.kind == "civicplus":
             return f"https://{self.site}"
         return f"https://{self.host}/ViewPublisher.php?view_id={self.view_id}"
@@ -171,7 +180,7 @@ class Source:
                 data["follow"] = self.follow
         elif self.kind == "gdrive":
             data["folder_id"] = self.folder_id
-        elif self.kind in ("civicclerk", "escribe"):
+        elif self.kind in ("civicclerk", "escribe", "civicweb"):
             data["tenant"] = self.tenant
         elif self.kind == "civicplus":
             data["site"] = self.site
@@ -401,6 +410,10 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
         tenant = _tenant(
             value, _ESCRIBE_HOST, "escribe_tenant", "https://pub-yourcounty.escribemeetings.com"
         )
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=tenant)
+    if kind == "civicweb":
+        value = str(fields.get("civicweb_tenant") or fields.get("tenant") or "")
+        tenant = _tenant(value, _CIVICWEB_HOST, "civicweb_tenant", "https://yourtown.civicweb.net")
         return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=tenant)
     if kind == "civicplus":
         site = _site(str(fields.get("site") or ""))
