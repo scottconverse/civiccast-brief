@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set nav = "runs" %}
-{% block head %}{% if job.running %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block head %}{% if job.running or job.publish_at %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
 {% block content %}
 <h2>Weekly job</h2>
 {% if notice %}<p class="notice{% if notice_bad %} error{% endif %}" role="{{ 'alert' if notice_bad else 'status' }}">{{ notice }}</p>{% endif %}
@@ -12,6 +12,8 @@
   <dd>{% if job.last %}<span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% if job.last.seconds is not none %}, took {{ job.last.seconds|duration }}{% endif %} &middot; <a href="{{ root }}/runs/{{ job.last.id }}">output</a>{% else %}None yet{% endif %}</dd>
   <dt>Next run</dt>
   <dd>{{ job.next_at|when }}</dd>
+  {% if job.publish_at %}<dt>Publish</dt>
+  <dd><strong>Queued</strong>: the site goes out at {{ job.publish_at|when }}{% if job.running %}, or when this run ends{% endif %}.</dd>{% endif %}
 </dl>
 <form method="post" action="{{ root }}/runs/now" class="actions">
   <input type="hidden" name="token" value="{{ token }}">
@@ -26,7 +28,7 @@
   {% for run in job.runs %}
     <tr>
       <td>{{ run.started_at|when }}</td>
-      <td>{{ "Run now" if run.trigger == "manual" else "Schedule" }}</td>
+      <td>{{ run.trigger|trigger }}</td>
       <td><span class="status {{ run.status }}">{{ run.status }}</span></td>
       <td>{% if run.seconds is not none %}{{ run.seconds|duration }}{% else %}—{% endif %}</td>
       <td><a href="{{ root }}/runs/{{ run.id }}">Output</a></td>

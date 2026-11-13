@@ -5,7 +5,7 @@
 <p><a href="{{ root }}/runs">&larr; Weekly job</a></p>
 <h2>Run {{ run.id }}</h2>
 <p><span class="status {{ run.status }}">{{ run.status }}</span>
-  &middot; {{ "Run now" if run.trigger == "manual" else "Schedule" }}
+  &middot; {{ run.trigger|trigger }}
   &middot; started {{ run.started_at|when }}{% if run.seconds is not none %}, took {{ run.seconds|duration }}{% endif %}
   {% if run.exit_code %}&middot; ended with code {{ run.exit_code }}{% endif %}</p>
 {% if run.status == "running" %}<p class="muted" role="status">Still running. This page refreshes every 5 seconds.</p>{% endif %}

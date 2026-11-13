@@ -8,6 +8,10 @@ finds the last 7 days of meetings in the city's ``sources.json`` and runs each o
     --episodes site-in --media media --site-out site
     --base-url https://longmont.civiccastbrief.org --media-base-url https://media.example.org
 
+    python -m civiccast_brief.weekly publish --city ... --work ... --db ... <the site settings>
+
+does only the site steps, for what is published on the desk now; no meeting is looked for.
+
 Exit 0 when every runnable meeting and the site steps finished; 1 when any failed. A meeting
 that cannot be run (no video, cancelled, no body) is listed with the reason and is not a failure.
 Rerun the same command to try the failed steps again.
@@ -26,7 +30,7 @@ from civiccast_brief.city import CityError, load_city
 from civiccast_brief.sources import SourceError, load_sources
 from civiccast_brief.weekly.documents import Fetcher, read_documents
 from civiccast_brief.weekly.find import Agenda, Listers, find_meetings
-from civiccast_brief.weekly.run import Settings, Site, run_week
+from civiccast_brief.weekly.run import Settings, Site, publish_site, run_week
 
 HTML_AGENDA = 3
 
@@ -134,6 +138,26 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         return _week(city.name, sources, first, last, listers, settings)
 
 
+def _publish(args: argparse.Namespace) -> int:
+    try:
+        city = load_city(args.city)
+        site = _site(args, city.slug)
+    except (CityError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if site is None:
+        print(
+            "error: publish needs the site settings (--episodes ... --media-base-url)",
+            file=sys.stderr,
+        )
+        return 1
+    settings = Settings(city=args.city, work=args.work, db=args.db, site=site)
+    report = publish_site(settings)
+    for line in report.lines:
+        print(line)
+    return 1 if report.failed else 0
+
+
 def _week(
     name: str, sources: Any, first: date, last: date, listers: Listers, settings: Settings
 ) -> int:
@@ -158,20 +182,29 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--first", type=date.fromisoformat, help="first day, YYYY-MM-DD")
     run.add_argument("--last", type=date.fromisoformat, help="last day (default: today)")
     run.add_argument("--diarize", action="store_true", help="label caption lines with voices")
-    run.add_argument("--episodes", type=Path, help="site input folder (city.json, episodes)")
-    run.add_argument("--media", type=Path, help="folder for the MP3, chapters and VTT files")
-    run.add_argument("--site-out", type=Path, help="folder the site is built into")
-    run.add_argument("--base-url", help="public address of the site")
-    run.add_argument("--media-base-url", help="where the media files will be served")
-    run.add_argument("--audio-engine", help="voice engine (default: the audio command's)")
+    _site_options(run)
+    publish = commands.add_parser("publish", help="build the site from what is published now")
+    publish.add_argument("--city", type=Path, required=True, help="city folder (city.json ...)")
+    publish.add_argument("--work", type=Path, required=True, help="the weekly run's work folder")
+    publish.add_argument("--db", type=Path, required=True, help="editor desk database")
+    _site_options(publish)
     return parser
+
+
+def _site_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--episodes", type=Path, help="site input folder (city.json, episodes)")
+    parser.add_argument("--media", type=Path, help="folder for the MP3, chapters and VTT files")
+    parser.add_argument("--site-out", type=Path, help="folder the site is built into")
+    parser.add_argument("--base-url", help="public address of the site")
+    parser.add_argument("--media-base-url", help="where the media files will be served")
+    parser.add_argument("--audio-engine", help="voice engine (default: the audio command's)")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
-    return _run(args)
+    return _publish(args) if args.command == "publish" else _run(args)
 
 
 if __name__ == "__main__":

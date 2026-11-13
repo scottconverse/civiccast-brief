@@ -680,10 +680,29 @@ def run_week(
     line = run_roundup(steps, settings, state, last)
     report.add(line, failed=line.startswith("roundup: failed"))
     if settings.site is not None:
-        when = published or datetime.now().astimezone().isoformat(timespec="seconds")
-        try:
-            for line, failed in publish(steps, settings, state, when):
-                report.add(line, failed=failed)
-        except StepFailed as exc:
-            report.add(f"site: {exc}", failed=True)
+        _publish_into(report, steps, settings, state, published)
     return report
+
+
+def publish_site(
+    settings: Settings, steps: Steps | None = None, published: str | None = None
+) -> Report:
+    """Only the site steps: export the desk, build what is published, build the site.
+
+    The station runs this about half a minute after an editor publishes, edits or kills a
+    public item, so the site follows the desk without waiting for the weekly run."""
+    assert settings.site is not None, "publish_site needs the site settings"
+    report = Report()
+    _publish_into(report, steps or Steps(), settings, State(settings.work / STATE_NAME), published)
+    return report
+
+
+def _publish_into(
+    report: Report, steps: Steps, settings: Settings, state: State, published: str | None
+) -> None:
+    when = published or datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        for line, failed in publish(steps, settings, state, when):
+            report.add(line, failed=failed)
+    except StepFailed as exc:
+        report.add(f"site: {exc}", failed=True)
