@@ -30,7 +30,7 @@ Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization 
 | Ollama at `127.0.0.1:11434` with the writer model | recap, script | The default model is `deepseek-v4.1-flash:1017-cloud`. Pass `--model` to use another. |
 | yt-dlp, installed by CivicCast Brief | YouTube capture | Run `python -m civiccast_brief tools --test-video <URL>` once, with any public YouTube meeting video that has captions. It installs yt-dlp into `~/.civiccast-brief/record/runtimes/yt-dlp` and makes it active only after it fetches that video's captions. Not needed for a Granicus city. |
 | The `diarize` extra and a Hugging Face token | `--diarize` only | `uv sync --extra diarize`, and set `HF_TOKEN` to a free Hugging Face token that has accepted the pyannote model terms. Without `--diarize`, names come from the roll call only. |
-| A voice engine | audio | Chatterbox or Dia2. The default voice is not picked yet, so the engine setup is not written up here. |
+| A voice engine | audio | Dia2 (the default) or Chatterbox, on a Windows PC with an NVIDIA GPU, reached over ssh. Both run as plain Windows Python; none needs Linux. Dia2 setup: [voice-bakeoff.md](voice-bakeoff.md#dia2-setup). |
 
 ## 1. Start the city folder
 
@@ -335,7 +335,7 @@ drafts go to review, and rejected items are killed. Keep a copy of the file befo
 python -m civiccast_brief.audio runs/2026-11-03/script.txt --out runs/2026-11-03/audio
 ```
 
-The default voice is Step-Audio-EditX (`stepaudio`). Add `--engine chatterbox` or `--engine dia2` to use another.
+The default voice is Dia2 (`dia2`). Add `--engine chatterbox` to use Chatterbox.
 
 This writes `episode.mp3`, `chapters.json` and `transcript.vtt`.
 

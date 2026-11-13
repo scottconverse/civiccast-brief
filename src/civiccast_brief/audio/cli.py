@@ -1,9 +1,9 @@
 """Command line for the audio package.
 
-    python -m civiccast_brief.audio SCRIPT [--engine stepaudio|chatterbox|dia2|fake] --out DIR
+    python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|fake] --out DIR
                                     [--intro FILE] [--outro FILE] [--config FILE]
 
-The default engine is stepaudio (Step-Audio-EditX), Scott's pick on 2026-11-06 "for now". Output in DIR:
+The default engine is dia2 (Scott, 2026-11-12). Output in DIR:
 episode.mp3, chapters.json, transcript.vtt, and work/ (the raw voice WAV, the program and master
 WAVs, and render.json with the line timings).
 """
