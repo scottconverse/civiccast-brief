@@ -1,8 +1,53 @@
 {% extends "base.html" %}
 {% set nav = "items" %}
 {% block content %}
-<h2>Items</h2>
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if not current and not error %}
+<h2>Control room</h2>
+{% if job %}
+<p>Weekly job: {% if job.running %}<strong>running</strong> since {{ job.running.started_at|when }}{% elif job.last %}last run <span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% else %}no run yet{% endif %}
+  &middot; next run {{ job.next_at|when }}{% if job.publish_at %} &middot; <strong>publish queued</strong> for {{ job.publish_at|when }}{% endif %}
+  &middot; <a href="{{ root }}/runs">Weekly job and Run now</a></p>
+{% endif %}
+<h3>Problems ({{ problems|length }})</h3>
+{% if problems %}
+<ul class="problems">
+  {% for p in problems %}
+  <li><a href="{{ root }}{{ p.href }}">{{ p.what }}</a>: {{ p.why }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">Nothing needs you.</p>
+{% endif %}
+<h3>What went out ({{ went_out|length }})</h3>
+{% if went_out %}
+<table>
+  <thead><tr><th>Item</th><th>Published</th><th></th></tr></thead>
+  <tbody>
+  {% for item in went_out %}
+    <tr>
+      <td>{{ item.headline or item.title }}<br><span class="muted">{{ item.kind }} &middot; {{ item.body or "no body" }} &middot; {{ item.meeting_date }}</span></td>
+      <td>{{ item.published_at|localtime }}<br><span class="muted">{{ item.published_by }}</span></td>
+      <td class="actions">
+        <a href="{{ root }}/items/{{ item.id }}">Edit</a>
+        <form method="post" action="{{ root }}/items/{{ item.id }}/unpublish">
+          <input type="hidden" name="token" value="{{ token }}">
+          <button type="submit" data-busy="Unpublishing…">Unpublish</button>
+        </form>
+        <form method="post" action="{{ root }}/items/{{ item.id }}/kill">
+          <input type="hidden" name="token" value="{{ token }}">
+          <button type="submit" data-busy="Killing…">Kill</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Nothing is published yet.</p>
+{% endif %}
+{% endif %}
+<h2>All items</h2>
 <p class="tabs">
   <a href="{{ root }}/" {% if not current %}aria-current="page"{% endif %}>All</a>
   {% for s in statuses %}
