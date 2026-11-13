@@ -20,6 +20,11 @@ yet, ``audio``, ``episode assemble`` (with the published story of the same meeti
 files copied under their episode names; each published story is written as a stand-alone
 story file (so it is on the site with or without an episode); and ``site build``.
 
+With ``Settings.worker`` (``--worker DIR``) a Windows PC does two of these steps for a cloud
+server (see :mod:`civiccast_brief.weekly.worker`): a YouTube meeting waits until the PC sent its
+captions, and a published episode waits until the PC sent its audio. Waiting is not a failure;
+the PC's upload starts the next run or publish.
+
 ``weekly-state.json`` in the work folder records each meeting's steps, so a rerun picks up where
 the last one stopped: a finished meeting is not run again, a failed one is tried again.
 """
@@ -47,6 +52,7 @@ from civiccast_brief.site.model import CITY_FILE, ROSTER_FILE, STORIES_DIR
 from civiccast_brief.weekly import rosterfill
 from civiccast_brief.weekly.documents import DOCUMENTS_NAME, write_documents
 from civiccast_brief.weekly.find import Found
+from civiccast_brief.weekly.worker import AUDIO, CAPTIONS, WorkerFolder, audio_key
 
 Main = Callable[[Sequence[str]], int]
 STATE_NAME = "weekly-state.json"
@@ -96,6 +102,8 @@ class Settings:
     db: Path
     diarize: bool = False
     site: Site | None = None
+    #: The PC worker's folder: YouTube captions and audio come from a Windows PC.
+    worker: Path | None = None
 
 
 def slug(text: str) -> str:
@@ -135,6 +143,10 @@ class State:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         text = json.dumps(self.data, indent=2, ensure_ascii=False) + "\n"
         self.path.write_text(text, encoding="utf-8", newline="\n")
+
+
+class Waiting(Exception):
+    """A step waits for the PC worker; the meeting is tried again on the next run."""
 
 
 class StepFailed(Exception):
@@ -275,6 +287,12 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             raise StepFailed(
                 f"no roster for {meeting.body} (add rosters/{slug(meeting.body)}.json)"
             )
+        youtube = meeting.video and not (meeting.granicus_host or meeting.cablecast_host)
+        if settings.worker is not None and youtube:
+            inbox = WorkerFolder(settings.worker)
+            if not inbox.copy_into(CAPTIONS, meeting.video, folder / "raw"):
+                inbox.want_captions(meeting.video)
+                raise Waiting("waiting for its captions from the PC worker")
         argv = ["run", meeting.video, "--out", str(folder), "--city", str(settings.city)]
         argv += ["--roster", str(roster)]
         if meeting.agenda is not None:
@@ -580,6 +598,14 @@ def publish(
         folder = Path(entry["folder"])
         try:
             script_txt, script_json, audio = _desk_script(folder, entry, path, meta)
+            if not (audio / "episode.mp3").is_file() and settings.worker is not None:
+                words = script_txt.read_text(encoding="utf-8")
+                key = audio_key(words, site.audio_engine)
+                inbox = WorkerFolder(settings.worker)
+                if not inbox.copy_into(AUDIO, key, audio):
+                    inbox.want_audio(key, words, site.audio_engine)
+                    log.append((f"{meeting_id}: waiting for its audio from the PC worker", False))
+                    continue
             if not (audio / "episode.mp3").is_file():
                 engine = ["--engine", site.audio_engine] if site.audio_engine else []
                 _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
@@ -667,6 +693,11 @@ def run_week(
             continue
         try:
             run_meeting(steps, settings, meeting, entry)
+        except Waiting as exc:
+            entry.update(status="waiting", error=str(exc))
+            state.save()
+            report.add(f"{meeting.day} {meeting.title}: {exc}")
+            continue
         except StepFailed as exc:
             _record(state, entry, str(exc))
             report.add(f"{meeting.day} {meeting.title}: failed: {exc}", failed=True)

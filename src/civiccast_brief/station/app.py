@@ -2,6 +2,7 @@
 
     python -m civiccast_brief.station serve --config station.json [--port 8765]
     python -m civiccast_brief.station deploy cloudflare|folder ...   (see station/deploy.py)
+    python -m civiccast_brief.station worker --station URL           (see station/worker.py)
 
 ``station.json`` (paths are relative to its own folder; ``{python}`` is this Python)::
 
@@ -20,6 +21,10 @@
 
 ``publish`` is optional. Its commands run after the job, and alone (a publish run) about half
 a minute after an editor publishes, edits or kills a public item on the desk.
+
+``worker`` is optional: the folder a Windows PC fills with YouTube captions and audio for a
+cloud station. Give the job and publish commands the same folder as ``--worker``. The station
+then serves it at ``/worker`` and needs the worker token (station/worker.py).
 """
 
 from __future__ import annotations
@@ -40,7 +45,9 @@ from fastapi.responses import RedirectResponse
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import BIND_HOST, DEFAULT_PORT, make_desk_app, serve
 from civiccast_brief.station import deploy
+from civiccast_brief.station import worker as pc
 from civiccast_brief.station.runner import Schedule, Station, StationError
+from civiccast_brief.weekly.worker import WorkerFolder
 
 DESK_ROOT = "/desk"
 
@@ -53,6 +60,7 @@ class StationConfig:
     job: list[list[str]]
     folder: Path
     publish: list[list[str]]
+    worker: Path | None = None
 
 
 def load_config(path: Path) -> StationConfig:
@@ -84,15 +92,27 @@ def load_config(path: Path) -> StationConfig:
     if not isinstance(publish, list) or (publish and not _commands(publish)):
         raise StationError('"publish" must be a list of commands, each a list of words')
     city = place(data["city"], "city") if data.get("city") else None
-    return StationConfig(place(data.get("db"), "db"), city, schedule, job, folder, publish)
+    inbox = place(data["worker"], "worker") if data.get("worker") is not None else None
+    return StationConfig(
+        place(data.get("db"), "db"), city, schedule, job, folder, publish, worker=inbox
+    )
 
 
 def _commands(steps: list[Any]) -> bool:
     return all(isinstance(s, list) and s and all(isinstance(p, str) for p in s) for s in steps)
 
 
-def make_station_app(store: ReviewStore, station: Station, city_dir: Path | None = None) -> FastAPI:
-    """The desk mounted at /desk with the Runs page, and the scheduler running while it is up."""
+def make_station_app(
+    store: ReviewStore,
+    station: Station,
+    city_dir: Path | None = None,
+    *,
+    worker: WorkerFolder | None = None,
+    worker_token: str = "",
+) -> FastAPI:
+    """The desk mounted at /desk with the Runs page, and the scheduler running while it is up.
+
+    With ``worker`` the PC worker's API is at /worker (station/worker.py)."""
     desk = make_desk_app(store, city_dir=city_dir, root=DESK_ROOT, station=station)
 
     @asynccontextmanager
@@ -113,6 +133,8 @@ def make_station_app(store: ReviewStore, station: Station, city_dir: Path | None
     def home() -> RedirectResponse:
         return RedirectResponse(DESK_ROOT + "/", status_code=303)
 
+    if worker is not None:
+        app.mount("/worker", pc.make_worker_app(worker, station, worker_token))
     app.mount(DESK_ROOT, desk)
     return app
 
@@ -137,6 +159,20 @@ def build_parser() -> argparse.ArgumentParser:
     cloud.add_argument("--account", help="the Cloudflare account id")
     folder.add_argument("--out", type=Path, required=True, help="the web root")
     folder.add_argument("--media-out", type=Path, required=True, help="the media folder")
+    work = commands.add_parser(
+        "worker", help="on a Windows PC: fetch captions and make audio for a cloud station"
+    )
+    work.add_argument("--station", required=True, help="the station's address (https://...)")
+    work.add_argument(
+        "--work",
+        type=Path,
+        default=Path.home() / ".civiccast-brief" / "worker",
+        help="where the PC keeps its files (default ~/.civiccast-brief/worker)",
+    )
+    work.add_argument(
+        "--every", type=int, default=pc.DEFAULT_EVERY, help="seconds between checks (default 300)"
+    )
+    work.add_argument("--once", action="store_true", help="check once, do the jobs, then stop")
     return parser
 
 
@@ -159,12 +195,30 @@ def _deploy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _worker(args: argparse.Namespace) -> int:
+    if not args.station.startswith(("https://", "http://127.0.0.1", "http://localhost")):
+        print("error: --station must be an https:// address", file=sys.stderr)
+        return 1
+    token = pc.worker_token()
+    if not token:
+        print(
+            f"error: set {pc.TOKEN_ENV} or the Windows credential {pc.TOKEN_CREDENTIAL} "
+            "to the station's worker token",
+            file=sys.stderr,
+        )
+        return 1
+    _say(f"CivicCast Brief worker for {args.station} (Ctrl+C to stop)")
+    return pc.run_worker(args.station, token, args.work, _say, every=args.every, once=args.once)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
     if args.command == "deploy":
         return _deploy(args)
+    if args.command == "worker":
+        return _worker(args)
     try:
         config = load_config(args.config)
         if config.city is not None and not config.city.is_dir():
@@ -173,7 +227,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             station = Station(
                 config.db, config.job, config.schedule, cwd=config.folder, publish=config.publish
             )
-            app = make_station_app(store, station, config.city)
+            inbox = token = None
+            if config.worker is not None:
+                token = pc.worker_token()
+                if not token:
+                    raise StationError(
+                        f'"worker" needs the worker token: set {pc.TOKEN_ENV} or the Windows '
+                        f"credential {pc.TOKEN_CREDENTIAL}"
+                    )
+                inbox = WorkerFolder(config.worker)
+            app = make_station_app(
+                store, station, config.city, worker=inbox, worker_token=token or ""
+            )
             print(
                 f"CivicCast Brief: http://{BIND_HOST}:{args.port}{DESK_ROOT}/  "
                 f"(weekly job: {config.schedule.describe()}; Ctrl+C to stop)",

@@ -126,7 +126,21 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         return 1
     last = args.last or date.today()
     first = args.first or last - timedelta(days=args.days - 1)
-    settings = Settings(city=args.city, work=args.work, db=args.db, diarize=args.diarize, site=site)
+    if args.worker and args.diarize:
+        print(
+            "error: --diarize needs the meeting's audio, which only the PC can download; "
+            "leave it off with --worker",
+            file=sys.stderr,
+        )
+        return 1
+    settings = Settings(
+        city=args.city,
+        work=args.work,
+        db=args.db,
+        diarize=args.diarize,
+        site=site,
+        worker=args.worker,
+    )
     if listers is not None:
         return _week(city.name, sources, first, last, listers, settings)
     import httpx
@@ -151,7 +165,7 @@ def _publish(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    settings = Settings(city=args.city, work=args.work, db=args.db, site=site)
+    settings = Settings(city=args.city, work=args.work, db=args.db, site=site, worker=args.worker)
     report = publish_site(settings)
     for line in report.lines:
         print(line)
@@ -198,6 +212,12 @@ def _site_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--base-url", help="public address of the site")
     parser.add_argument("--media-base-url", help="where the media files will be served")
     parser.add_argument("--audio-engine", help="voice engine (default: the audio command's)")
+    parser.add_argument(
+        "--worker",
+        type=Path,
+        help="the PC worker's folder: a Windows PC sends the YouTube captions and the audio "
+        "(for a cloud server; see station/worker.py)",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
