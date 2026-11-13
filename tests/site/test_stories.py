@@ -128,7 +128,7 @@ def test_front_page_has_the_bozeman_blocks_and_only_the_feeds_that_exist(
     assert "Thursday, November 5, 2026" in home  # top strip
     assert 'class="chip all"' in home and "All topics" in home
     assert "every public meeting, written up" in home
-    assert 'id="filter-board"' in home and 'src="/assets/front.js"' in home
+    assert 'id="filter-board"' in home and 'src="/assets/front.js?v=' in home
     assert "Earlier in" in home
     assert ">The Podcast<" in home and ">Boards<" in home
     assert 'class="btn solid" href="/feed.xml">RSS feed</a>' in home

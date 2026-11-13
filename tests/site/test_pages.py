@@ -353,3 +353,15 @@ def test_the_byline_and_transcript_title_do_not_repeat_the_meeting_date(tmp_path
     transcript = _text(out, TRANSCRIPT)
     assert "Transcript: City Council Regular Session</h1>" in transcript
     assert "20 October 2026" not in transcript
+
+
+def test_css_and_script_links_change_when_the_file_changes(built: tuple[Path, object]) -> None:
+    # A host may let browsers keep /assets/ files for hours; a redesign must not reach returning
+    # readers as new pages with the old stylesheet. Each link names the file's content hash.
+    import hashlib
+
+    out, _ = built
+    home = (out / "index.html").read_text(encoding="utf-8")
+    for rel in ("site.css", "print.css", "front.js"):
+        version = hashlib.sha256((out / "assets" / rel).read_bytes()).hexdigest()[:10]
+        assert f'"/assets/{rel}?v={version}"' in home, rel
