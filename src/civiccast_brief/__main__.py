@@ -2,7 +2,9 @@
 
     python -m civiccast_brief setup DIR --slug SLUG --name NAME --state STATE
         --contact-email ADDRESS --podcast-email ADDRESS
-        [--body "City Council"] [--roster-page URL] [--granicus HOST --view-id N]
+        [--body "City Council"] [--roster-page URL]
+        [--platform youtube|granicus|cablecast|none] [--granicus HOST --view-id N]
+        [--cablecast HOST]
 
     python -m civiccast_brief tools [--test-video URL]
 
@@ -29,8 +31,90 @@ from pathlib import Path
 
 from civiccast_brief.city import CityError, setup
 
+_PLATFORM_LABELS = {
+    "youtube": "YouTube",
+    "granicus": "Granicus",
+    "cablecast": "Cablecast",
+    "none": "none of these (no video archive yet)",
+}
+
+
+def _found_platforms(args: argparse.Namespace) -> dict[str, str]:
+    """The video platforms the command line and the folder's sources.json already name, each
+    with where it was seen. Granicus and Cablecast hosts from sources.json fill in the flags."""
+    from civiccast_brief.sources import SourceError, load_sources
+
+    seen: dict[str, str] = {}
+    if args.granicus:
+        seen["granicus"] = "--granicus"
+    if args.cablecast:
+        seen["cablecast"] = "--cablecast"
+    try:
+        sources = load_sources(args.folder)
+    except SourceError:
+        sources = []
+    for source in sources:
+        if source.kind == "granicus" and "granicus" not in seen:
+            seen["granicus"] = f"{args.folder / 'sources.json'}: {source.host}"
+            args.granicus = args.granicus or source.host
+            if args.view_id is None and source.view_id.isdigit():
+                args.view_id = int(source.view_id)
+        elif source.kind == "cablecast" and "cablecast" not in seen:
+            seen["cablecast"] = f"{args.folder / 'sources.json'}: {source.host}"
+            args.cablecast = args.cablecast or source.host
+        elif source.kind == "youtube" and "youtube" not in seen:
+            seen["youtube"] = f"{args.folder / 'sources.json'}: channel {source.channel_id}"
+    return seen
+
+
+def _ask_platform(options: list[str], found: dict[str, str]) -> str | None:
+    """Ask which platform, by number. None when there is no one to ask (input is not a terminal)."""
+    if not sys.stdin.isatty():
+        return None
+    print("Where does this city keep its meeting videos?")
+    for number, name in enumerate(options, start=1):
+        where = f"  (found: {found[name]})" if name in found else ""
+        print(f"  {number}. {_PLATFORM_LABELS[name]}{where}")
+    while True:
+        try:
+            answer = input(f"Type 1-{len(options)}: ").strip()
+        except EOFError:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(options):
+            return options[int(answer) - 1]
+        print(f"Type a number from 1 to {len(options)}.")
+
+
+def _choose_platform(args: argparse.Namespace) -> str | None:
+    """The video platform: ``--platform`` when given; else the one platform found; else ask.
+    Never YouTube by default. None (with a message) when it cannot be settled."""
+    found = _found_platforms(args)
+    if args.platform:
+        return str(args.platform)
+    if len(found) == 1:
+        (only,) = found
+        print(f"Video platform: {_PLATFORM_LABELS[only]} (found: {found[only]}).")
+        return only
+    options = list(found) if found else list(_PLATFORM_LABELS)
+    picked = _ask_platform(options, found)
+    if picked is None:
+        why = (
+            "more than one video platform was found: " + ", ".join(found)
+            if found
+            else "no video platform was found"
+        )
+        print(
+            f"setup failed: {why}. Say which one with --platform "
+            f"({', '.join(_PLATFORM_LABELS)}); it is not guessed.",
+            file=sys.stderr,
+        )
+    return picked
+
 
 def _setup(args: argparse.Namespace) -> int:
+    platform = _choose_platform(args)
+    if platform is None:
+        return 2
     try:
         written = setup(
             args.folder,
@@ -43,13 +127,14 @@ def _setup(args: argparse.Namespace) -> int:
             roster_page=args.roster_page,
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
+            platform=platform,
+            cablecast_host=args.cablecast,
         )
     except CityError as exc:
         print(f"setup failed: {exc}", file=sys.stderr)
         return 1
     for path in written:
         print(f"wrote {path}")
-    platform = "granicus" if args.granicus else "youtube"
     print(
         f"capture.platform is set to {platform!r} in {args.folder / 'city.json'}. Only the "
         "single-meeting command (`meeting run --city`) uses it; edit city.json to change it."
@@ -132,8 +217,18 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--contact-email", required=True, help="where readers send corrections")
     cmd.add_argument("--podcast-email", required=True, help="podcast owner email for the feed")
     cmd.add_argument("--roster-page", default="", help="the city's page that lists the members")
+    cmd.add_argument(
+        "--platform",
+        choices=list(_PLATFORM_LABELS),
+        help="where the city keeps its meeting videos. Without it, setup uses the one platform "
+        "it finds (--granicus, --cablecast, or the folder's sources.json) and otherwise asks; "
+        "when it cannot ask, it stops",
+    )
     cmd.add_argument("--granicus", metavar="HOST", help="Granicus host, e.g. oakland.granicus.com")
     cmd.add_argument("--view-id", type=int, help="Granicus ViewPublisher view_id")
+    cmd.add_argument(
+        "--cablecast", metavar="HOST", help="Cablecast host, e.g. reflect-oakland.cablecast.tv"
+    )
     cmd.set_defaults(run=_setup)
     cmd = commands.add_parser("tools", help="install or update yt-dlp in CivicCast Brief's folder")
     cmd.add_argument(

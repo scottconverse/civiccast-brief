@@ -146,7 +146,13 @@ def test_a_city_with_no_website_says_so(web):
     assert "City website" in note and "--website" in note
 
 
-def test_a_cablecast_archive_says_which_host_to_add_on_the_sources_page(web):
+def test_a_cablecast_archive_says_which_host_to_add_on_the_sources_page(web, monkeypatch):
+    from civiccast_brief.meeting import cablecast
+
+    def down(host):
+        raise cablecast.CablecastError("could not fetch: HTTP Error 503")
+
+    monkeypatch.setattr(cablecast, "list_shows", down)
     gallery = (
         "https://reflect-cityofloveland-co.cablecast.tv/CablecastPublicSite/gallery/2?channel=1"
     )

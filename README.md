@@ -1,5 +1,9 @@
 # CivicCast Brief
 
+CivicCast Brief reads a city's public meetings and turns each one into a cited written recap, a news
+story and a short podcast episode. A person reviews everything before it is published. Most people
+use the desk (double-click `desk.cmd`) to set up a city and to review stories; it opens your browser
+by itself and keeps its window open while the desk runs, so closing that window stops the desk.
 
 ## Published Townlight shared importer
 

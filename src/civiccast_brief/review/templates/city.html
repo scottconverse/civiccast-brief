@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set nav = "city" %}
+{% block content %}
+<h2>The city</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to set up the city.</p>
+{% else %}
+<p class="muted">Saved to <code>{{ path }}</code>. Only these fields change; everything else in the file stays as it is.</p>
+<form method="post" action="/city" novalidate>
+  <input type="hidden" name="token" value="{{ token }}">
+  <fieldset>
+    <legend>City details</legend>
+    <p><label for="name">City name</label><br>
+      <input id="name" type="text" name="name" value="{{ form.get("name", "") }}" placeholder="Longmont"
+             {% if error_field == "name" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="slug">Short web name (lowercase letters and digits, hyphens between words)</label><br>
+      <input id="slug" type="text" name="slug" value="{{ form.get("slug", "") }}" placeholder="longmont"
+             {% if error_field == "slug" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="state">State</label><br>
+      <input id="state" type="text" name="state" value="{{ form.get("state", "") }}" placeholder="CO"
+             {% if error_field == "state" %}aria-invalid="true"{% endif %}>
+      <span class="muted">A code (CO) is saved as the full name.</span></p>
+    <p><label for="contact_email">Contact email (where readers send corrections)</label><br>
+      <input class="wide" id="contact_email" type="text" name="contact_email" value="{{ form.get("contact_email", "") }}"
+             {% if error_field == "contact_email" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="podcast_email">Podcast owner email (the address Spotify and Apple write to)</label><br>
+      <input class="wide" id="podcast_email" type="text" name="podcast_email" value="{{ form.get("podcast_email", "") }}"
+             {% if error_field == "podcast_email" %}aria-invalid="true"{% endif %}></p>
+    <p><label for="platform">Where the city keeps its meeting videos</label><br>
+      <select id="platform" name="platform" {% if error_field == "platform" %}aria-invalid="true"{% endif %}>
+        {% if not form.get("platform") %}<option value="" selected>Choose one</option>{% endif %}
+        {% for p in platforms %}<option value="{{ p }}" {% if form.get("platform") == p %}selected{% endif %}>{{ {"youtube": "YouTube", "granicus": "Granicus", "cablecast": "Cablecast", "none": "None yet"}[p] }}</option>{% endfor %}
+      </select></p>
+    {% if found_platforms|length > 1 and form.get("platform") in ("", "none") %}
+    <p class="notice" role="status">Find found more than one video platform ({{ found_platforms|join(", ") }}). Choose the one meetings are captured from, then save.</p>
+    {% elif not found_platforms and form.get("platform") == "none" %}
+    <p class="muted">No video platform is set. None of this city's sources is a YouTube channel, Cablecast or Granicus archive yet.</p>
+    {% endif %}
+    <button type="submit" class="primary" data-busy="Saving the city…">Save the city</button>
+  </fieldset>
+</form>
+{% endif %}
+{% endblock %}

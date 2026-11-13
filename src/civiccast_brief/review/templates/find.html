@@ -60,7 +60,17 @@ sources below and press Add.</p>
 <h3>Found, but not offered to add</h3>
 <p class="muted">Each line says why, and what to do.</p>
 <ul>
-{% for u in found.unread %}<li>{{ u.platform }}: {{ u.url }}{% if u.note %} ({{ u.note }}){% endif %}</li>{% endfor %}
+{% for u in found.unread %}<li>{{ u.platform }}: {{ u.url }}{% if u.note %} ({{ u.note }}){% endif %}
+  {% if u.channel %}
+  <form method="post" action="/sources/find/add-anyway" novalidate>
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="search" value="{{ search_id }}">
+    <input type="hidden" name="index" value="{{ loop.index0 }}">
+    <label for="anyway-{{ loop.index0 }}">Bodies it covers (separate with commas)</label>
+    <input id="anyway-{{ loop.index0 }}" type="text" name="bodies" value="" placeholder="e.g. City Council">
+    <button type="submit" data-busy="Adding the channel…">Add anyway</button>
+  </form>
+  {% endif %}</li>{% endfor %}
 </ul>
 {% endif %}
 {% if found.notes %}

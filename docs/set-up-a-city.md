@@ -4,6 +4,18 @@ This guide takes one city from nothing to a built site. Each step names the comm
 writes. Run the commands from the repository folder with the project's Python
 (`uv sync`, then `.venv\Scripts\python.exe`, shown below as `python`).
 
+## Start here: the desk's Find page
+
+Most people set up a city in the editor desk, not with commands. Install the program (next
+section), double-click `desk.cmd`, and open **Sources > Find a city's sources**. Type the city's
+name and state (and its website, when you know it), press **Search**, tick the sources it found and
+press **Add**. The **City** page holds the city's name, short web name, state and contact emails.
+The commands further down do the same work from a terminal. They are the other way, for scripts
+or for anyone who prefers a terminal.
+
+`desk.cmd` opens your browser by itself, a few seconds after it starts, at `http://127.0.0.1:8765/`.
+It keeps its window open for as long as the desk runs: closing that window stops the desk.
+
 ## Install
 
 On Windows, `install.ps1` sets up everything below except Chrome, Ollama and the voice engine,
@@ -14,11 +26,20 @@ code, or, with no copy yet, run this in PowerShell:
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
 ```
 
-That puts the code in `%LOCALAPPDATA%\CivicCastBrief\app`. The script installs uv, the Python
+**Where it installs.** Run from a copy you already downloaded (a folder with `install.ps1` and
+`pyproject.toml` together), the program installs inside that folder: the Python environment is its
+`.venv` and `desk.cmd` is written there. Run with no copy (the one-line command above), it
+downloads the code into `%LOCALAPPDATA%\CivicCastBrief\app` (`-AppDir` picks another folder),
+replaces the code already there and keeps its `.venv`. The desk's own data, `desk.db` and the
+`city` folder, is in `Documents\CivicCast Brief`. When ffmpeg is not installed by winget, the
+script puts it in `%LOCALAPPDATA%\CivicCastBrief\ffmpeg`; yt-dlp goes to
+`%USERPROFILE%\.civiccast-brief\record\runtimes\yt-dlp`.
+
+The script installs uv, the Python
 packages (uv brings Python 3.12 when the machine has none), ffmpeg (with winget, or the gyan.dev
 build checked against its SHA-256) and yt-dlp. It then checks for Chrome and for Ollama with the
-writer model, lists what is still missing, and writes `desk.cmd`, which starts the editor desk with
-its data in `Documents\CivicCast Brief`. TownRecord and the speech code are part of CivicCast
+writer model, lists what is still missing, and writes `desk.cmd`, which starts the editor desk
+(see "Start here" above for how it behaves). TownRecord and the speech code are part of CivicCast
 Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization (large).
 
 ## What you need first
@@ -84,7 +105,9 @@ trailing "Meeting": `LOVELAND CITY COUNCIL MEETING` finds "City Council Meeting 
 On the desk's Sources page, **Show recent titles** lists the body names a Cablecast host's shows use.
 
 The editor desk has the same search under **Sources > Find a city's sources**. It shows what it
-found with a checkbox for each source, and saves only the sources you leave checked.
+found with a checkbox for each source, and saves only the sources you leave checked. A YouTube
+channel it spotted but did not offer (none of its newest titles names a body) has an **Add anyway**
+button: type the bodies the channel covers and it is added like any other source.
 
 ### Or set the folder up by hand
 
@@ -96,10 +119,15 @@ Find where the city puts its meeting videos.
   (`https://<host>/videos/<clip>/captions.vtt` has text). Some Granicus cities keep none, and
   CivicCast Brief does not transcribe audio.
 
+The city's video platform is never guessed. Say it with `--platform` (`youtube`, `granicus`,
+`cablecast` or `none`), or let `setup` take the one it finds (`--granicus`, `--cablecast`, or a
+`sources.json` already in the folder). When none or more than one is found, `setup` asks you at a
+terminal, and stops with a message when there is no terminal to ask on.
+
 Then run, for a YouTube city:
 
 ```
-python -m civiccast_brief setup cities/yourcity --slug yourcity --name "Your City" --state "Your State" --contact-email corrections@example.org --podcast-email podcast@example.org --roster-page https://yourcity.gov/council
+python -m civiccast_brief setup cities/yourcity --slug yourcity --name "Your City" --state "Your State" --platform youtube --contact-email corrections@example.org --podcast-email podcast@example.org --roster-page https://yourcity.gov/council
 ```
 
 `--state` takes the full name or the two-letter code (`CO`); the folder stores the full name.
@@ -107,7 +135,8 @@ python -m civiccast_brief setup cities/yourcity --slug yourcity --name "Your Cit
 The `podcast` settings in `city.json` (category, language, the email Spotify writes to, show art) are
 explained in [List a city show on Apple Podcasts and Spotify](podcast-directories.md).
 
-For a Granicus city, add `--granicus yourcity.granicus.com --view-id 2`. Use `--body` when the
+For a Granicus city, use `--granicus yourcity.granicus.com --view-id 2` (instead of
+`--platform youtube`); for a Cablecast city, `--cablecast reflect-yourcity.cablecast.tv`. Use `--body` when the
 meetings are not a "City Council" (for example `--body "Board of Supervisors"`).
 
 This writes two files and never overwrites one that is already there:
@@ -129,6 +158,12 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | Web page of meeting documents | the page that links the agendas, packets or minutes; optionally the path its meeting pages start with | `https://www.svcmontessori.org/board-meetings`; `/boardmeetings/` |
 | Google Drive folder | the public folder's address or id | `https://drive.google.com/drive/folders/15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2` |
 | CivicWeb portal | the portal's address or its tenant, the part before `.civicweb.net` | `https://yourtown.civicweb.net` |
+| Cablecast video archive | the archive's host, `<name>.cablecast.tv` (an `https://` address is cut down to its host) | `reflect-cityofloveland-co.cablecast.tv` |
+
+A Cablecast source reads the archive's list of the newest 200 shows that have a video. A body's
+meeting is the newest show dated today or earlier whose title names the body (a title may leave off
+the city's name and "Meeting", see below); the captions are read when the meeting is run. Find
+offers a Cablecast archive that the city's own pages link, with the bodies its show titles name.
 
 A web page source reads the newest dated document it links. When the page links one page per
 meeting instead (a school district's board calendar, for example), give the path those pages start

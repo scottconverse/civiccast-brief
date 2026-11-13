@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from civiccast_brief.city import CITY_FILE, ROSTER_FILE, city_settings, roster_template
 from civiccast_brief.citybuild import boards
@@ -33,6 +33,34 @@ PUBLISHER_EMAIL: Final = "podcast@civiccastbrief.org"
 #: The address readers write to, shown on every city's About page. Email Routing forwards it,
 #: like the podcast address, to the publisher (set 2026-11-11).
 CONTACT_EMAIL: Final = "contact@civiccastbrief.org"
+
+
+VIDEO_KINDS: Final = ("youtube", "cablecast", "granicus")
+
+
+def video_platforms(sources: list[Source]) -> dict[str, Source]:
+    """The video platforms among ``sources``, each with its first source."""
+    out: dict[str, Source] = {}
+    for kind in VIDEO_KINDS:
+        match = next((s for s in sources if s.kind == kind), None)
+        if match is not None:
+            out[kind] = match
+    return out
+
+
+def capture_choice(sources: list[Source]) -> dict[str, Any]:
+    """The ``capture`` setting for a city whose sources are ``sources``: the one video platform
+    among them; ``none`` when there is none, and also when there are several (the desk's City page
+    asks). YouTube is never assumed."""
+    found = video_platforms(sources)
+    if len(found) != 1:
+        return {"platform": "none"}
+    ((kind, source),) = found.items()
+    if kind == "granicus":
+        return {"platform": kind, "host": source.host, "view_id": int(source.view_id)}
+    if kind == "cablecast":
+        return {"platform": kind, "host": source.host}
+    return {"platform": kind}
 
 
 @dataclass
@@ -173,11 +201,17 @@ def build_city(
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     built = Built(folder)
+    picked = [c.source for c in found.candidates if chosen is None or c.source.id in set(chosen)]
+    capture = capture_choice([*load_sources(folder), *picked])
     city = city_settings(
         slug=slug or slug_for(found.name),
         name=found.name,
         contact_email=CONTACT_EMAIL,
         podcast_email=PUBLISHER_EMAIL,
+        platform=capture["platform"],
+        granicus_host=capture.get("host") if capture["platform"] == "granicus" else None,
+        granicus_view_id=capture.get("view_id"),
+        cablecast_host=capture.get("host") if capture["platform"] == "cablecast" else None,
     )
     if _write_new(folder / CITY_FILE, city):
         built.lines.append(f"wrote {folder / CITY_FILE}")
@@ -189,7 +223,6 @@ def build_city(
         built.lines.append(f"kept {folder / CITY_FILE} (already there)")
         built.notice.append(f"Kept {CITY_FILE} (already there).")
     _roster(built, folder, found, fetcher, open_in_browser, today or date.today())
-    picked = [c.source for c in found.candidates if chosen is None or c.source.id in set(chosen)]
     before = {s.id for s in load_sources(folder)}
     path, changes = merge_sources(folder, picked)
     built.notice.insert(0, _sources_notice(picked, before))
