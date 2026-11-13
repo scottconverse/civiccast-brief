@@ -225,7 +225,7 @@ def civicweb_bodies(tenant: str, fetcher: Fetcher) -> list[str]:
     """The portal's meeting types, which are its bodies (a type with no meetings page is not)."""
     page = fetcher.get(civicweb_base(tenant) + "/Portal/MeetingTypeList.aspx")
     names = [_text(name) for _id, name in _CIVICWEB_TYPE.findall(page.text)]
-    return [n for n in dict.fromkeys(names) if n]
+    return [n for n in dict.fromkeys(names) if n and not _CIVICWEB_NOT_BODY.search(n)]
 
 
 def civicweb_body(name: str) -> str:
@@ -484,6 +484,9 @@ _NOT_MEETINGS: Final = re.compile(
     r"applications?|articles?)\b",
     re.IGNORECASE,
 )
+#: A CivicWeb meeting type that is a calendar or a notice page ("Rolling Calendar", "Public
+#: Meetings Notice", "Standing Meeting Notices" on Loveland's portal) and not a body.
+_CIVICWEB_NOT_BODY: Final = re.compile(_NOT_MEETINGS.pattern + r"|\bcalendar\b", re.IGNORECASE)
 
 
 def archive_center_bodies(text: str) -> list[str]:

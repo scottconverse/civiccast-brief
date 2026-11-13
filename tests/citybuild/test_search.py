@@ -422,3 +422,19 @@ def test_a_civicweb_portal_whose_body_list_does_not_answer_is_named(web):
     ((platform, note),) = [(u.platform, u.note) for u in found.unread]
     assert platform == "CivicWeb"
     assert note.startswith("its body list did not answer: ")
+
+
+def test_civicweb_calendar_and_notice_types_are_not_offered_as_bodies(web):
+    """Loveland's meeting-type list also holds "Rolling Calendar", "Public Meetings Notice" and
+    "Standing Meeting Notices"; a newcomer picking bodies is not shown them."""
+    from civiccast_brief.citybuild import platforms
+
+    add_loveland(web, TODAY)
+    page = web.pages[f"https://{LOVELAND}.civicweb.net/Portal/MeetingTypeList.aspx"][1]
+    for name in (b"Rolling Calendar", b"Public Meetings Notice", b"Standing Meeting Notices"):
+        assert name in page  # the real page lists them
+    names = platforms.civicweb_bodies(LOVELAND, web.fetcher())
+    for dropped in ("Rolling Calendar", "Public Meetings Notice", "Standing Meeting Notices"):
+        assert dropped not in names
+    assert "LOVELAND CITY COUNCIL MEETING" in names and "Planning Commission" in names
+    assert len(names) == 7
