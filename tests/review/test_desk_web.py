@@ -362,3 +362,60 @@ def test_a_civicweb_source_is_added_edited_and_its_tenant_error_names_the_field(
         "/sources/remove", data={"token": t, "source_id": "civicweb:cilovelandco"}
     )
     assert removed.status_code == 200 and sources.load_sources(city) == []
+
+
+def test_the_front_page_is_a_control_room_of_problems_and_what_went_out(store):
+    out = add_episode(store, "m1")
+    store.publish(out.id)
+    failed = store.add_item(
+        meeting_id="m2",
+        title="Planning night",
+        meeting_date="2026-11-05",
+        checks_passed=False,
+        checks_note="a quote is not in the transcript",
+        auto_publish=True,
+    )
+    waiting = add_episode(store, "m3", body="Library Board")
+    client = client_for(store)
+    page = client.get("/").text
+    assert "Control room" in page
+    problems = page.split("<h3>Problems (2)</h3>")[1].split("<h3>What went out")[0]
+    assert f'href="/items/{failed.id}"' in problems
+    assert "Failed its checks: a quote is not in the transcript" in problems
+    assert f'href="/items/{waiting.id}"' in problems and "In review" in problems
+    went_out = page.split("<h3>What went out (1)</h3>")[1].split("<h2>All items</h2>")[0]
+    assert f'action="/items/{out.id}/unpublish"' in went_out
+    assert f'action="/items/{out.id}/kill"' in went_out
+    assert f'href="/items/{out.id}">Edit</a>' in went_out
+    # A status tab shows only its list.
+    assert "Control room" not in client.get("/?status=review").text
+
+
+def test_an_edit_to_a_published_item_stays_published_and_unpublish_takes_it_off(store):
+    item = add_episode(store)
+    client = client_for(store)
+    t = token(client)
+    store.publish(item.id)
+    page = client.get(f"/items/{item.id}").text
+    assert f'action="/items/{item.id}/unpublish"' in page
+    assert f'action="/items/{item.id}/publish"' not in page
+    assert "Saving a change publishes the change." in page
+
+    saved = client.post(
+        f"/items/{item.id}/save",
+        data={
+            "token": t,
+            "recap": "Recap, fixed.",
+            "script": "[S1] Script.",
+            "speaker:voice 01": "unknown",
+        },
+    )
+    assert saved.status_code == 200 and "Saved and published again" in saved.text
+    after = store.get_item(item.id)
+    assert (after.status, after.recap) == ("published", "Recap, fixed.")
+
+    off = client.post(f"/items/{item.id}/unpublish", data={"token": t})
+    assert off.status_code == 200 and "Unpublished." in off.text
+    assert store.get_item(item.id).status == "held"
+    again = client.post(f"/items/{item.id}/unpublish", data={"token": t})
+    assert again.status_code == 400 and "only a published item can be unpublished" in again.text

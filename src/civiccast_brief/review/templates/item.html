@@ -48,11 +48,17 @@
     <textarea class="tall" name="script">
 {{ item.script }}</textarea></label></p>
   {% endif %}
-  <p class="muted">Publishing covers exactly the saved text. Saving a change sends the item back to review.</p>
+  <p class="muted">Publishing covers exactly the saved text. {% if saved.status == "published" %}Saving a change publishes the change.{% else %}Saving a change sends the item back to review.{% endif %}</p>
   <button type="submit" data-busy="Saving…">Save</button>
 </form>
 
 <div class="actions">
+  {% if saved.status == "published" %}
+  <form method="post" action="{{ root }}/items/{{ saved.id }}/unpublish">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit" data-busy="Unpublishing…">Unpublish</button>
+  </form>
+  {% else %}
   <form method="post" action="{{ root }}/items/{{ saved.id }}/publish">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" class="primary" data-busy="Publishing…">Publish</button>
@@ -61,6 +67,7 @@
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" data-busy="Holding…">Hold</button>
   </form>
+  {% endif %}
   <form method="post" action="{{ root }}/items/{{ saved.id }}/kill">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" data-busy="Killing…">Kill</button>

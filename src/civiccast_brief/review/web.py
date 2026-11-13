@@ -73,7 +73,7 @@ RegenerateCallback = Callable[[DeskItem], None]
 _SOURCE_ID: Final = re.compile(
     r"^(primegov|youtube|granicus|cablecast|webpage|gdrive|civicclerk|escribe|civicweb|civicplus|laserfiche):[A-Za-z0-9._/:~%?=&-]{1,500}$"
 )
-_ITEM_ACTIONS: Final = ("save", "publish", "hold", "kill", "redraft", "regenerate")
+_ITEM_ACTIONS: Final = ("save", "publish", "unpublish", "hold", "kill", "redraft", "regenerate")
 _CSP: Final = (
     "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; "
     "frame-ancestors 'none'; base-uri 'none'"
@@ -110,18 +110,24 @@ def local_time(value: str | None) -> str:
     return datetime.fromisoformat(value).astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
 
-def item_notice(code: str, item: DeskItem) -> tuple[str, bool] | None:
-    """Map a notice code from the query string to (text, is_error). Unknown codes give None."""
+def item_notice(code: str, item: DeskItem, *, live: bool = False) -> tuple[str, bool] | None:
+    """Map a notice code from the query string to (text, is_error). Unknown codes give None.
+
+    ``live`` is True in the station, where a change to what readers see is deployed in about
+    a minute."""
     when = local_time(item.published_at)
+    soon = " The site updates in about a minute." if live else ""
     texts = {
         "saved_unchanged": f"Saved. Nothing changed. State: {item.status}.",
         "saved_review": "Saved. The item is in review. Publish it when it is ready.",
         "saved_reset": "Saved. The item went back to review; publish it again before export.",
-        "published": f"Published at {when}. The export will write this item.",
+        "published": f"Published at {when}. The export will write this item.{soon}",
+        "saved_published": f"Saved and published again at {when}.{soon}",
+        "unpublished": f"Unpublished. It is held and off the site; publish it to put it back.{soon}",
         "already_published": f"Already published at {when}. Nothing changed.",
         "held": "Held. The export skips this item until you publish it.",
         "already_held": "Already held. Nothing changed.",
-        "killed": "Killed. The export skips this item. Edit or redraft it to bring it back.",
+        "killed": f"Killed. The export skips this item. Edit or redraft it to bring it back.{soon}",
         "already_killed": "Already killed. Nothing changed.",
         "redrafted": "Redrafted with your note. The new draft is below, in review.",
         "regenerate_requested": "Audio regeneration requested. The request is listed below.",
@@ -273,9 +279,20 @@ class DeskApp:
                 )
             if not update.changed:
                 return "saved_unchanged"
+            if update.previous_status == "published":
+                # Publish is immediate: an edit to what went out goes out too.
+                self.store.publish(item.id, by="editor (edited)")
+                return "saved_published"
             return "saved_review" if update.previous_status == "review" else "saved_reset"
         if action == "publish":
             return "published" if self.store.publish(item.id) else "already_published"
+        if action == "unpublish":
+            if item.status != "published":
+                raise ReviewError(
+                    f"only a published item can be unpublished; this one is {item.status}"
+                )
+            self.store.hold(item.id, note or "unpublished")
+            return "unpublished"
         if action == "hold":
             return "held" if self.store.hold(item.id, note) else "already_held"
         if action == "kill":
@@ -466,6 +483,41 @@ def _route_path(request: Request) -> str:
     path = str(request.scope.get("path", ""))
     root = str(request.scope.get("root_path", ""))
     return path[len(root) :] if root and path.startswith(root) else path
+
+
+@dataclasses.dataclass(frozen=True)
+class Problem:
+    """One line of the control room's Problems list."""
+
+    what: str
+    why: str
+    href: str
+
+
+def _problems(items: Sequence[DeskItem], job: Any) -> list[Problem]:
+    """Runs and items that need the editor: a failed last run, failed checks, unpublished work."""
+    found: list[Problem] = []
+    if job is not None and job.last is not None and job.last.status in ("failed", "interrupted"):
+        why = f"The last run {job.last.status}"
+        if job.last.exit_code:
+            why += f" (code {job.last.exit_code})"
+        found.append(
+            Problem("Weekly job", why + ". Its output says where.", f"/runs/{job.last.id}")
+        )
+    for item in items:
+        name = item.headline or item.title
+        if item.status in ("review", "held") and item.checks_passed is False:
+            note = f": {item.checks_note}" if item.checks_note else ""
+            found.append(
+                Problem(name, f"Failed its checks{note}. Held off the site.", f"/items/{item.id}")
+            )
+        elif item.status == "review":
+            found.append(
+                Problem(
+                    name, "In review, not on the site. Publish it or kill it.", f"/items/{item.id}"
+                )
+            )
+    return found
 
 
 #: How a run started, as the Weekly job page says it.
@@ -691,6 +743,7 @@ def make_desk_app(
         everything = store.list_items()
         counts = {s: sum(1 for i in everything if i.status == s) for s in STATUSES}
         shown = [i for i in everything if not status or i.status == status]
+        job = station.status() if station is not None else None
         return state.page(
             "list.html",
             title="Items",
@@ -699,6 +752,9 @@ def make_desk_app(
             statuses=STATUSES,
             current=status,
             error="",
+            job=job,
+            problems=_problems(everything, job),
+            went_out=[i for i in everything if i.status == "published"],
         )
 
     @app.get("/items/{item_id}", response_class=HTMLResponse)
@@ -706,7 +762,8 @@ def make_desk_app(
         item = store.get_item(item_id)
         if item is None:
             return PlainTextResponse(f"No item with id {item_id}.\n", status_code=404)
-        return state.item_page(item, notice=item_notice(notice, item))
+        live = state.on_public_change is not None
+        return state.item_page(item, notice=item_notice(notice, item, live=live))
 
     @app.post("/items/{item_id}/{action}")
     async def item_action(item_id: int, action: str, request: Request) -> Response:

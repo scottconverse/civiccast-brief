@@ -350,12 +350,26 @@ are not edited on the desk). Each item is in one state:
 | killed | will not run until it is edited or redrafted | no |
 | published | ready to go out | yes |
 
+The desk's front page is the control room:
+
+- **Problems** lists what needs you: the weekly job's last run if it failed (in the station), items
+  that failed their checks, and items still in review.
+- **What went out** lists the published items, each with **Edit**, **Unpublish** and **Kill**.
+- In the station it also shows the last run, the next run and a queued publish, with a link to the
+  Weekly job page and **Run now**.
+
+All items are listed below it, with a tab for each state.
+
 The buttons on an item page:
 
-- **Save** keeps your edits and sends the item back to review.
-- **Publish** locks the item to its exact saved text. Any later change sends it back to review, and
-  it must be published again. A killed item cannot be published until it is edited or redrafted.
+- **Save** keeps your edits. A published item stays published, so the change goes out; any other
+  item goes back to review.
+- **Publish** puts the item out with its exact saved text. A killed item cannot be published until
+  it is edited or redrafted.
+- **Unpublish** (published items) takes the item off the site and holds it.
 - **Hold** and **Kill** take an item out of the export.
+- In the station, Publish, Save on a published item, Unpublish and Kill rebuild and deploy the site
+  about a minute later.
 - **Redraft** sends your note and the current draft to the writer (the city's model pick for that
   body) and puts the new draft in review. It runs the same checks as the weekly run: one rewrite
   with the check report, then anything still unsupported is cut. The writer works from the

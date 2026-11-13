@@ -219,3 +219,33 @@ def test_station_json_takes_publish_commands(tmp_path):
         config.write_text(json.dumps({**base, "publish": bad}), encoding="utf-8")
         with pytest.raises(StationError, match='"publish" must be a list of commands'):
             load_config(config)
+
+
+def test_the_control_room_shows_a_failed_run_and_an_edit_queues_a_publish(desk):
+    client, store, s, clock = desk
+    token = client.app.state.desk.token
+    s.runner.codes["make"] = 4
+    s.run_now()
+    page = client.get("/desk/").text
+    assert "Weekly job: last run" in page and "failed" in page
+    assert "The last run failed (code 4)" in page
+
+    item = _item(store, "m1")
+    store.publish(item.id)
+    clock.now += DELAY
+    s.tick()
+    assert s.status().publish_at is None
+    saved = client.post(
+        f"/desk/items/{item.id}/save",
+        data={
+            "token": token,
+            "recap": "Recap, fixed.",
+            "script": "[S1] Script.",
+            "speaker:voice 01": "unknown",
+        },
+    )
+    assert "Saved and published again" in saved.text
+    assert "The site updates in about a minute." in saved.text
+    assert s.status().publish_at == clock.now + DELAY
+    client.post(f"/desk/items/{item.id}/unpublish", data={"token": token})
+    assert store.get_item(item.id).status == "held"
