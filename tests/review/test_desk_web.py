@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from desk_signin import signed_in
 from fastapi.testclient import TestClient
 
 from civiccast_brief import models, sources
@@ -26,7 +27,7 @@ def store(tmp_path):
 
 
 def client_for(store, city=None, **kw):
-    return TestClient(make_desk_app(store, city_dir=city, **kw), base_url="http://127.0.0.1")
+    return signed_in(make_desk_app(store, city_dir=city, **kw))
 
 
 def token(client) -> str:

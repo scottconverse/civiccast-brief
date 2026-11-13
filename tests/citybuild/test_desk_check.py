@@ -6,7 +6,7 @@ import json
 import threading
 
 import pytest
-from fastapi.testclient import TestClient
+from desk_signin import signed_in
 
 from civiccast_brief.citybuild import browser, cli
 from civiccast_brief.review.store import ReviewStore
@@ -23,7 +23,7 @@ def desk(web, tmp_path):
     with ReviewStore(tmp_path / "d.db") as store:
         app = make_desk_app(store, city_dir=city)
         app.state.desk.make_fetcher = web.fetcher
-        yield TestClient(app, base_url="http://127.0.0.1"), city
+        yield signed_in(app), city
 
 
 def token(client) -> str:

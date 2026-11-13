@@ -39,6 +39,10 @@
     .tabs { display: flex; gap: .75rem; flex-wrap: wrap; margin: .5rem 0 1rem; }
     .cites { font-size: .85em; color: var(--muted); margin: .2rem 0 .8rem; }
     pre { white-space: pre-wrap; background: #8881; padding: .5rem; }
+    .sign-out { margin-left: auto; }
+    label { display: block; margin: .6rem 0 .2rem; }
+    input[type=email], input[type=password] { font: inherit; padding: .3rem;
+             width: min(100%, 22rem); box-sizing: border-box; }
     #busy-status { min-height: 1.2em; margin: 0; }
   </style>
   <script src="/static/desk.js" defer></script>
@@ -46,6 +50,7 @@
 <body>
 <header>
   <h1><a href="/">CivicCast Brief editor desk</a></h1>
+  {% if signed_in %}
   <nav aria-label="Desk">
     <a href="/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
     <a href="/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
@@ -53,6 +58,11 @@
     <a href="/sources" {% if nav == "sources" %}aria-current="page"{% endif %}>Sources</a>
     <a href="/roster" {% if nav == "roster" %}aria-current="page"{% endif %}>Roster</a>
   </nav>
+  <form method="post" action="/sign-out" class="sign-out">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Sign out</button>
+  </form>
+  {% endif %}
 </header>
 <p id="busy-status" class="muted" role="status" aria-live="polite"></p>
 <main>

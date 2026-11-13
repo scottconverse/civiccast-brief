@@ -4,7 +4,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from desk_signin import signed_in
 from test_weekly_run import COUNCIL, LAST, Fake, _settings
 
 from civiccast_brief.meeting.roster import load_roster
@@ -204,7 +204,7 @@ def test_the_desk_roster_page_says_where_each_member_came_from_and_has_no_editor
     )
     rosterfill.fill_roster(path, city, COUNCIL, DAY, DOCUMENTS)
     with ReviewStore(tmp_path / "d.db") as store:
-        client = TestClient(make_desk_app(store, city_dir=city), base_url="http://127.0.0.1")
+        client = signed_in(make_desk_app(store, city_dir=city))
         page = client.get("/roster")
         home = client.get("/")
     assert page.status_code == 200
@@ -213,7 +213,8 @@ def test_the_desk_roster_page_says_where_each_member_came_from_and_has_no_editor
     assert "Diane Crist" in page.text
     assert "packet, page 6, line 8" in " ".join(page.text.split())
     assert "Entered by hand" in page.text
-    assert "<form" not in page.text and "<textarea" not in page.text
+    main = page.text.split("<main>", 1)[1]
+    assert "<form" not in main and "<textarea" not in main
     assert "@" not in page.text
 
 
