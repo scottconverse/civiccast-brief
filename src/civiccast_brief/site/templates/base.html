@@ -105,7 +105,7 @@
 {% endif %}
   <p>{{ city.disclaimer }}</p>
   <p>{{ city.site_title }} is published by {{ city.publisher }}. It is independent and is not run by or affiliated with the City of {{ city.name }}. This site uses Cloudflare Web Analytics, which counts visits without cookies. <a href="{{ href('/about/') }}#privacy">Privacy</a>.</p>
-  <p class="foot-links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/archive/') }}">Archive</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a></p>
+  <p class="foot-links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/archive/') }}">Archive</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a>{% if desk_signin %} <a href="{{ desk_signin }}" rel="nofollow">Editor sign-in</a>{% endif %}</p>
 </footer>
 </div>
 {% for script in scripts %}

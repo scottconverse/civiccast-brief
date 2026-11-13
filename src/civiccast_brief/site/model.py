@@ -80,6 +80,8 @@ class City:
     spotify_url: str | None = None
     #: Show the "By email" band on the front page. Off by default; needs signup_url.
     email_signup: bool = False
+    #: The editor desk's address (the station serves it at /desk). The footer links its sign-in page.
+    desk_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -608,6 +610,7 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         apple_podcasts_url=check.https_url(data, "apple_podcasts_url"),
         spotify_url=check.https_url(data, "spotify_url"),
         email_signup=email_signup,
+        desk_url=check.https_url(data, "desk_url"),
     )
 
 
