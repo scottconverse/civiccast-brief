@@ -681,3 +681,33 @@ def test_an_episode_killed_on_the_desk_leaves_the_site(tmp_path):
     assert "oWZpzjzjwnE: no longer published; episode ep-oWZpzjzjwnE removed" in report.lines
     assert sorted(p.name for p in site.episodes.glob("*.json")) == ["older-episode.json"]
     assert list(site.media.iterdir()) == []
+
+
+def test_a_killed_copy_that_shares_an_episode_name_does_not_stay_on_the_site(tmp_path):
+    """Live on 13 November 2026: two videos of the 5 November preservation commission built the
+    same episode file; the second was killed on the desk and its episode stayed on the site,
+    because the copy left published was not built again."""
+    from civiccast_brief.weekly.run import State, _drop_unpublished_episodes
+
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    site.episodes.mkdir()
+    (site.episodes / "2026-11-05-hpc.json").write_text('{"video": "killed"}', encoding="utf-8")
+    state = State(tmp_path / STATE_NAME)
+    state.data["built"] = {"kqArjgcjLF0": "2026-11-05-hpc", "yK8bes8CYTM": "2026-11-05-hpc"}
+    state.data["built_from"] = {"kqArjgcjLF0": "hash-kept", "yK8bes8CYTM": "hash-killed"}
+    items = [
+        (tmp_path, {"kind": "episode", "status": "published", "meeting_id": "kqArjgcjLF0"}),
+    ]
+
+    _drop_unpublished_episodes(site, state, items)
+
+    assert state.data["built"] == {"kqArjgcjLF0": "2026-11-05-hpc"}
+    # The kept copy is built again, so its episode replaces the killed one's in the file.
+    assert "kqArjgcjLF0" not in state.data["built_from"]

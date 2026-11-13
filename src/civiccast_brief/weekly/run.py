@@ -522,6 +522,12 @@ def _drop_unpublished_episodes(
         name = built.pop(meeting_id)
         built_from.pop(meeting_id, None)
         if name in keep:
+            # Two videos of one meeting share the name, and the file may hold the killed one's
+            # episode: build the published one again over it.
+            for other, other_name in built.items():
+                if other_name == name:
+                    built_from.pop(other, None)
+            log.append((f"{meeting_id}: no longer published; episode {name} is built again", False))
             continue
         for path in (
             site.episodes / f"{name}.json",
