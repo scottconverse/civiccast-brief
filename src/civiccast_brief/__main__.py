@@ -143,8 +143,10 @@ def _setup(args: argparse.Namespace) -> int:
         "next, in this order (see docs/set-up-a-city.md):\n"
         "  1. add the city's sources: `city find --out` or the desk's Sources screen, then "
         "`city check`\n"
-        f"  2. add the members to {args.folder / 'roster.json'} from the city's own page\n"
-        "  3. run one meeting"
+        "  2. run one meeting: the run fills the members into "
+        f"{args.folder / 'roster.json'} from that meeting's own records (the roll call in the "
+        "minutes, the member list on the agenda)\n"
+        "  3. check the members and where each came from on the desk's Roster page"
     )
     return 0
 

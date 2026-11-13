@@ -102,12 +102,15 @@ def _setup_argv(folder, *extra, state="Ohio"):
 def test_setup_next_steps_follow_the_docs_order(tmp_path, capsys):
     assert top.main(_setup_argv(tmp_path / "c")) == 0
     out = capsys.readouterr().out
-    sources, members, meeting = (
+    sources, meeting, roster = (
         out.index("add the city's sources"),
-        out.index("add the members"),
         out.index("run one meeting"),
+        out.index("Roster page"),
     )
-    assert sources < members < meeting
+    assert sources < meeting < roster
+    # Members come from the meeting's records during the run, never typed in by hand.
+    assert "add the members" not in out
+    assert "from that meeting's own records" in out
     assert "city find" in out and "city check" in out and "Sources screen" in out
 
 
