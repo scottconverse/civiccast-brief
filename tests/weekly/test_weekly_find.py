@@ -329,3 +329,36 @@ def test_a_live_stream_listed_before_its_meeting_is_not_run_yet():
     assert [(m.body, m.reason) for m in found] == [
         (COUNCIL, "the meeting is on 2026-11-17, after this run")
     ]
+
+
+def test_two_videos_of_one_meeting_run_once():
+    """Longmont, 3 and 5 November 2026: the portal linked one council video and the channel
+    had another; the preservation commission went up twice. Each made a second story."""
+    hpc = "Historic Preservation Commission"
+    portal = Source(kind="primegov", bodies=(COUNCIL, hpc), url="https://longmont.primegov.com")
+    channel = Source(kind="youtube", bodies=(COUNCIL, hpc), channel_id="UC" + "a" * 22)
+    council = _meeting(
+        "City Council Regular Session",
+        datetime(2026, 11, 3, 18, 0),
+        "https://www.youtube.com/watch?v=oWZpzjzjwnE",
+    )
+    videos = [
+        NS(video_id="Q3Cpd52hWa4", title="City Council Regular Session - November 3, 2026", published="2026-11-04T02:00:00Z"),
+        NS(video_id="SSSSSSSSSSS", title="City Council Study Session - November 3, 2026", published="2026-11-04T03:00:00Z"),
+        NS(video_id="kqArjgcjLF0", title="Historic Preservation Commission - November 5, 2026", published="2026-11-06T00:00:00Z"),
+        NS(video_id="yK8bes8CYTM", title="Historic Preservation Commission Nov. 5, 2026 Meeting", published="2026-11-06T01:00:00Z"),
+        NS(video_id="P1PPPPPPPPP", title="Historic Preservation Commission - November 5, 2026 Part 2", published="2026-11-06T02:00:00Z"),
+    ]  # fmt: skip
+    listers = Listers(
+        primegov=lambda url, first, last: [council], youtube=lambda cid: videos, city="Longmont"
+    )
+    found, _ = find_meetings([portal, channel], FIRST, LAST, listers)
+    reasons = {m.video: m.reason for m in found}
+    assert reasons == {
+        "oWZpzjzjwnE": "",
+        "Q3Cpd52hWa4": "another video of this meeting runs (oWZpzjzjwnE)",
+        "SSSSSSSSSSS": "",
+        "kqArjgcjLF0": "",
+        "yK8bes8CYTM": "another video of this meeting runs (kqArjgcjLF0)",
+        "P1PPPPPPPPP": "",
+    }

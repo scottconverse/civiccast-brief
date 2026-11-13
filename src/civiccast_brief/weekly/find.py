@@ -339,6 +339,39 @@ def _city_body(meeting: Found, city_bodies: Sequence[str], last: date, city: str
     return replace(meeting, body=body, reason=_day_reason(meeting.title, last))
 
 
+_DATE_WORD = re.compile(
+    r"\d+|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?"
+    r"|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?"
+)
+
+
+def meeting_name(title: str, city: str = "") -> str:
+    """A title without its date, the city, a short name in parentheses or "Meeting":
+    "Historic Preservation Commission Nov. 5, 2026 Meeting" -> "historic preservation commission".
+    A session's kind stays ("city council regular session", "city council study session")."""
+    text = f" {_fold(re.sub(r'\([^)]*\)', ' ', title))} "
+    if city:
+        text = text.replace(f" {_fold(city)} ", " ")
+    text = re.sub(r" part (\d+)(?= )", r" part\1", text)  # "Part 2" is another video
+    words = [w for w in text.split() if w != "meeting" and not _DATE_WORD.fullmatch(w)]
+    return " ".join(words)
+
+
+def _one_video_per_meeting(by_key: dict[str, Found], city: str) -> None:
+    """Two videos of one meeting (the portal's link and the channel's upload, or two uploads)
+    would make two episodes of it. The first one found runs: a portal meeting, with its
+    agenda, before a channel video."""
+    kept: dict[tuple[str, date, str], Found] = {}
+    for key, meeting in list(by_key.items()):
+        if meeting.reason or not meeting.body or not meeting.video:
+            continue
+        same = (meeting.body, meeting.day, meeting_name(meeting.title, city))
+        first = kept.setdefault(same, meeting)
+        if first is not meeting:
+            reason = f"another video of this meeting runs ({first.video})"
+            by_key[key] = replace(meeting, reason=reason)
+
+
 def find_meetings(
     sources: Sequence[Source], first: date, last: date, listers: Listers
 ) -> tuple[list[Found], list[str]]:
@@ -380,6 +413,7 @@ def find_meetings(
                 )
             elif held.documents is None and meeting.documents is not None:
                 by_key[meeting.key] = replace(held, documents=meeting.documents)
+    _one_video_per_meeting(by_key, listers.city)
     # Documents go with the body's video meeting that day; a day with none is its own entry.
     for meeting in listed:
         same = [
