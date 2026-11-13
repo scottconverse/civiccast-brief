@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from civiccast_brief import models, sources
-from civiccast_brief.review import desk
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.review.web import make_desk_app
 
@@ -168,7 +167,7 @@ def test_settings_lists_the_city_s_own_bodies_not_a_made_up_city_council(store, 
     assert empty.status_code == 200
 
 
-def test_settings_save_model_picks_and_auto_publish(store, city):
+def test_settings_save_model_picks(store, city):
     add_episode(store)
     add_episode(store, meeting_id="m2", body="Planning Commission")
     client = client_for(store, city)
@@ -193,18 +192,15 @@ def test_settings_save_model_picks_and_auto_publish(store, city):
     assert bad.status_code == 400 and "Not saved" in bad.text
     assert models.load_settings(city).pick("recap", "Library Board") == models.DEEPSEEK
 
-    auto = client.post("/settings/auto-publish", data={"token": token(client), "auto::1": "on"})
-    assert auto.status_code == 200 and "It is on for Planning Commission" in auto.text
-    assert desk.load_auto_publish(city) == {"City Council": False, "Planning Commission": True}
-    off = client.post("/settings/auto-publish", data={"token": token(client)})
-    assert off.status_code == 200 and "It is off for every body" in off.text
+    assert "auto-publish" not in client.get("/settings").text.lower()
 
 
 def test_settings_without_a_city_folder_say_how_to_start(store):
     client = client_for(store)
     assert "--city" in client.get("/settings").text
-    response = client.post("/settings/auto-publish", data={"token": token(client)})
+    response = client.post("/settings/models", data={"token": token(client)})
     assert response.status_code == 400 and "Start the desk with --city" in response.text
+    assert client.post("/settings/auto-publish", data={"token": token(client)}).status_code == 404
 
 
 def test_sources_add_edit_remove_and_errors_name_the_field(store, city):

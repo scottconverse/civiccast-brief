@@ -2,70 +2,31 @@
 
 The weekly run calls three things:
 
-- ``stage_item(db, city_dir, ...)``: put a new episode or article on the desk for review. When
-  ``desk.json`` turns auto-publish on for the item's body and the item passed its checks, it is
-  published at once, with no press.
+- ``stage_item(db, ...)``: put a new episode or article on the desk. Every item that passed its
+  checks is published at once, for every body, with no press. An item that failed its checks is
+  held in review and never published by itself.
 - ``redraft(store, item_id, note, writer)``: the desk's Redraft button. The writer is injected;
   it gets the item and the editor's note and returns new content.
 - ``export_published(db, out)`` (in ``review.export``): write every published item, and only
   those, to a folder.
 
-``desk.json`` in the city folder::
-
-    {"format": 1, "auto_publish": {"City Council": false, "Planning and Zoning Commission": true}}
-
-A body that is not listed is not auto-published.
 """
 
 from __future__ import annotations
 
-import json
-import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from civiccast_brief.review.store import ContentUpdate, DeskItem, ReviewError, ReviewStore
-
-SETTINGS_NAME: Final = "desk.json"
-FORMAT: Final = 1
 
 #: Gets the item and the editor's note; returns the new content. For an episode, any of
 #: "recap", "script", "speakers"; for an article, "article". It may add "checks_passed".
 Writer = Callable[[DeskItem, str], Mapping[str, Any]]
 
 
-def load_auto_publish(city_dir: str | Path) -> dict[str, bool]:
-    path = Path(city_dir) / SETTINGS_NAME
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        raw = data.get("auto_publish", {})
-        if not isinstance(raw, dict):
-            raise TypeError('"auto_publish" is not an object')
-    except (OSError, ValueError, TypeError, AttributeError) as exc:
-        raise ReviewError(f"{path} is not a readable desk settings file: {exc}") from exc
-    return {" ".join(str(k).split()): v is True for k, v in raw.items() if str(k).strip()}
-
-
-def save_auto_publish(city_dir: str | Path, settings: Mapping[str, bool]) -> Path:
-    path = Path(city_dir) / SETTINGS_NAME
-    data = {
-        "format": FORMAT,
-        "auto_publish": {k: bool(v) for k, v in sorted(settings.items())},
-    }
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
-    )
-    os.replace(tmp, path)
-    return path
-
-
 def stage_item(
     db: str | Path,
-    city_dir: str | Path | None,
     *,
     kind: str,
     meeting_id: str,
@@ -79,10 +40,7 @@ def stage_item(
     script: str = "",
     article: Mapping[str, Any] | None = None,
 ) -> DeskItem:
-    """Add one item to the desk; auto-publish it if desk.json says so and its checks passed."""
-    auto = False
-    if city_dir is not None:
-        auto = load_auto_publish(city_dir).get(" ".join(body.split()), False)
+    """Add one item to the desk and publish it at once when its checks passed."""
     with ReviewStore(db) as store:
         return store.add_item(
             kind=kind,
@@ -96,7 +54,7 @@ def stage_item(
             article=article,
             checks_passed=checks_passed,
             checks_note=checks_note,
-            auto_publish=auto,
+            auto_publish=True,
         )
 
 

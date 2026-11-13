@@ -4,7 +4,7 @@ Pages:
   - ``/``: the items, by state (review, held, published, killed);
   - ``/items/<id>``: one episode or article, with Save, Publish, Hold, Kill, Redraft and, for an
     episode, Regenerate audio;
-  - ``/settings``: which model writes each task, per body, and auto-publish per body;
+  - ``/settings``: which model writes each task, per body;
   - ``/city``: the city's name, short web name, state and contact emails (city.json).
   - ``/sources``: the city's meeting sources (add, edit, remove).
   - ``/sources/find``: search a city's site and the meeting platforms, then add what was found.
@@ -268,10 +268,6 @@ class DeskApp:
             except city_sources.SourceError:
                 pass
             try:
-                names |= set(desk.load_auto_publish(self.city_dir))
-            except ReviewError:
-                pass
-            try:
                 for picks in model_settings.load_settings(self.city_dir).tasks.values():
                     names |= set(picks.bodies)
             except model_settings.ModelSettingsError:
@@ -283,17 +279,12 @@ class DeskApp:
         self, *, notice: str = "", error: str = "", status: int = 200
     ) -> HTMLResponse:
         settings = None
-        auto: dict[str, bool] = {}
         load_error = ""
         if self.city_dir is not None:
             try:
                 settings = model_settings.load_settings(self.city_dir)
             except model_settings.ModelSettingsError as exc:
                 load_error = str(exc)
-            try:
-                auto = desk.load_auto_publish(self.city_dir)
-            except ReviewError as exc:
-                load_error = f"{load_error} {exc}".strip()
         bodies = self.known_bodies()
         picks: dict[str, dict[str, str]] = {}
         choices = list(model_settings.CHOICES)
@@ -310,7 +301,6 @@ class DeskApp:
             bodies=bodies,
             picks=picks,
             choices=choices,
-            auto=auto,
             notice=notice,
             error=error or load_error,
         )
@@ -333,17 +323,6 @@ class DeskApp:
             current.tasks[task] = model_settings.TaskPicks(default=default, bodies=overrides)
         path = model_settings.save_settings(self.city_dir, current)
         return f"Saved the model picks to {path}."
-
-    def save_auto(self, form: Mapping[str, str]) -> str:
-        assert self.city_dir is not None
-        chosen = {
-            body: form.get(f"auto::{number}") == "on"
-            for number, body in enumerate(self.known_bodies())
-        }
-        path = desk.save_auto_publish(self.city_dir, chosen)
-        on = [b for b, v in chosen.items() if v]
-        which = ", ".join(on) if on else "no body"
-        return f"Saved to {path}. Auto-publish is on for {which}."
 
     # ----- sources --------------------------------------------------------------------------
 
@@ -532,20 +511,14 @@ def make_desk_app(
     @app.get("/settings", response_class=HTMLResponse)
     def settings(notice: str = "") -> HTMLResponse:
         message = ""
-        if state.city_dir is not None:
-            if notice == "models":
-                where = state.city_dir / model_settings.SETTINGS_NAME
-                message = f"Saved the model picks to {where}."
-            elif notice == "auto":
-                on = [b for b, v in desk.load_auto_publish(state.city_dir).items() if v]
-                where = state.city_dir / desk.SETTINGS_NAME
-                status = f"It is on for {', '.join(on)}." if on else "It is off for every body."
-                message = f"Saved auto-publish to {where}. {status}"
+        if state.city_dir is not None and notice == "models":
+            where = state.city_dir / model_settings.SETTINGS_NAME
+            message = f"Saved the model picks to {where}."
         return state.settings_page(notice=message)
 
     @app.post("/settings/{which}")
     async def save_settings(which: str, request: Request) -> Response:
-        if which not in ("models", "auto-publish"):
+        if which != "models":
             return PlainTextResponse("Not found.\n", status_code=404)
         form = await read_form(request)
         if form is None:
@@ -555,13 +528,10 @@ def make_desk_app(
                 error="Start the desk with --city to save settings.", status=400
             )
         try:
-            if which == "models":
-                state.save_models(form)
-            else:
-                state.save_auto(form)
-        except (model_settings.ModelSettingsError, ReviewError, OSError) as exc:
+            state.save_models(form)
+        except (model_settings.ModelSettingsError, OSError) as exc:
             return state.settings_page(error=f"Not saved: {exc}", status=400)
-        return _redirect("/settings?notice=" + ("models" if which == "models" else "auto"))
+        return _redirect("/settings?notice=models")
 
     @app.get("/roster", response_class=HTMLResponse)
     def roster() -> HTMLResponse:

@@ -12,7 +12,7 @@ from civiccast_brief.review.export import export_published
 from civiccast_brief.review.store import ReviewError, ReviewStore
 
 
-def stage(db, city, meeting_id="m1", body="Planning Commission", checks=True, **kw):
+def stage(db, meeting_id="m1", body="Planning Commission", checks=False, **kw):
     fields = (
         {"speakers": {"voice 01": "unknown"}, "recap": "R", "script": "S"}
         if "article" not in kw
@@ -20,7 +20,6 @@ def stage(db, city, meeting_id="m1", body="Planning Commission", checks=True, **
     )
     return desk.stage_item(
         db,
-        city,
         kind="article" if "article" in kw else "episode",
         meeting_id=meeting_id,
         title="T",
@@ -34,9 +33,9 @@ def stage(db, city, meeting_id="m1", body="Planning Commission", checks=True, **
 
 def test_export_writes_only_published_items_and_removes_ones_pulled_back(tmp_path, article):
     db, out = tmp_path / "d.db", tmp_path / "out"
-    a = stage(db, None, "m1")
-    b = stage(db, None, "m2", article=article)
-    stage(db, None, "m3")
+    a = stage(db, "m1")
+    b = stage(db, "m2", article=article)
+    stage(db, "m3")
     with ReviewStore(db) as store:
         store.publish(a.id)
         store.publish(b.id)
@@ -62,7 +61,7 @@ def test_export_writes_only_published_items_and_removes_ones_pulled_back(tmp_pat
 
 def test_export_refuses_text_changed_behind_the_desk(tmp_path):
     db = tmp_path / "d.db"
-    item = stage(db, None)
+    item = stage(db)
     with ReviewStore(db) as store:
         store.publish(item.id)
     conn = sqlite3.connect(db)
@@ -80,27 +79,22 @@ def test_export_never_creates_a_database(tmp_path):
     assert not (tmp_path / "missing.db").exists()
 
 
-def test_stage_auto_publishes_only_for_bodies_turned_on(tmp_path):
-    city = tmp_path / "city"
-    city.mkdir()
-    desk.save_auto_publish(city, {"Planning Commission": True, "City Council": False})
+def test_every_item_that_passed_its_checks_is_published_for_every_body(tmp_path):
+    """No per-body switch: a single body, one never seen before, and a roundup's joined body
+    name all publish at once. Only failed checks hold an item."""
     db = tmp_path / "d.db"
-    assert stage(db, city, "a").status == "published"
-    assert stage(db, city, "b", checks=False).status == "review"
-    assert stage(db, city, "c", body="City Council").status == "review"
-    assert stage(db, city, "d", body="Library Board").status == "review"
-    assert desk.load_auto_publish(city) == {"City Council": False, "Planning Commission": True}
-
-
-def test_a_broken_desk_file_is_reported(tmp_path):
-    (tmp_path / "desk.json").write_text("{not json", encoding="utf-8")
-    with pytest.raises(ReviewError, match="not a readable desk settings file"):
-        desk.load_auto_publish(tmp_path)
+    assert stage(db, "a", checks=True).status == "published"
+    assert stage(db, "c", body="City Council", checks=True).status == "published"
+    roundup = stage(db, "d", body="City Council and Historic Preservation Commission", checks=True)
+    assert roundup.status == "published"
+    assert roundup.published_by == "auto-publish (checks passed)"
+    held = stage(db, "b", checks=False)
+    assert held.status == "review" and held.published_hash is None
 
 
 def test_redraft_sends_the_note_to_the_writer_and_returns_to_review(tmp_path, article):
     db = tmp_path / "d.db"
-    item = stage(db, None)
+    item = stage(db)
     seen = []
 
     def writer(current, note):

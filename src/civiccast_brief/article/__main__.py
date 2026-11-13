@@ -18,8 +18,8 @@ pages as well as claims, and the check looks in the cited pages too.
 recap. Exit 1 and no file when no draft passes; the episode then keeps its dated title.
 
 ``stage`` checks a saved story again and puts it on the editor desk as an article item. The
-check result goes with it, so a failing story is never auto-published. A producer approves it
-on the desk; ``episode assemble --article`` then adds the published story to the episode.
+check result goes with it: a passing story is published at once, a failing one is held in
+review; ``episode assemble --article`` then adds the published story to the episode.
 """
 
 from __future__ import annotations
@@ -147,7 +147,6 @@ def _stage(args: argparse.Namespace) -> int:
     try:
         item = stage_item(
             args.db,
-            args.city,
             kind="article",
             meeting_id=recap.video_id,
             title=article.headline,
@@ -192,7 +191,6 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("--db", type=Path, required=True, help="desk database")
     stage.add_argument("--recap", type=Path, required=True)
     stage.add_argument("--article", type=Path, required=True)
-    stage.add_argument("--city", type=Path, help="city folder (desk.json auto-publish)")
     stage.add_argument("--transcript", type=Path, help="default: transcript.json next to the recap")
     stage.add_argument("--documents", type=Path, help="default: documents.json next to the recap")
     stage.set_defaults(func=_stage)

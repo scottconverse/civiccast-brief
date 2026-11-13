@@ -7,7 +7,7 @@ For each meeting :mod:`find` turned up, in date order:
 1. ``agenda.txt`` from the portal's HTML agenda, when there is one;
 2. ``meeting run`` (captions, speakers, recap) with the body's roster;
 3. ``script write``; when the check fails, once more with the report, then ``script repair``;
-4. the episode goes on the editor desk (auto-publish per ``desk.json``);
+4. the episode goes on the editor desk, published at once when its checks passed;
 5. ``documents.json`` from the portal: the meeting's packet and its minutes (published, or the
    draft in a later packet); a document that is not there is a line in the report;
 6. ``article write`` and ``article stage``, with ``documents.json`` when there is one.
@@ -197,16 +197,14 @@ def _stage_episode(steps: Steps, settings: Settings, folder: Path, script_json: 
             str(folder),
             "--script",
             str(script_json),
-            "--city",
-            str(settings.city),
         ],
         "episode stage",
     )
 
 
 def _article(steps: Steps, settings: Settings, folder: Path) -> str:
-    """Write and stage the story. A story that fails its check still goes on the desk for
-    review (it is never auto-published); no story at all is a failure."""
+    """Write and stage the story. A story that fails its check is held in review on the desk
+    (it is never published by itself); no story at all is a failure."""
     recap = str(folder / "recap.json")
     out = folder / "article"
     city = ["--city", str(settings.city)]
@@ -229,7 +227,6 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
             recap,
             "--article",
             str(article),
-            *city,
             *docs,
         ],
         "article stage",

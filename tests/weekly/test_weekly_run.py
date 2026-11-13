@@ -171,7 +171,7 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     assert agenda.startswith("Source: https://longmont.primegov.com/agenda/9\nRetrieved ")
     assert "AGENDA\n1. Call to order" in agenda
     stage = fake.calls[2][1]
-    assert _opt(stage, "--city") == str(settings.city)
+    assert "--city" not in stage
     assert _opt(stage, "--script") == str(folder / "script.json")
     assert "roundup: not made (1 meeting(s) done this week; it needs 2)" in report.lines
     state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
@@ -477,7 +477,7 @@ class DeskFake(Fake):
         recap = json.loads((folder / "recap.json").read_text(encoding="utf-8"))
         try:
             desk.stage_item(
-                self.db, None, kind=kind, meeting_id=recap["video_id"], title="t",
+                self.db, kind=kind, meeting_id=recap["video_id"], title="t",
                 meeting_date="2026-11-03", body=COUNCIL, checks_passed=True,
                 article=STORY if kind == "article" else None,
             )  # fmt: skip

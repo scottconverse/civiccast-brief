@@ -86,7 +86,6 @@ def work(tmp_path):
 def stage_story(db, city):
     return desk.stage_item(
         db,
-        city,
         kind="article",
         meeting_id=RECAP.video_id,
         title=OLD_STORY["headline"],
@@ -158,7 +157,6 @@ def test_an_episode_redraft_writes_the_script_again_with_the_note(work, tmp_path
     city.mkdir()
     item = desk.stage_item(
         db,
-        city,
         kind="episode",
         meeting_id=RECAP.video_id,
         title="City Council",
