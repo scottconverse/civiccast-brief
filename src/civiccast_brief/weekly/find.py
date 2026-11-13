@@ -119,14 +119,17 @@ def match_body(title: str, bodies: Iterable[str], city: str = "") -> str:
     over "Commission"). A title may also leave off the city's name and a trailing "Meeting",
     by the same rule as ``city check`` (``citybuild.read.shortened_match``).
     """
-    named = _fold(body_name(title))
-    folded = f" {_fold(title)} "
-    lowered = " ".join(title.casefold().split())
-    hits = [
-        b
-        for b in bodies
-        if _fold(b) == named or f" {_fold(b)} " in folded or shortened_match(b, lowered, city)
-    ]
+    hits: list[str] = []
+    # Also without a short name in parentheses: "Longmont Housing Authority(LHA) Advisory Board".
+    for text in dict.fromkeys((title, re.sub(r"\s*\([^)]*\)\s*", " ", title))):
+        named = _fold(body_name(text))
+        folded = f" {_fold(text)} "
+        lowered = " ".join(text.casefold().split())
+        hits += [
+            b
+            for b in bodies
+            if _fold(b) == named or f" {_fold(b)} " in folded or shortened_match(b, lowered, city)
+        ]
     return max(hits, key=len) if hits else ""
 
 
@@ -205,12 +208,16 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
         # The meeting's day is the one its title names; the video goes up later, often the next
         # day in UTC and sometimes weeks after. A video posted in the days is listed even when
         # its meeting was before them, so a late video is not passed over.
-        day = title_day(title) or posted
+        named = title_day(title)
+        day = named or posted
         in_days = any(d is not None and first <= d <= last for d in (day, posted))
         if day is None or not in_days or not listers.classifier.is_meeting(title):
             continue
         body = match_body(title, source.bodies, listers.city)
         reason = "" if body else f"the title names no body this source covers ({body_name(title)})"
+        if not reason and named is None:
+            # The meeting run takes the date from the title, so it would fail ("November 2026").
+            reason = "the title names no meeting day"
         found.append(Found(body, day, title, source.id, str(video.video_id), reason=reason))
     return found
 
