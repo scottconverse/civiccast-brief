@@ -19,7 +19,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--db", type=Path, required=True, help="review database")
     s.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
     s.add_argument("--script", type=Path, required=True, help="checked script.json")
-    s.add_argument("--city", type=Path, help="city folder (desk.json auto-publish)")
     a = commands.add_parser("assemble", help="write one site episode JSON from an approved item")
     a.add_argument("--item", type=Path, required=True, help="exported item folder")
     a.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
@@ -45,7 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "stage":
-            print(f"staged item {stage(args.db, args.meeting, args.script, args.city)}")
+            print(f"staged item {stage(args.db, args.meeting, args.script)}")
             return 0
         if args.command == "story":
             story = assemble_story(

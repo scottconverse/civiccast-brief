@@ -5,7 +5,7 @@
 
 serve runs the editor desk on 127.0.0.1 only. It creates an empty database if PATH does not
 exist, and moves an older review database to the desk's states (approved items become
-published). --city names the city folder, where the desk keeps models.json, desk.json and
+published). --city names the city folder, where the desk keeps models.json and
 sources.json; without it the Settings and Sources pages are read-only notes.
 
 export writes published items to DIR; it never creates a database, and it reports each
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = commands.add_parser("serve", help="run the editor desk on 127.0.0.1")
     run.add_argument("--db", required=True, type=Path, help="SQLite desk database")
-    run.add_argument("--city", type=Path, help="city folder (models.json, desk.json, sources.json)")
+    run.add_argument("--city", type=Path, help="city folder (models.json, sources.json)")
     run.add_argument(
         "--work",
         type=Path,

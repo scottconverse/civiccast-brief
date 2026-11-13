@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set nav = "settings" %}
 {% block content %}
-<h2>Models and auto-publish</h2>
+<h2>Models</h2>
 {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 {% if city_dir is none %}
@@ -51,18 +51,6 @@
 </form>
 {% endif %}
 
-<form method="post" action="/settings/auto-publish">
-  <input type="hidden" name="token" value="{{ token }}">
-  <h3>Auto-publish</h3>
-  <p class="muted">When it is on for a body, an item for that body that passed its checks is
-    published as soon as the weekly run stages it, with no press. Items that failed their
-    checks still wait for you. Saved to <code>desk.json</code>.</p>
-  {% for body in bodies %}
-  <p><label><input type="checkbox" name="auto::{{ loop.index0 }}" {% if auto.get(body) %}checked{% endif %}>
-    {{ body }}</label></p>
-  {% endfor %}
-  <p><button type="submit" data-busy="Saving auto-publish…">Save auto-publish</button></p>
-</form>
 <p class="muted">Bodies come from your sources, your items and these settings. Add a source for a
   body on the <a href="/sources">Sources</a> page to see it here.</p>
 {% endif %}

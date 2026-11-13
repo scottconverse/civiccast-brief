@@ -68,18 +68,17 @@ def _meeting_id(recap: Recap, data: dict[str, Any]) -> str:
     return str(data["video_id"])
 
 
-def stage(db: Path, meeting_dir: Path, script_json: Path, city_dir: Path | None = None) -> int:
+def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
     """Add the meeting to the desk. Returns the new item id.
 
-    The script is checked against the recap again. With ``city_dir``, a script that passes is
-    auto-published when ``desk.json`` says so for the body; otherwise the item waits for review.
+    The script is checked against the recap again. A script that passes is published at once;
+    one that fails is held in review.
     """
     recap, data = _meeting(meeting_dir)
     script = load_script(script_json)
     report = check_script(recap, script)
     item = stage_item(
         db,
-        city_dir,
         kind="episode",
         meeting_id=_meeting_id(recap, data),
         title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),

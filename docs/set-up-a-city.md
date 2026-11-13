@@ -195,7 +195,7 @@ The screen checks each field, names the one that is wrong, and keeps what you ty
 
 ### Pick the models
 
-Go to **Models and auto-publish** in the desk. Each task (recap, judge, article, script, roundup)
+Go to **Models** in the desk. Each task (recap, judge, article, script, roundup)
 has a default model, and any body can use a different one. Out of the box, City Council uses Claude
 and every other body uses DeepSeek (`deepseek-v4.1-flash:1017-cloud` through Ollama). The desk
 saves the picks to `cities/yourcity/models.json`:
@@ -332,11 +332,12 @@ python -m civiccast_brief.article stage --db review.db --recap runs/2026-11-03/r
 python -m civiccast_brief.review serve --db review.db --city cities/yourcity
 ```
 
-`article stage` checks the story again and adds it as an article item with the result, so a story
-that fails is never auto-published.
+`article stage` checks the story again and adds it as an article item with the result. Every item
+that passes its checks is published at once, for every body. An item that fails is held in review
+and never published by itself.
 
 The editor desk runs at `http://127.0.0.1:8765` (`--port` picks another). `--city` turns on the
-Sources and Models and auto-publish pages; without it the desk only reviews items.
+Sources and Models pages; without it the desk only reviews items.
 
 An item is an **episode** (speakers, recap, podcast script) or an **article** (headline, dek and
 sections of paragraphs, each with its citations; votes, quotes and topics come from the writer and
@@ -367,17 +368,9 @@ The buttons on an item page:
 Each button shows what it is doing while it works, and each page says what happened. The item's
 history lists every action.
 
-**Auto-publish.** On the Models and auto-publish page, tick a body to let its items publish with no
-press when they pass their checks. Items that fail their checks still wait for you. The setting is
-saved to `cities/yourcity/desk.json`:
-
-```json
-{"format": 1, "auto_publish": {"City Council": false, "Planning and Zoning Commission": true}}
-```
-
-The weekly run stages items with `civiccast_brief.review.desk.stage_item(db, city_dir, kind=...,
-meeting_id=..., title=..., meeting_date=..., body=..., checks_passed=...)`, which applies
-auto-publish.
+**Auto-publish.** It is always on. The weekly run stages items with
+`civiccast_brief.review.desk.stage_item(db, kind=..., meeting_id=..., title=..., meeting_date=...,
+body=..., checks_passed=...)`, which publishes an item that passed its checks at once.
 
 Then export the published items:
 
@@ -460,7 +453,7 @@ For each meeting, in date order:
 2. `meeting run` makes the transcript, speakers and recap;
 3. `script write` writes the script. When the check fails, it writes once more with the check
    report, and then `script repair` drops the lines that fail;
-4. the episode goes on the editor desk (auto-published when `desk.json` says so for the body);
+4. the episode goes on the editor desk, published at once when its checks passed;
 5. `article write` and `article stage` write the story and put it on the desk.
 
 With two or more meetings done in the week, a roundup follows: a combined recap, its script, a

@@ -264,8 +264,8 @@ def _published_article(tmp_path, meeting_dir, story):
     assert code == 0
     with ReviewStore(db) as store:
         [item] = store.list_items()
-        assert item.kind == "article" and item.status == "review"
-        store.publish(item.id)
+        # The story passed its check, so it was published with no press.
+        assert item.kind == "article" and item.status == "published"
     [folder] = export_published(db, tmp_path / "article-export").exported
     return db, folder
 
@@ -355,20 +355,11 @@ def _passing_script(meeting_dir):
     return path
 
 
-def _city(tmp_path):
-    city = tmp_path / "city"
-    city.mkdir()
-    (city / "desk.json").write_text(
-        json.dumps({"format": 1, "auto_publish": {"City Council": True}}), encoding="utf-8"
-    )
-    return city
-
-
-def test_stage_checks_the_script_and_auto_publishes_for_the_city(tmp_path, meeting):
+def test_stage_checks_the_script_and_publishes_it_at_once(tmp_path, meeting):
     meeting_dir, _ = meeting
     script = _passing_script(meeting_dir)
     db = tmp_path / "review.db"
-    item_id = B.stage(db, meeting_dir, script, _city(tmp_path))
+    item_id = B.stage(db, meeting_dir, script)
     with ReviewStore(db) as store:
         item = store.get_item(item_id)
     assert item.checks_passed is True
@@ -376,16 +367,11 @@ def test_stage_checks_the_script_and_auto_publishes_for_the_city(tmp_path, meeti
     assert item.body == "City Council"
 
 
-def test_stage_without_a_city_waits_and_a_failing_script_is_never_auto_published(tmp_path, meeting):
+def test_a_failing_script_is_held_in_review(tmp_path, meeting):
     meeting_dir, _ = meeting
-    script = _passing_script(meeting_dir)
-    db = tmp_path / "review.db"
-    plain = B.stage(db, meeting_dir, script)
-    with ReviewStore(db) as store:
-        assert store.get_item(plain).status == "review"
     # The fixture's own script has no disclaimer and no outro, so it fails the check.
     db2 = tmp_path / "review2.db"
-    failing = B.stage(db2, meeting_dir, meeting_dir / "script.json", _city(tmp_path))
+    failing = B.stage(db2, meeting_dir, meeting_dir / "script.json")
     with ReviewStore(db2) as store:
         item = store.get_item(failing)
     assert item.checks_passed is False
