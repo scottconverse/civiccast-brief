@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set nav = "sources" %}
+{% block content %}
+<h2>Check</h2>
+<p><a href="/sources">Back to Sources</a></p>
+<p class="notice" role="status">{{ read }} of {{ proofs|length }} body sources read.
+{% if saved %}Saved to <code>{{ saved }}</code>.{% elif one_source %}Only this source was read, so the saved city-check.json is unchanged.{% endif %}</p>
+{% if proofs %}
+<table>
+  <thead><tr><th>Result</th><th>Body</th><th>Source</th><th>Meeting</th></tr></thead>
+  <tbody>
+  {% for p in proofs %}
+    <tr>
+      <td>{% if p.ok %}<strong>READ</strong>{% else %}<strong>NOT READ</strong>{% endif %}</td>
+      <td>{{ p.body }}</td>
+      <td>{{ kind_labels.get(p.kind, p.kind) }}<br><span class="muted">{{ p.address }}</span></td>
+      <td>
+        {% if p.ok %}
+          {{ p.meeting_date.isoformat() if p.meeting_date else "date not printed" }}
+          {{ p.title }}<br>
+          {{ p.what }}:
+          {% if p.document.startswith("http") %}<a href="{{ p.document }}" rel="noreferrer">{{ p.document }}</a>{% else %}{{ p.document }}{% endif %}
+        {% else %}
+          Why: {{ p.problem }}
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nothing matched, so nothing was read.</p>
+{% endif %}
+{% endblock %}
