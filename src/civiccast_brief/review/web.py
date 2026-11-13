@@ -600,6 +600,7 @@ def make_desk_app(
 
     @app.post("/sources/find", response_class=HTMLResponse)
     async def find_search(request: Request) -> Response:
+        from civiccast_brief.citybuild import browser
         from civiccast_brief.citybuild.cli import parse_also
         from civiccast_brief.citybuild.search import search_city
 
@@ -631,14 +632,18 @@ def make_desk_app(
         except ValueError as exc:
             return again(str(exc).replace("--also ", "The line "), "also")
         fetcher = state.make_fetcher()
-        found = await run_in_threadpool(
-            search_city,
-            name,
-            region,
-            website=form.get("website", "").strip() or None,
-            extra=extra,
-            fetcher=fetcher,
-        )
+        try:
+            found = await run_in_threadpool(
+                search_city,
+                name,
+                region,
+                website=form.get("website", "").strip() or None,
+                extra=extra,
+                fetcher=fetcher,
+                open_in_browser=browser.open_page,
+            )
+        finally:
+            browser.close_shared()
         search_id = secrets.token_urlsafe(9)
         state.searches[search_id] = found
         while len(state.searches) > MAX_SEARCHES:
