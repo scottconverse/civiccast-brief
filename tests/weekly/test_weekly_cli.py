@@ -97,3 +97,17 @@ def test_publish_needs_the_site_settings(tmp_path, capsys):
     )  # fmt: skip
     assert cli._publish(args) == 1
     assert "publish needs the site settings" in capsys.readouterr().err
+
+
+def test_the_pc_worker_folder_is_passed_on_and_refused_with_diarize(tmp_path, capsys, monkeypatch):
+    seen = []
+    report = NS(lines=[], failed=0)
+    monkeypatch.setattr(cli, "run_week", lambda s, *a, **k: seen.append(s) or report)
+    args = _args(tmp_path, "--worker", str(tmp_path / "pc"), "--diarize")
+    assert cli._run(args, Listers(primegov=lambda *a: [])) == 1
+    assert "--diarize needs the meeting's audio" in capsys.readouterr().err
+    assert seen == []
+    (tmp_path / "2").mkdir()
+    again = _args(tmp_path / "2", "--worker", str(tmp_path / "pc"))
+    cli._run(again, Listers(primegov=lambda *a: []))
+    assert seen and seen[0].worker == tmp_path / "pc"

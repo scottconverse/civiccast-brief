@@ -501,3 +501,63 @@ Windows:
 ```
 schtasks /Create /TN "CivicCast Brief weekly" /SC WEEKLY /D TUE /ST 06:00 /TR "C:\path\to\python.exe -m civiccast_brief.weekly run --city ... (the rest of the command)"
 ```
+
+## 10. A cloud station with a Windows PC worker
+
+A station on a cloud server cannot do two of the weekly steps: YouTube asks a data-center address
+to sign in before it hands over captions, and the server has no GPU for the voice. A Windows PC on
+a home connection does those two steps, and the cloud station does the rest.
+
+**On the cloud station.** Add a `"worker"` folder to `station.json`, and give the job and publish
+commands the same folder as `--worker`:
+
+```
+{
+  "db": "desk.db",
+  "city": "cities/yourcity",
+  "schedule": {"day": "monday", "time": "06:00", "timezone": "America/Denver"},
+  "worker": "worker",
+  "job": [["{python}", "-m", "civiccast_brief.weekly", "run", "--worker", "worker", "--city", "cities/yourcity", "..."]],
+  "publish": [["{python}", "-m", "civiccast_brief.weekly", "publish", "--worker", "worker", "--city", "cities/yourcity", "..."]]
+}
+```
+
+Then:
+
+- a YouTube meeting waits for its captions. The run reports "waiting for its captions from the PC
+  worker", which is not a failure;
+- a published episode waits for its audio in the same way;
+- `--diarize` cannot be used with `--worker`, because it needs the meeting's audio.
+
+Meetings from Granicus or Cablecast portals do not wait. The station fetches their captions itself.
+
+**The token.** The station and the PC share one token. Make a long random one and set it on both
+machines, either as the environment variable `CIVICCAST_WORKER_TOKEN` or, on Windows, as a
+credential:
+
+```
+cmdkey /generic:CivicCastBrief/worker-token /user:worker /pass:YOUR-TOKEN
+```
+
+The station will not start with a `"worker"` folder and no token.
+
+**On the PC.** Run the worker with the station's address:
+
+```
+python -m civiccast_brief.station worker --station https://desk.example.org
+```
+
+Every 5 minutes it asks the station what it needs. It fetches each video's captions with yt-dlp,
+or reads the transcript panel in Chrome, and makes each episode's audio with the voice engine
+named in the request. Then it sends the files back.
+
+- When captions arrive, the station starts the weekly job again.
+- When audio arrives, the station queues a publish.
+
+Options:
+
+- `--once` checks one time and stops. The exit code is 1 when a job failed.
+- `--every N` sets the seconds between checks.
+- `--work DIR` sets where the PC keeps its files (by default `~/.civiccast-brief/worker`).
+
+To start it with Windows, add a scheduled task "At log on" that runs the command.
