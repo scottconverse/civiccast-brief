@@ -36,7 +36,7 @@ import secrets
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
@@ -52,6 +52,9 @@ from civiccast_brief.review import desk
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.weekly import rosterfill
+
+if TYPE_CHECKING:
+    from civiccast_brief.station.runner import Station
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +91,16 @@ STATE_HELP: Final = {
     "killed": "Will not run. Edit or redraft it to bring it back to review.",
     "published": "Published. The export writes it.",
 }
+
+
+def _duration(seconds: float) -> str:
+    """12 s, 4 min 05 s, 1 h 02 min."""
+    whole = round(seconds)
+    if whole < 60:
+        return f"{whole} s"
+    if whole < 3600:
+        return f"{whole // 60} min {whole % 60:02d} s"
+    return f"{whole // 3600} h {whole % 3600 // 60:02d} min"
 
 
 def local_time(value: str | None) -> str:
@@ -173,8 +186,11 @@ class DeskApp:
         city_dir: str | Path | None = None,
         writer: desk.Writer | None = None,
         regenerate: RegenerateCallback | None = None,
+        root: str = "",
     ) -> None:
         self.store = store
+        #: Where the desk is mounted ("" or "/desk"); every link and redirect starts with it.
+        self.root = root
         self.city_dir = Path(city_dir) if city_dir is not None else None
         self.writer = writer
         self.token = secrets.token_urlsafe(24)
@@ -189,12 +205,20 @@ class DeskApp:
         #: What the last removed source was ("https://... for City Council"), for its notice.
         self.removed: dict[str, str] = {}
         self.templates.filters["localtime"] = local_time
+        self.templates.filters["when"] = lambda v: v.strftime("%a %Y-%m-%d %H:%M %Z")
+        self.templates.filters["duration"] = _duration
+        #: True in the station, which adds the Weekly job page.
+        self.has_station = False
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
 
     def page(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
         context.setdefault("signed_in", True)
         html = self.templates.get_template(name).render(
-            token=self.token, city_dir=self.city_dir, **context
+            token=self.token,
+            city_dir=self.city_dir,
+            root=self.root,
+            has_station=self.has_station,
+            **context,
         )
         return HTMLResponse(html, status_code=status)
 
@@ -434,8 +458,60 @@ def _then_close_chrome(work: Any, *args: Any, **kw: Any) -> Any:
         browser.close_shared()
 
 
+def _route_path(request: Request) -> str:
+    """The path inside the desk: a mounted desk sees "/desk/sign-in" as "/sign-in"."""
+    path = str(request.scope.get("path", ""))
+    root = str(request.scope.get("root_path", ""))
+    return path[len(root) :] if root and path.startswith(root) else path
+
+
 def _redirect(location: str) -> RedirectResponse:
     return RedirectResponse(location, status_code=303)
+
+
+RUN_NOTICES: Final = {
+    "started": ("The weekly job started. This page shows it until it ends.", False),
+    "busy": ("A run is already going. Run now waits until it ends.", True),
+}
+
+
+def _add_run_routes(
+    app: FastAPI,
+    state: DeskApp,
+    station: Station,
+    read_form: Callable[[Request], Any],
+    bad_token: Callable[[], Response],
+) -> None:
+    """The Weekly job page: last run, next run, Run now, and each run's output."""
+
+    def runs_page(notice: str = "", bad: bool = False, code: int = 200) -> HTMLResponse:
+        return state.page(
+            "runs.html",
+            status=code,
+            title="Weekly job",
+            job=station.status(),
+            notice=notice,
+            notice_bad=bad,
+        )
+
+    @app.get("/runs", response_class=HTMLResponse)
+    def runs(notice: str = "") -> HTMLResponse:
+        text, bad = RUN_NOTICES.get(notice, ("", False))
+        return runs_page(text, bad)
+
+    @app.get("/runs/{run_id}", response_class=HTMLResponse)
+    def one_run(run_id: int) -> HTMLResponse:
+        run = station.run(run_id)
+        if run is None:
+            return runs_page(f"There is no run {run_id}.", True, 404)
+        return state.page("run.html", title=f"Run {run_id}", run=run)
+
+    @app.post("/runs/now")
+    async def run_now(request: Request) -> Response:
+        if await read_form(request) is None:
+            return bad_token()
+        started = await run_in_threadpool(station.run_now)
+        return _redirect("/runs?notice=" + ("started" if started is not None else "busy"))
 
 
 def make_desk_app(
@@ -445,12 +521,17 @@ def make_desk_app(
     writer: desk.Writer | None = None,
     regenerate: RegenerateCallback | None = None,
     auth: DeskAuth | None = None,
+    root: str = "",
+    station: Station | None = None,
 ) -> FastAPI:
     """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio.
 
     ``auth`` holds the accounts and sessions; by default they live in the desk's own file.
+    ``root`` is the path the desk is mounted at ("/desk" in the station). ``station`` adds the
+    Runs page: the weekly job's last run, next run and Run now.
     """
-    state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate)
+    root = root.rstrip("/")
+    state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate, root=root)
     accounts = auth if auth is not None else DeskAuth(store.path)
     app = FastAPI(
         title="CivicCast Brief editor desk", docs_url=None, redoc_url=None, openapi_url=None
@@ -473,7 +554,7 @@ def make_desk_app(
             response = PlainTextResponse(
                 "Forbidden: cross-site request blocked.\n", status_code=403
             )
-        elif request.url.path in OPEN_PATHS:
+        elif _route_path(request) in OPEN_PATHS:
             response = await call_next(request)
         else:
             user = await run_in_threadpool(accounts.user_for, request.cookies.get(SESSION_COOKIE))
@@ -481,10 +562,13 @@ def make_desk_app(
                 request.state.user = user
                 response = await call_next(request)
             elif request.method == "POST":
-                response = PlainTextResponse("Sign in first: /sign-in\n", status_code=401)
+                response = PlainTextResponse(f"Sign in first: {root}/sign-in\n", status_code=401)
             else:
                 response = _redirect("/sign-in")
         response.headers.update(SECURITY_HEADERS)
+        location = response.headers.get("location", "")
+        if root and location.startswith("/") and not location.startswith("//"):
+            response.headers["location"] = root + location
         return response
 
     async def read_form(request: Request) -> dict[str, str] | None:
@@ -578,6 +662,10 @@ def make_desk_app(
         return Response(
             (STATIC_DIR / "desk.js").read_text(encoding="utf-8"), media_type="text/javascript"
         )
+
+    if station is not None:
+        state.has_station = True
+        _add_run_routes(app, state, station, read_form, bad_token)
 
     @app.get("/", response_class=HTMLResponse)
     def items(status: str = "") -> HTMLResponse:

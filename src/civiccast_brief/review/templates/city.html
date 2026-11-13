@@ -9,7 +9,7 @@
 <code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to set up the city.</p>
 {% else %}
 <p class="muted">Saved to <code>{{ path }}</code>. Only these fields change; everything else in the file stays as it is.</p>
-<form method="post" action="/city" novalidate>
+<form method="post" action="{{ root }}/city" novalidate>
   <input type="hidden" name="token" value="{{ token }}">
   <fieldset>
     <legend>City details</legend>

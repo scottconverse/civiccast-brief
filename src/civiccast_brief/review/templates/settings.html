@@ -11,7 +11,7 @@
 <p class="muted">City folder: <code>{{ city_dir }}</code></p>
 
 {% if picks %}
-<form method="post" action="/settings/models">
+<form method="post" action="{{ root }}/settings/models">
   <input type="hidden" name="token" value="{{ token }}">
   <h3>Which model writes each task</h3>
   <p class="muted">Each task has a default model. A body can use a different one; leave it on
@@ -52,6 +52,6 @@
 {% endif %}
 
 <p class="muted">Bodies come from your sources, your items and these settings. Add a source for a
-  body on the <a href="/sources">Sources</a> page to see it here.</p>
+  body on the <a href="{{ root }}/sources">Sources</a> page to see it here.</p>
 {% endif %}
 {% endblock %}

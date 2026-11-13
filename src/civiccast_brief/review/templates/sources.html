@@ -11,10 +11,10 @@
 <code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to add sources.</p>
 {% else %}
 <p class="muted">Where the city's meetings come from. Saved to <code>{{ path }}</code>.</p>
-<p><a href="/sources/find">Find a city's sources</a>: search the city's website and the meeting platforms, then pick what to add.</p>
+<p><a href="{{ root }}/sources/find">Find a city's sources</a>: search the city's website and the meeting platforms, then pick what to add.</p>
 
 {% if sources %}
-<form method="post" action="/sources/check">
+<form method="post" action="{{ root }}/sources/check">
   <input type="hidden" name="token" value="{{ token }}">
   <button type="submit" data-busy="Checking… this reads each source once and can take a minute">Check all sources</button>
   <span class="muted">Reads the newest meeting of each body, the same as <code>city check</code>.</span>
@@ -28,13 +28,13 @@
       <td>{{ s.address }}</td>
       <td>{{ s.bodies|join(", ") }}</td>
       <td>
-        <a href="/sources?edit={{ s.id|urlencode }}">Edit</a>
-        <form method="post" action="/sources/check">
+        <a href="{{ root }}/sources?edit={{ s.id|urlencode }}">Edit</a>
+        <form method="post" action="{{ root }}/sources/check">
           <input type="hidden" name="token" value="{{ token }}">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <button type="submit" data-busy="Checking… this reads the source once and can take a minute">Check</button>
         </form>
-        <form method="post" action="/sources/remove">
+        <form method="post" action="{{ root }}/sources/remove">
           <input type="hidden" name="token" value="{{ token }}">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <button type="submit" data-busy="Removing…">Remove</button>
@@ -48,7 +48,7 @@
 <p>No sources yet. Add the first one below.</p>
 {% endif %}
 
-<form method="post" action="/sources/{{ "edit" if editing else "add" }}" novalidate>
+<form method="post" action="{{ root }}/sources/{{ "edit" if editing else "add" }}" novalidate>
   <input type="hidden" name="token" value="{{ token }}">
   {% if editing %}<input type="hidden" name="source_id" value="{{ editing }}">{% endif %}
   <fieldset>
@@ -87,7 +87,7 @@
         <input class="wide" id="cablecast_host" type="text" name="cablecast_host" value="{{ form.get("cablecast_host", "") }}"
                placeholder="reflect-yourcity.cablecast.tv" {{ invalid("cablecast_host") }}></p>
       {{ field_error("cablecast_host") }}
-      <p><button type="submit" formaction="/sources/cablecast-titles" data-busy="Reading the host's show list…">Show recent titles</button>
+      <p><button type="submit" formaction="{{ root }}/sources/cablecast-titles" data-busy="Reading the host's show list…">Show recent titles</button>
         <span class="muted">Lists the names its recent shows use, so you can type a matching body name.</span></p>
       {% if cablecast_titles %}
       <p>Body names in the recent show titles (the date is left off; the number is how many shows):</p>
@@ -146,7 +146,7 @@
       <textarea id="bodies" name="bodies" placeholder="City Council" {{ invalid("bodies") }}>{{ form.get("bodies", "") }}</textarea></p>
     {{ field_error("bodies") }}
     <button type="submit" class="primary" data-busy="Checking and saving…">{{ "Save changes" if editing else "Add source" }}</button>
-    {% if editing %}<a href="/sources">Cancel</a>{% endif %}
+    {% if editing %}<a href="{{ root }}/sources">Cancel</a>{% endif %}
   </fieldset>
 </form>
 {% endif %}

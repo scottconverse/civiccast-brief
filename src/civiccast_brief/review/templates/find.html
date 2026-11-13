@@ -2,7 +2,7 @@
 {% set nav = "sources" %}
 {% block content %}
 <h2>Find a city's sources</h2>
-<p><a href="/sources">Back to Sources</a></p>
+<p><a href="{{ root }}/sources">Back to Sources</a></p>
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 {% if city_dir is none %}
 <p>This desk was started without a city folder. Start it with
@@ -12,7 +12,7 @@
 Granicus, YouTube and others) what they list. No AI model is used. Nothing is saved until you pick
 sources below and press Add.</p>
 
-<form method="post" action="/sources/find" novalidate>
+<form method="post" action="{{ root }}/sources/find" novalidate>
   <input type="hidden" name="token" value="{{ token }}">
   <fieldset>
     <legend>The city</legend>
@@ -37,7 +37,7 @@ sources below and press Add.</p>
 <h3>Found for {{ found.name }}, {{ found.state }}</h3>
 <p>Website: {{ found.website or "not found" }}. {{ found.asked|length }} web requests.</p>
 {% if found.candidates %}
-<form method="post" action="/sources/find/save">
+<form method="post" action="{{ root }}/sources/find/save">
   <input type="hidden" name="token" value="{{ token }}">
   <input type="hidden" name="search" value="{{ search_id }}">
   <fieldset>
@@ -62,7 +62,7 @@ sources below and press Add.</p>
 <ul>
 {% for u in found.unread %}<li>{{ u.platform }}: {{ u.url }}{% if u.note %} ({{ u.note }}){% endif %}
   {% if u.channel %}
-  <form method="post" action="/sources/find/add-anyway" novalidate>
+  <form method="post" action="{{ root }}/sources/find/add-anyway" novalidate>
     <input type="hidden" name="token" value="{{ token }}">
     <input type="hidden" name="search" value="{{ search_id }}">
     <input type="hidden" name="index" value="{{ loop.index0 }}">

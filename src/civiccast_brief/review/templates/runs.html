@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set nav = "runs" %}
+{% block head %}{% if job.running %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+<h2>Weekly job</h2>
+{% if notice %}<p class="notice{% if notice_bad %} error{% endif %}" role="{{ 'alert' if notice_bad else 'status' }}">{{ notice }}</p>{% endif %}
+<p>It runs {{ job.schedule }}: it finds the week's meetings, makes each brief, and publishes it.</p>
+<dl class="facts">
+  <dt>Now</dt>
+  <dd>{% if job.running %}<strong>Running</strong> since {{ job.running.started_at|when }} &middot; <a href="{{ root }}/runs/{{ job.running.id }}">watch its output</a>{% else %}Idle{% endif %}</dd>
+  <dt>Last run</dt>
+  <dd>{% if job.last %}<span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% if job.last.seconds is not none %}, took {{ job.last.seconds|duration }}{% endif %} &middot; <a href="{{ root }}/runs/{{ job.last.id }}">output</a>{% else %}None yet{% endif %}</dd>
+  <dt>Next run</dt>
+  <dd>{{ job.next_at|when }}</dd>
+</dl>
+<form method="post" action="{{ root }}/runs/now" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit" class="primary" data-busy="Starting…"{% if job.running %} disabled{% endif %}>Run now</button>
+  {% if job.running %}<span class="muted">A run is going; Run now comes back when it ends.</span>{% endif %}
+</form>
+{% if job.runs %}
+<h3>Recent runs</h3>
+<table>
+  <thead><tr><th>Started</th><th>How</th><th>State</th><th>Took</th><th></th></tr></thead>
+  <tbody>
+  {% for run in job.runs %}
+    <tr>
+      <td>{{ run.started_at|when }}</td>
+      <td>{{ "Run now" if run.trigger == "manual" else "Schedule" }}</td>
+      <td><span class="status {{ run.status }}">{{ run.status }}</span></td>
+      <td>{% if run.seconds is not none %}{{ run.seconds|duration }}{% else %}—{% endif %}</td>
+      <td><a href="{{ root }}/runs/{{ run.id }}">Output</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
