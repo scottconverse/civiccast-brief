@@ -21,6 +21,7 @@ HOST = "reflect-cityofloveland-co.cablecast.tv"
 API = f"https://{HOST}/cablecastapi/v1"
 STORE = f"https://{HOST}/store-3/746-cc-v2/"
 STORE_732 = f"https://{HOST}/store-3/732-Planning-Commission-August-24-2026-v2/"
+STORE_726 = f"https://{HOST}/store-3/726-PC-v3/"
 OAKLAND = ROSTERS_DIR / "oakland.json"
 
 
@@ -38,6 +39,10 @@ def _answers():
         STORE + "vod.m3u8": _text("vod.m3u8"),
         STORE + "captions.en.m3u8": _text("captions.en.m3u8"),
         STORE_732 + "vod.m3u8": _text("vod-732.m3u8"),
+        f"{API}/shows/726": _text("show-726.json"),
+        f"{API}/vods/516": _text("vod-726.json"),
+        STORE_726 + "vod.m3u8": _text("vod-726.m3u8"),
+        f"{API}/shows?pageSize=200": _text("shows.json"),
     }
     for number in ("00000", "00499", "00500", "00501", "01568"):
         suffix = "13.167" if number == "01568" else "10.000"
@@ -64,7 +69,8 @@ def web(monkeypatch):
 
 def test_the_list_keeps_shows_with_a_video_once_each_and_dates_them_by_title(monkeypatch):
     shows = C.parse_shows(json.loads(_text("shows.json")), HOST)
-    # Skipped: 745 "cc", 743 and 742, 736 and 664 (no vods); 726 repeats 732's title and day.
+    # Skipped: 745 "cc", 743 and 742, 736 and 664 (no vods); 726 repeats 732's title and day, and
+    # with no way to choose the first listed (732) stands for both.
     assert [(s.show_id, s.vod_id, s.date) for s in shows] == [
         (750, 533, "November 10, 2026"),
         (749, 534, "November 10, 2026"),
@@ -80,11 +86,23 @@ def test_the_list_keeps_shows_with_a_video_once_each_and_dates_them_by_title(mon
     ]
     assert shows[3].name == "City Council Meeting November 4, 2026"
     assert shows[5].name == "City Council - Oct 20 2026"
-    # The list is one request for the newest shows of every body, with no search term.
-    asked = []
-    monkeypatch.setattr(C, "_fetch", lambda url: asked.append(url) or _text("shows.json"))
-    assert [s.show_id for s in C.list_shows(HOST)] == [s.show_id for s in shows]
-    assert asked == [f"{API}/shows?pageSize=200"]
+
+
+def test_of_two_copies_of_one_meeting_the_list_keeps_the_one_with_captions(web):
+    # Loveland: 732 and 726 are both "Planning Commission August 24, 2026". 732's vod has no
+    # caption playlist (its list row says hasCaptions true); 726's has one (its row says false).
+    shows = C.list_shows(HOST)
+    assert [s.show_id for s in shows] == [750, 749, 748, 746, 744, 740, 737, 726, 665]
+    assert (shows[7].vod_id, shows[7].date) == (516, "August 24, 2026")
+    # One request for the newest shows of every body, with no search term; captions are looked
+    # for only in the group of copies.
+    assert web[0] == f"{API}/shows?pageSize=200"
+    assert not any("/shows/746" in url or "/shows/750" in url for url in web)
+
+
+def test_when_no_copy_has_captions_the_first_listed_is_kept(monkeypatch, web):
+    monkeypatch.setattr(C, "has_captions", lambda show: False)
+    assert 732 in [s.show_id for s in C.list_shows(HOST)]
 
 
 def test_a_show_without_a_day_is_not_listed():

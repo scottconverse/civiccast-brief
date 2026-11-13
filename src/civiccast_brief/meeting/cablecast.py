@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import urllib.request
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -103,23 +104,41 @@ def _show(host: str, row: dict[str, Any]) -> Show | None:
     return Show(host, int(row["id"]), int(vods[0]), title, _long(day))
 
 
-def parse_shows(data: dict[str, Any], host: str) -> list[Show]:
-    """The shows that have a video, in the order given (newest first). Two shows with one title
-    and day (Cablecast keeps a show per airing) are one meeting, and the first with a vod wins."""
-    shows: list[Show] = []
-    seen: set[tuple[str, str]] = set()
+def parse_shows(
+    data: dict[str, Any], host: str, choose: Callable[[list[Show]], Show] | None = None
+) -> list[Show]:
+    """The shows that have a video, in the order given (newest first). Cablecast keeps a show per
+    airing, so two shows with one title and day are one meeting: ``choose`` picks one of them
+    (default the first listed). A group keeps the place of its first show."""
+    groups: dict[tuple[str, str], list[Show]] = {}
     for row in data.get("shows") or []:
         show = _show(host, row)
-        if show is None or (show.name.casefold(), show.date) in seen:
-            continue
-        seen.add((show.name.casefold(), show.date))
-        shows.append(show)
-    return shows
+        if show is not None:
+            groups.setdefault((show.name.casefold(), show.date), []).append(show)
+    pick = choose or (lambda group: group[0])
+    return [group[0] if len(group) == 1 else pick(group) for group in groups.values()]
+
+
+def has_captions(show: Show) -> bool:
+    """Whether the show's vod names a caption playlist. The list's own ``hasCaptions`` flag is
+    not used: Loveland's two copies of one meeting have it the wrong way round."""
+    try:
+        full = find_show(show.host, show.show_id)
+        base = full.mp4_url.rsplit("/", 1)[0] + "/"
+        return subtitles_uri(_fetch(base + "vod.m3u8")) is not None
+    except CablecastError:
+        return False
+
+
+def _captioned(group: list[Show]) -> Show:
+    """The first copy of a meeting whose vod has captions, else the first copy."""
+    return next((show for show in group if has_captions(show)), group[0])
 
 
 def list_shows(host: str) -> list[Show]:
-    """The newest shows of every body, not only the council: the caller picks the bodies."""
-    return parse_shows(_json(f"{_api(host)}/shows?pageSize={LIST_SIZE}"), host)
+    """The newest shows of every body, not only the council: the caller picks the bodies.
+    Captions are looked for only to choose between copies of one meeting."""
+    return parse_shows(_json(f"{_api(host)}/shows?pageSize={LIST_SIZE}"), host, _captioned)
 
 
 def find_show(host: str, show_id: int) -> Show:
