@@ -681,3 +681,49 @@ def test_an_episode_killed_on_the_desk_leaves_the_site(tmp_path):
     assert "oWZpzjzjwnE: no longer published; episode ep-oWZpzjzjwnE removed" in report.lines
     assert sorted(p.name for p in site.episodes.glob("*.json")) == ["older-episode.json"]
     assert list(site.media.iterdir()) == []
+
+
+def test_a_killed_copy_that_shares_an_episode_name_does_not_stay_on_the_site(tmp_path):
+    """Live on 13 November 2026: two videos of the 5 November preservation commission built the
+    same episode file; the second was killed on the desk and its episode stayed on the site,
+    because the copy left published was not built again."""
+    from civiccast_brief.weekly.run import State, _drop_unpublished_episodes
+
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    site.episodes.mkdir()
+    (site.episodes / "2026-11-05-hpc.json").write_text('{"video": "killed"}', encoding="utf-8")
+    state = State(tmp_path / STATE_NAME)
+    state.data["built"] = {"kqArjgcjLF0": "2026-11-05-hpc", "yK8bes8CYTM": "2026-11-05-hpc"}
+    state.data["built_from"] = {"kqArjgcjLF0": "hash-kept", "yK8bes8CYTM": "hash-killed"}
+    items = [
+        (tmp_path, {"kind": "episode", "status": "published", "meeting_id": "kqArjgcjLF0"}),
+    ]
+
+    _drop_unpublished_episodes(site, state, items)
+
+    assert state.data["built"] == {"kqArjgcjLF0": "2026-11-05-hpc"}
+    # The kept copy is built again, so its episode replaces the killed one's in the file.
+    assert "kqArjgcjLF0" not in state.data["built_from"]
+
+
+def test_a_meeting_run_before_keeps_its_run_when_it_would_not_be_run_now(tmp_path):
+    """Live on 13 November 2026: a preservation commission video already run was found again as
+    the second video of its meeting; its entry became 'not run' and its published episode could
+    not be built ("no run of it is in this work folder")."""
+    from dataclasses import replace
+
+    settings = _settings(tmp_path)
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    second = replace(COUNCIL_MEETING, reason="another video of this meeting runs (XXXXXXXXXXX)")
+    report = run_week(settings, [second], LAST, Fake().steps())
+
+    entry = json.loads((settings.work / STATE_NAME).read_text())["meetings"][COUNCIL_MEETING.key]
+    assert entry["status"] == "done"
+    assert f"{COUNCIL_MEETING.day} {COUNCIL_MEETING.title}: done in an earlier run" in report.lines
