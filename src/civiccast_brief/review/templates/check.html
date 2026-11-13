@@ -2,7 +2,7 @@
 {% set nav = "sources" %}
 {% block content %}
 <h2>Check</h2>
-<p><a href="/sources">Back to Sources</a></p>
+<p><a href="{{ root }}/sources">Back to Sources</a></p>
 <p class="notice" role="status">{{ read }} of {{ proofs|length }} body sources read.
 {% if saved %}Saved to <code>{{ saved }}</code>.{% elif one_source %}Only this source was read, so the saved city-check.json is unchanged.{% endif %}</p>
 {% if proofs %}

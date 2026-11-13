@@ -43,22 +43,27 @@
     label { display: block; margin: .6rem 0 .2rem; }
     input[type=email], input[type=password] { font: inherit; padding: .3rem;
              width: min(100%, 22rem); box-sizing: border-box; }
+    .status.ok { color: var(--ok); } .status.failed, .status.interrupted { color: var(--bad); }
+    .facts { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; }
+    .facts dt { font-weight: 600; } .facts dd { margin: 0; }
     #busy-status { min-height: 1.2em; margin: 0; }
   </style>
-  <script src="/static/desk.js" defer></script>
+  <script src="{{ root }}/static/desk.js" defer></script>
+  {% block head %}{% endblock %}
 </head>
 <body>
 <header>
-  <h1><a href="/">CivicCast Brief editor desk</a></h1>
+  <h1><a href="{{ root }}/">CivicCast Brief editor desk</a></h1>
   {% if signed_in %}
   <nav aria-label="Desk">
-    <a href="/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
-    <a href="/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
-    <a href="/city" {% if nav == "city" %}aria-current="page"{% endif %}>City</a>
-    <a href="/sources" {% if nav == "sources" %}aria-current="page"{% endif %}>Sources</a>
-    <a href="/roster" {% if nav == "roster" %}aria-current="page"{% endif %}>Roster</a>
+    <a href="{{ root }}/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
+    <a href="{{ root }}/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
+    <a href="{{ root }}/city" {% if nav == "city" %}aria-current="page"{% endif %}>City</a>
+    <a href="{{ root }}/sources" {% if nav == "sources" %}aria-current="page"{% endif %}>Sources</a>
+    <a href="{{ root }}/roster" {% if nav == "roster" %}aria-current="page"{% endif %}>Roster</a>
+    {% if has_station %}<a href="{{ root }}/runs" {% if nav == "runs" %}aria-current="page"{% endif %}>Weekly job</a>{% endif %}
   </nav>
-  <form method="post" action="/sign-out" class="sign-out">
+  <form method="post" action="{{ root }}/sign-out" class="sign-out">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit">Sign out</button>
   </form>

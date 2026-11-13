@@ -12,7 +12,7 @@
 <p class="notice{% if notice_error %} error{% endif %}" role="{% if notice_error %}alert{% else %}status{% endif %}">{{ notice }}</p>
 {% endif %}
 
-<form method="post" action="/items/{{ saved.id }}/save">
+<form method="post" action="{{ root }}/items/{{ saved.id }}/save">
   <input type="hidden" name="token" value="{{ token }}">
   {% if item.kind == "article" %}
   {% set a = item.article %}
@@ -53,27 +53,27 @@
 </form>
 
 <div class="actions">
-  <form method="post" action="/items/{{ saved.id }}/publish">
+  <form method="post" action="{{ root }}/items/{{ saved.id }}/publish">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" class="primary" data-busy="Publishing…">Publish</button>
   </form>
-  <form method="post" action="/items/{{ saved.id }}/hold">
+  <form method="post" action="{{ root }}/items/{{ saved.id }}/hold">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" data-busy="Holding…">Hold</button>
   </form>
-  <form method="post" action="/items/{{ saved.id }}/kill">
+  <form method="post" action="{{ root }}/items/{{ saved.id }}/kill">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" data-busy="Killing…">Kill</button>
   </form>
   {% if saved.kind == "episode" %}
-  <form method="post" action="/items/{{ saved.id }}/regenerate">
+  <form method="post" action="{{ root }}/items/{{ saved.id }}/regenerate">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit" data-busy="Requesting…">Regenerate audio</button>
   </form>
   {% endif %}
 </div>
 
-<form method="post" action="/items/{{ saved.id }}/redraft">
+<form method="post" action="{{ root }}/items/{{ saved.id }}/redraft">
   <input type="hidden" name="token" value="{{ token }}">
   <fieldset>
     <legend>Redraft</legend>
@@ -105,5 +105,5 @@
   <li class="muted">No history.</li>
 {% endfor %}
 </ul>
-<p><a href="/">All items</a></p>
+<p><a href="{{ root }}/">All items</a></p>
 {% endblock %}

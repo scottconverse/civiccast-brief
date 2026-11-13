@@ -4,9 +4,9 @@
 <h2>Items</h2>
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 <p class="tabs">
-  <a href="/" {% if not current %}aria-current="page"{% endif %}>All</a>
+  <a href="{{ root }}/" {% if not current %}aria-current="page"{% endif %}>All</a>
   {% for s in statuses %}
-  <a href="/?status={{ s }}" {% if current == s %}aria-current="page"{% endif %}>{{ s|capitalize }} ({{ counts.get(s, 0) }})</a>
+  <a href="{{ root }}/?status={{ s }}" {% if current == s %}aria-current="page"{% endif %}>{{ s|capitalize }} ({{ counts.get(s, 0) }})</a>
   {% endfor %}
 </p>
 <p class="muted">The export writes published items whose text is unchanged since publishing, and nothing else:
@@ -24,7 +24,7 @@
       <td>{{ item.meeting_date }}</td>
       <td><span class="status {{ item.status }}">{{ item.status }}</span>{% if item.published_at %}<br><span class="muted">{{ item.published_at|localtime }}</span>{% endif %}</td>
       <td>{% if item.checks_passed is none %}<span class="muted">not run</span>{% elif item.checks_passed %}passed{% else %}failed{% endif %}</td>
-      <td><a href="/items/{{ item.id }}">Open</a></td>
+      <td><a href="{{ root }}/items/{{ item.id }}">Open</a></td>
     </tr>
   {% endfor %}
   </tbody>
