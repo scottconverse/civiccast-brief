@@ -22,6 +22,7 @@ on:
       - 'docs/**.webp'
       - 'docs/**.html'
       - 'docs/**.css'
+      - 'website/**'
   pull_request:
     # Docs-only changes start no CI run (docs get push, merge and publish only).
     paths-ignore:
@@ -41,6 +42,7 @@ on:
       - 'docs/**.webp'
       - 'docs/**.html'
       - 'docs/**.css'
+      - 'website/**'
 
 jobs:
   test:

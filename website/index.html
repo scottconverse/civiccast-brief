@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CivicCast Brief: what did my local government just do?</title>
+<meta name="description" content="CivicCast Brief turns a city's public meeting videos and documents into cited news stories, a two-host podcast and a static city website. Self-hosted, Windows-first, Apache-2.0.">
+<meta name="theme-color" content="#2340c4">
+<meta property="og:title" content="CivicCast Brief">
+<meta property="og:description" content="Public meeting video in, cited news story and podcast out. Every paragraph links to the second it was said.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://scottconverse.github.io/civiccast-brief/">
+<meta property="og:image" content="https://scottconverse.github.io/civiccast-brief/assets/shots/site-home.webp">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/bricolage-grotesque-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="CivicCast Brief, top of page">
+      <img src="assets/favicon.svg" alt="" width="32" height="32">
+      <span>CivicCast <b>Brief</b></span>
+    </a>
+    <a class="gh-m" href="https://github.com/scottconverse/civiccast-brief">GitHub</a>
+    <nav class="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#start">Quick start</a>
+      <a href="#status">Status</a>
+      <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md">Manual</a>
+      <a class="gh" href="https://github.com/scottconverse/civiccast-brief">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Version 0.2.0 · open source · Windows 11</p>
+      <h1>What did your city government <em>just do?</em></h1>
+      <p class="lede">CivicCast Brief reads a city's public meeting videos, agendas, packets and minutes, then writes a
+        <strong>news story</strong>, a <strong>recap</strong> and a <strong>two-host podcast episode</strong> for each
+        meeting. Every paragraph, vote and quote links to the second in the video where it was said.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="https://longmont.civiccastbrief.org">See the live Longmont site <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="#start">Install on Windows</a>
+      </div>
+      <p class="cta-note">Self-hosted · Apache-2.0 · free open-source voices, no hosted text-to-speech</p>
+
+      <div class="showcase">
+        <figure class="browser">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>longmont.civiccastbrief.org</span></div>
+          <img src="assets/shots/site-home.webp" width="1600" height="1000"
+            alt="The Longmont CivicCast Brief front page: the lead story about the urban renewal authority's 8-0 vote, topic buttons, and a podcast panel listing four episodes.">
+        </figure>
+        <figure class="phone">
+          <img src="assets/shots/site-phone.webp" width="780" height="1688" loading="lazy"
+            alt="The same front page on a phone, with the lead story first.">
+        </figure>
+      </div>
+    </div>
+
+    <div class="proof">
+      <ul class="wrap">
+        <li><b>Cited to the second</b><span>Each paragraph links to its moment in the meeting video, or to the packet page it came from.</span></li>
+        <li><b>Named only from records</b><span>A speaker gets a name only when a city record prints it. Everyone else stays unknown.</span></li>
+        <li><b>Voices on your own GPU</b><span>Dia2 runs on your NVIDIA card. Nothing is sent to a hosted voice service.</span></li>
+        <li><b>A real city, every week</b><span>Longmont, Colorado runs on it now, from meeting video to published site.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="problem">
+    <div class="wrap split2">
+      <div>
+        <p class="kicker">The problem</p>
+        <h2>City meetings are public. Hardly anyone can watch them.</h2>
+        <p class="intro">A council meeting can run four hours. The record is spread across a video, an agenda, a
+          packet of hundreds of pages and minutes that come out weeks later. Most towns no longer have a reporter in the room.</p>
+        <ul class="problem-list">
+          <li><span class="n">1</span><p><strong>Summaries you can check.</strong>A recap is only useful if a reader can see where each sentence came from.</p></li>
+          <li><span class="n">2</span><p><strong>No made-up facts.</strong>A claim, number or name that is not in the meeting's own words or documents is dropped.</p></li>
+          <li><span class="n">3</span><p><strong>Cheap enough for one town.</strong>A static site, a feed and audio made on one Windows PC, with no paid voice service.</p></li>
+        </ul>
+      </div>
+      <figure class="quote-card">
+        <p>One speaker said putting the burden squarely on the project was unfair. Council Member Jake Marsing moved to strike
+          section two, condition two, of ordinance 2026-76 in its entirety. <span class="cite">4:11:43</span> <span class="cite">3:59:17</span></p>
+        <p>On access, a speaker said a sprinklered development could go to 50 units, and above 50 units two accesses were
+          required. <span class="cite">3:07:35</span> <span class="cite">3:57:06</span></p>
+        <figcaption class="meta">From the <a href="https://longmont.civiccastbrief.org/episodes/2026-11-03-longmont-city-council/">Nov. 3, 2026 Longmont City Council story</a>.
+          On the site, each time opens the meeting video at that second.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band alt" id="how">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>One weekly run, from meeting video to published page.</h2>
+      <p class="intro">The weekly run finds the last seven days of meetings and takes each new one through every step.
+        It records each step, so running it again retries only what failed.</p>
+      <ol class="steps">
+        <li><h3>Find</h3><p><code>city find</code> finds a city's meeting sources, with no AI model. You tick what to keep.</p></li>
+        <li><h3>Capture</h3><p>Video captions, the agenda and, where the platform has them, the packet and the minutes.</p></li>
+        <li><h3>Transcript</h3><p>Times on every line. Speaker names from the roll call, member list and agenda.</p></li>
+        <li><h3>Recap</h3><p>Every claim quotes the meeting word for word, with the time it was said.</p></li>
+      </ol>
+      <ol class="steps steps-2" start="5" style="counter-reset: s 4">
+        <li><h3>Write</h3><p>A news story and a two-host podcast script, both written from the recap.</p></li>
+        <li><h3>Check</h3><p>A checker compares every sentence to the record and drops what it cannot find.</p></li>
+        <li><h3>Desk</h3><p>Items that pass go out. Items that fail wait on the editor's Problems list.</p></li>
+        <li><h3>Publish</h3><p>Audio with chapters, the static site and the feed, deployed to your host.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band" id="features">
+    <div class="wrap">
+      <p class="kicker">Features</p>
+      <h2>Built to be checked, not just read.</h2>
+      <div class="caps">
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <h3>Stories cited to the second</h3>
+          <p>Each paragraph, vote and quote links to the second in the video where it was said, or to the page of the packet or minutes it came from.</p>
+        </article>
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg></div>
+          <h3>A checker for every draft</h3>
+          <p>The recap, story and podcast script are each checked against the record. A claim that is not there does not reach the page.</p>
+        </article>
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5"/></svg></div>
+          <h3>An editor desk in the browser</h3>
+          <p>Sign-in, a control room with Problems and What went out, Edit, Unpublish, Kill and Redraft. A failed item never publishes by itself.</p>
+        </article>
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7v4M16 7v4M4 10v1M20 10v1"/><path d="M8 21h8"/></svg></div>
+          <h3>A two-host podcast</h3>
+          <p>Each meeting gets an episode with chapters and a transcript, read by the Dia2 voice engine on your own GPU. The feed follows the Apple Podcasts and Spotify formats.</p>
+        </article>
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+          <h3>Reads the platforms cities use</h3>
+          <p>PrimeGov, Granicus, YouTube, Cablecast, CivicWeb, CivicClerk, CivicPlus, eScribe and Laserfiche, plus web pages, Google Drive and OneDrive shares.</p>
+        </article>
+        <article class="cap">
+          <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+          <h3>Self-hosted, static output</h3>
+          <p>A plain static site with search, board, topic and monthly pages. Deploy it to Cloudflare Pages with audio on R2, or copy it to any web server.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt" id="screens">
+    <div class="wrap">
+      <p class="kicker">See it</p>
+      <h2>What readers and editors see.</h2>
+      <div class="screens">
+        <div class="screen">
+          <div class="copy">
+            <h3>The story page</h3>
+            <p>Readers get a plain news story, an audio player with chapters, and a time on every claim.</p>
+            <ul>
+              <li>Times open the meeting video at that second.</li>
+              <li>Chapters jump to each agenda item in the episode.</li>
+              <li>Topic and board pages collect related stories.</li>
+            </ul>
+          </div>
+          <figure class="browser">
+            <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>longmont.civiccastbrief.org/episodes/…</span></div>
+            <img src="assets/shots/site-story-cites.webp" width="1600" height="1000" loading="lazy"
+              alt="A Longmont City Council story with time stamps after each paragraph, and an audio player listing the episode's chapters.">
+          </figure>
+        </div>
+        <div class="screen flip">
+          <div class="copy">
+            <h3>The editor desk</h3>
+            <p>The control room shows what needs a person, and what already went out.</p>
+            <ul>
+              <li><b>Problems</b>: items that failed a check or still wait for review.</li>
+              <li><b>What went out</b>: everything published, with Edit, Unpublish and Kill.</li>
+              <li>Every desk page needs a signed-in editor.</li>
+            </ul>
+          </div>
+          <figure class="browser">
+            <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>editor desk · 127.0.0.1</span></div>
+            <img src="assets/shots/desk-control-room.webp" width="1600" height="1000" loading="lazy"
+              alt="The CivicCast Brief editor desk control room, with six items under Problems and one auto-published story under What went out.">
+            <figcaption>A local test desk with Longmont meetings.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="architecture">
+    <div class="wrap">
+      <p class="kicker">Architecture</p>
+      <h2>A Python pipeline, a desk and a static site.</h2>
+      <p class="intro">Everything runs on one Windows PC, or on a station server with a Windows PC doing the parts a
+        server cannot. The output is plain files.</p>
+      <div class="arch">
+        <div class="arch-scroll">
+        <svg viewBox="0 0 1100 420" role="img" aria-labelledby="arch-t arch-d">
+          <title id="arch-t">CivicCast Brief architecture</title>
+          <desc id="arch-d">Public records (meeting video and captions, agenda, packet and minutes, member lists) feed the weekly run. The weekly run makes a transcript with speakers, a recap, and a story and podcast script, using a writing model through claude -p or Ollama. Checks pass items to the editor desk. Published items get audio from Dia2, a static site and feed, and are deployed to Cloudflare Pages and R2 or any folder, where readers and podcast apps reach them.</desc>
+          <defs>
+            <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+            <marker id="ak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-k" d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+
+          <rect class="zone" x="16" y="40" width="210" height="360" rx="14"/>
+          <text class="z" x="34" y="66">PUBLIC RECORD</text>
+          <rect class="zone" x="250" y="40" width="520" height="360" rx="14"/>
+          <text class="z" x="268" y="66">WEEKLY RUN · YOUR PC OR A STATION</text>
+          <rect class="zone" x="794" y="40" width="290" height="360" rx="14"/>
+          <text class="z" x="812" y="66">PUBLISH</text>
+
+          <rect class="box" x="34" y="80" width="174" height="56" rx="10"/>
+          <text class="t" x="50" y="104">Meeting video</text><text class="s" x="50" y="123">captions and times</text>
+          <rect class="box" x="34" y="160" width="174" height="56" rx="10"/>
+          <text class="t" x="50" y="184">Documents</text><text class="s" x="50" y="203">agenda, packet, minutes</text>
+          <rect class="box" x="34" y="240" width="174" height="56" rx="10"/>
+          <text class="t" x="50" y="264">Member lists</text><text class="s" x="50" y="283">roll calls, board pages</text>
+
+          <path class="ln" d="M208 108H238M208 188H238M208 268H238M238 108V268"/>
+          <path class="ln" d="M238 108H274" marker-end="url(#a)"/>
+
+          <rect class="box-k" x="276" y="80" width="150" height="56" rx="10"/>
+          <text class="t" x="292" y="104">Transcript</text><text class="s" x="292" y="123">with speaker names</text>
+          <rect class="box-k" x="452" y="80" width="130" height="56" rx="10"/>
+          <text class="t" x="468" y="104">Recap</text><text class="s" x="468" y="123">quotes and times</text>
+          <rect class="box-k" x="608" y="80" width="140" height="56" rx="10"/>
+          <text class="t" x="624" y="104">Story + script</text><text class="s" x="624" y="123">article and podcast</text>
+          <path class="ln-k" d="M426 108H450" marker-end="url(#ak)"/>
+          <path class="ln-k" d="M582 108H606" marker-end="url(#ak)"/>
+
+          <rect class="box" x="276" y="170" width="150" height="56" rx="10"/>
+          <text class="t" x="292" y="194">Writing model</text><text class="s" x="292" y="213">claude -p or Ollama</text>
+          <path class="ln" d="M426 190C440 190 440 130 450 130" stroke-dasharray="4 4" marker-end="url(#a)"/>
+
+          <rect class="box-p" x="452" y="170" width="296" height="56" rx="10"/>
+          <text class="t" x="468" y="194">Checks</text><text class="s" x="468" y="213">a claim not in the record is dropped</text>
+          <path class="ln-k" d="M517 136V168" marker-end="url(#ak)"/>
+          <path class="ln-k" d="M678 136V168" marker-end="url(#ak)"/>
+
+          <rect class="box-s" x="452" y="270" width="296" height="64" rx="10"/>
+          <text class="t" x="468" y="296">Editor desk</text><text class="s" x="468" y="317">passed: published · failed: Problems list</text>
+          <path class="ln-k" d="M600 226V268" marker-end="url(#ak)"/>
+
+          <rect class="box" x="276" y="270" width="150" height="64" rx="10"/>
+          <text class="t" x="292" y="296">Windows PC</text><text class="s" x="292" y="317">captions + audio</text>
+          <text class="s" x="276" y="358">for a cloud station</text>
+          <path class="ln" d="M426 302H450" stroke-dasharray="4 4" marker-end="url(#a)"/>
+
+          <path class="ln-k" d="M748 302H782V108H810" marker-end="url(#ak)"/>
+          <path class="ln-k" d="M782 198H810" marker-end="url(#ak)"/>
+
+          <rect class="box-k" x="812" y="80" width="254" height="56" rx="10"/>
+          <text class="t" x="828" y="104">Audio</text><text class="s" x="828" y="123">Dia2 on an NVIDIA GPU, chapters</text>
+          <rect class="box-k" x="812" y="170" width="254" height="56" rx="10"/>
+          <text class="t" x="828" y="194">Static site and feed</text><text class="s" x="828" y="213">stories, search, archives</text>
+          <rect class="box" x="812" y="260" width="254" height="56" rx="10"/>
+          <text class="t" x="828" y="284">Hosting</text><text class="s" x="828" y="303">Cloudflare Pages + R2, or any folder</text>
+          <rect class="box-p" x="812" y="340" width="254" height="44" rx="10"/>
+          <text class="t" x="828" y="367">Readers and podcast apps</text>
+          <path class="ln" d="M939 136V168" marker-end="url(#a)"/>
+          <path class="ln" d="M939 226V258" marker-end="url(#a)"/>
+          <path class="ln" d="M939 316V338" marker-end="url(#a)"/>
+        </svg>
+        </div>
+      </div>
+      <div class="arch-notes">
+        <p><b>Python 3.12 with uv.</b> One package with a command per step: meeting, script, article, review, audio, site, weekly and station.</p>
+        <p><b>No API key.</b> Claude is called through <code>claude -p</code> on a subscription; other bodies can use any model in Ollama.</p>
+        <p><b>Diagrams in the manual.</b> The <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md#4-architecture">architecture section</a> has the pipeline, the parts, an item's life on the desk and the station with a PC worker.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt" id="start">
+    <div class="wrap qs">
+      <div>
+        <p class="kicker">Quick start</p>
+        <h2>Install it on a Windows PC.</h2>
+        <ol>
+          <li><p><b>Install.</b> One command installs uv, Python packages, ffmpeg and yt-dlp for your user, with no administrator rights, and writes <code>desk.cmd</code>.</p></li>
+          <li><p><b>Open the desk.</b> Double-click <code>desk.cmd</code>. Your browser opens the desk; make the first account.</p></li>
+          <li><p><b>Find your city.</b> On <b>Sources</b>, search for the city, tick what it found, then <b>Check all sources</b>.</p></li>
+          <li><p><b>Run the week.</b> Run the weekly command, or schedule it. New meetings appear on the desk.</p></li>
+        </ol>
+        <div class="need">
+          <b>You need</b>
+          <ul>
+            <li>Windows 11 and Google Chrome</li>
+            <li>Ollama, or a Claude subscription, for writing</li>
+            <li>An NVIDIA GPU for audio</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="term">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>PowerShell</span></div>
+<pre><code><span class="c"># 1. Install (or double-click install.cmd in a copy of the code)</span>
+<span class="p">&gt; </span>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
+
+<span class="c"># 2. Open the editor desk</span>
+<span class="p">&gt; </span>.\desk.cmd
+
+<span class="c"># 4. Run the week for your city</span>
+<span class="p">&gt; </span>python -m civiccast_brief.weekly run --city cities/yourcity `
+    --work runs/weekly --db desk.db --episodes site-in `
+    --media media --site-out site `
+    --base-url https://yourcity.example.org `
+    --media-base-url https://media.example.org</code></pre>
+        </div>
+        <p class="cta-note" style="margin-top:14px">Every option is in
+          <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/set-up-a-city.md">Set up a city</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="deploy">
+    <div class="wrap">
+      <p class="kicker">Deployment</p>
+      <h2>Put the site where you want it.</h2>
+      <div class="deploy">
+        <div class="card">
+          <span class="tag tag-ok">Default · in use</span>
+          <h3>Cloudflare Pages + R2</h3>
+          <p><code>station deploy cloudflare</code> uploads new audio to an R2 bucket and deploys the site to Pages. The token is read from Windows Credential Manager and never printed.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Supported</span>
+          <h3>Any web server</h3>
+          <p><code>station deploy folder</code> copies the site and media into folders a web server serves, and removes only files it put there.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-warn">Built · Linux guide not run</span>
+          <h3>A station with a PC worker</h3>
+          <p><code>station serve</code> runs the desk and the weekly job on a server. A Windows PC fetches captions and makes audio for it. The <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/run-on-hostinger.md">Hostinger guide</a> has not been run on a Linux server.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt" id="status">
+    <div class="wrap">
+      <p class="kicker">Status</p>
+      <h2>Early, working, and honest about the gaps.</h2>
+      <p class="intro">Version 0.2.0. The whole pipeline runs every week for one real city. Some outside services are not connected yet.</p>
+      <div class="status">
+        <div class="col yes">
+          <h3>Works today</h3>
+          <ul>
+            <li>The Longmont site, built and deployed by the weekly run.</li>
+            <li>The editor desk with sign-in, auto-publish that holds failed items, Unpublish, Kill and Redraft.</li>
+            <li>A weekly run that resumes after a stop and retries only what failed.</li>
+            <li>The Windows installer, tested on a fresh Windows runner on GitHub.</li>
+            <li>Tests on Windows and Ubuntu for every code change.</li>
+          </ul>
+        </div>
+        <div class="col not">
+          <h3>Not yet</h3>
+          <ul>
+            <li>No Apple Podcasts or Spotify listing. The feed is ready for both.</li>
+            <li>Email sign-up code exists but is not connected to a sending account, and is not on the Longmont site.</li>
+            <li>The Hostinger guide has not been run on a Linux server.</li>
+            <li>Built and tested for Windows. Audio needs an NVIDIA GPU.</li>
+            <li>One meeting at a time: no beats, opinion pieces or records requests.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="disclaimer"><b>Episodes are AI-generated.</b> Check the official meeting record before you rely on anything they say. The citations are there so you can.</p>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2>Give your town a record it can check.</h2>
+      <p>CivicCast Brief is free and open source under the Apache-2.0 license.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="https://github.com/scottconverse/civiccast-brief">Get the code <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md">Read the manual</a>
+      </div>
+      <div class="contrib" id="contribute">
+        <a href="https://github.com/scottconverse/civiccast-brief/issues"><b>Report a problem</b><span>Open an issue on GitHub.</span></a>
+        <a href="https://github.com/scottconverse/civiccast-brief/releases"><b>Releases</b><span>Notes for each version.</span></a>
+        <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/set-up-a-city.md"><b>Set up a city</b><span>The step-by-step guide.</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CivicCast Brief · <a href="https://github.com/scottconverse/civiccast-brief/blob/main/LICENSE">Apache-2.0</a> · fonts under the <a href="https://github.com/scottconverse/civiccast-brief/tree/main/website/assets/fonts">SIL Open Font License</a></p>
+    <nav aria-label="Footer">
+      <a href="https://longmont.civiccastbrief.org">Longmont site</a>
+      <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md">Manual</a>
+      <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/voice-bakeoff.md">Voice bake-off</a>
+      <a href="https://github.com/scottconverse/civiccast-brief">GitHub</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
