@@ -443,7 +443,11 @@ def load_site_input(directory: Path) -> SiteInput:
 def _merge_stories(
     episodes: list[Episode], stories: list[Story]
 ) -> tuple[list[Episode], tuple[Story, ...], tuple[str, ...]]:
-    """Give an episode the story of its meeting when it has none; keep the rest as stories."""
+    """Give an episode the story of its meeting; keep the rest as stories.
+
+    The story file is the desk's published article now. An episode keeps the copy it was built
+    with, so an edit published on the desk later reaches the site only through the story.
+    """
     episodes = list(episodes)
     position = {episode.id: index for index, episode in enumerate(episodes)}
     alone: list[Story] = []
@@ -454,8 +458,7 @@ def _merge_stories(
             alone.append(story)
             continue
         merged.append(story.id)
-        if episodes[index].article is None:
-            episodes[index] = replace(episodes[index], article=story.article)
+        episodes[index] = replace(episodes[index], article=story.article)
     alone.sort(key=lambda item: (item.published, item.meeting_date, item.id), reverse=True)
     return episodes, tuple(alone), tuple(sorted(merged))
 
