@@ -493,7 +493,10 @@ meeting with no roster fails with a message that names the file to add.
 command again to retry what failed: finished meetings and steps are not run again. Exit code 0
 means every runnable meeting and the site finished; 1 means something failed (the output says what).
 
-**Minutes.** The run reads the video captions and the agenda. Meeting minutes are not read yet.
+**Documents.** The run reads the video captions, the agenda and, for a PrimeGov meeting, the
+packet and the minutes (the published minutes, or the draft minutes in the next regular session's
+packet). Their pages are saved in `documents.json`, and a story may cite a page. A packet or
+minutes that is not there is noted in the report, not a failure.
 
 **Schedule it.** To run it every week, add a scheduled task that runs the command, for example on
 Windows:
