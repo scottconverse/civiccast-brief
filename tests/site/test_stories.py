@@ -98,6 +98,20 @@ def test_a_story_whose_meeting_gets_an_episode_redirects_to_the_episode_page(
     assert load_site_input(episodes).stories == ()
 
 
+def test_an_edit_published_on_the_desk_replaces_the_story_the_episode_was_built_with(
+    tmp_path: Path,
+) -> None:
+    episodes = _episodes(tmp_path, story_id="2026-10-20-example-council")
+    built_with = json.loads((episodes / "ep-2026-10-20-example-council.json").read_text("utf-8"))
+    old_headline = built_with["article"]["headline"]
+    assert old_headline != HEADLINE
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+    page = _read(out, "episodes/2026-10-20-example-council/index.html")
+    assert HEADLINE in page and old_headline not in page
+    assert HEADLINE in _read(out, "index.html")
+
+
 def test_a_meeting_still_is_served_from_the_site_never_hot_linked(tmp_path: Path) -> None:
     jpeg = b"\xff\xd8\xff\xe0 still"
     episodes = _episodes(tmp_path, video="https://www.youtube.com/watch?v=Abc_123-xyZ")
