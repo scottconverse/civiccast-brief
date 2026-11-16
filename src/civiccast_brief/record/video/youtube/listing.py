@@ -36,6 +36,10 @@ SOURCE_LABELS: dict[str, str] = {
     SOURCE_RSS: "Read the public feed instead",
     SOURCE_CHANNEL_TAB: "Read the channel's own page",
     SOURCE_YTDLP: "Read the public channel listing with yt-dlp",
+}
+
+#: The other public meeting-video readers, kept apart from the YouTube ladder above.
+OTHER_SOURCE_LABELS: dict[str, str] = {
     SOURCE_CIVICCLERK: "Read the CivicClerk events and media API",
     SOURCE_ESCRIBE: "Read the eScribe calendar and player",
     SOURCE_VIMEO_RSS: "Read the Vimeo public feed",
@@ -46,6 +50,8 @@ SOURCE_LABELS: dict[str, str] = {
 
 def source_label(method: str) -> str:
     """The words the interface shows for a reading method."""
+    if method in OTHER_SOURCE_LABELS:
+        return OTHER_SOURCE_LABELS[method]
     return SOURCE_LABELS.get(method, f"Read YouTube with {method}")
 
 
