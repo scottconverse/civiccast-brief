@@ -202,6 +202,7 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
 
 
 NO_MEETING_DAY = "the title names no meeting day"
+_JOIN_LOOKBACK = timedelta(days=2)
 
 
 def _day_reason(title: str, last: date) -> str:
@@ -258,7 +259,7 @@ def _distinguishing_words(title: str) -> set[str]:
     return set(re.findall(r"[a-z]+", title.casefold())) & _DISTINGUISHING_WORDS
 
 
-def _join_dateless_youtube(by_key: dict[str, Found], listed: Sequence[Found]) -> None:
+def _join_dateless_youtube(by_key: dict[str, Found], listed: Sequence[Found]) -> set[str]:
     """Assign dateless channel videos to nearby listed meetings, one video per day."""
     videos = [
         (key, meeting)
@@ -305,6 +306,7 @@ def _join_dateless_youtube(by_key: dict[str, Found], listed: Sequence[Found]) ->
             if len(remaining) == 1:
                 assign(key, video, remaining[0])
                 changed = True
+    return assigned
 
 
 def _granicus(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
@@ -460,8 +462,12 @@ def find_meetings(
         if reader is None or getattr(listers, lister, None) is None:
             problems.append(f"{source.id}: no reader for {source.kind} sources")
             continue
+        # Listed sources supply dateless-video join candidates from two days before the
+        # window. A lookback meeting is kept only when a video joins it; otherwise it is not
+        # added to the run.
+        fetch_first = first - _JOIN_LOOKBACK if reader is _listed else first
         try:
-            meetings = reader(source, first, last, listers)
+            meetings = reader(source, fetch_first, last, listers)
         except Exception as exc:  # noqa: BLE001 - one broken source must not stop the others
             problems.append(f"{source.id}: {exc}")
             continue
@@ -486,7 +492,7 @@ def find_meetings(
                 )
             elif held.documents is None and meeting.documents is not None:
                 by_key[meeting.key] = replace(held, documents=meeting.documents)
-    _join_dateless_youtube(by_key, listed)
+    joined = _join_dateless_youtube(by_key, listed)
     _one_video_per_meeting(by_key, listers.city)
     # Documents go with the body's video meeting that day; a day with none is its own entry.
     for meeting in listed:
@@ -497,8 +503,12 @@ def find_meetings(
         ]
         if same:
             for key in same:
+                if meeting.day < first and key not in joined:
+                    continue
                 held = by_key[key]
                 by_key[key] = replace(held, documents=_chain(held.documents, meeting.documents))
+            continue
+        if meeting.day < first:
             continue
         key = f"documents:{meeting.body}:{meeting.day.isoformat()}"
         held = by_key.get(key)
