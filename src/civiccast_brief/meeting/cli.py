@@ -3,7 +3,8 @@
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
     python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
     python -m civiccast_brief.meeting run <video_or_clip_id> --city CITY_DIR --out DIR
-        [--agenda AGENDA.txt] [--documents documents.json] [--roster ROSTER.json] [--ytdlp-python PATH]
+        [--agenda AGENDA.txt] [--documents documents.json] [--roster ROSTER.json]
+        [--meeting-date "November 2, 2026"] [--ytdlp-python PATH]
         [--window-minutes 30] [--model NAME] [--reuse-draft]
 
 With --city and no --model, the recap and the judge use the city's model picks (models.json).
@@ -99,6 +100,7 @@ def _run(args: argparse.Namespace) -> int:
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
             cablecast_host=args.cablecast,
+            meeting_date=args.meeting_date,
         )
     except (
         capture_mod.CaptureError,
@@ -151,6 +153,10 @@ def main(argv: list[str] | None = None) -> int:
         "--city", type=Path, help="city folder from `python -m civiccast_brief setup`"
     )
     run_cmd.add_argument("--roster", type=Path, help="roster JSON (default: the --city roster)")
+    run_cmd.add_argument(
+        "--meeting-date",
+        help="the meeting date when a YouTube title has no date, e.g. 'November 2, 2026'",
+    )
     run_cmd.add_argument(
         "--ytdlp-python",
         help="the python.exe that runs yt-dlp (default: CivicCast Brief's private yt-dlp runtime)",

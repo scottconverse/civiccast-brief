@@ -6,6 +6,7 @@ from civiccast_brief.weekly.find import Agenda, Listers, find_meetings, match_bo
 
 COUNCIL = "City Council"
 PZ = "Planning and Zoning Commission"
+TRUSTEES = "Board of Trustees"
 PORTAL = Source(kind="primegov", bodies=(COUNCIL, PZ), url="https://longmont.primegov.com")
 CHANNEL = Source(kind="youtube", bodies=(COUNCIL,), channel_id="UC" + "a" * 22)
 FIRST, LAST = date(2026, 10, 27), date(2026, 11, 10)
@@ -22,6 +23,14 @@ def test_match_body_takes_the_named_body_or_the_longest_listed_one():
     assert match_body("Golf Course Advisory Board", bodies) == ""
     # A listed name inside another word is not a match.
     assert match_body("Councilmember town hall", [COUNCIL]) == ""
+
+
+def test_match_body_treats_an_ampersand_and_and_the_same():
+    body = "Planning and Community Development Commission"
+    ampersand_body = "Planning & Community Development Commission"
+
+    assert match_body(ampersand_body, [body]) == body
+    assert match_body(body, [ampersand_body]) == ampersand_body
 
 
 def test_youtube_id_reads_watch_and_short_links_only():
@@ -297,6 +306,75 @@ def test_a_short_name_in_parentheses_does_not_hide_the_body():
     ]
     title = "Longmont Housing Authority(LHA) Advisory Board of Commissioners Meeting, Nov. 10, 2026"
     assert match_body(title, bodies) == "Longmont Housing Authority Advisory Board"
+
+
+def test_a_dateless_video_joins_the_one_listed_meeting_just_before_it():
+    from civiccast_brief.sources import make_source
+
+    town = make_source("civicplus", {"site": "www.townoflyons.com", "bodies": TRUSTEES})
+    channel = Source(kind="youtube", bodies=(TRUSTEES,), channel_id="UC" + "a" * 22)
+    video = NS(
+        video_id="LLLLLLLLLLL",
+        title="Board of Trustees Budget Workshop",
+        published="2026-11-03T05:00:00Z",
+    )
+    rows = {
+        town.id: [
+            _doc(
+                TRUSTEES,
+                date(2026, 11, 2),
+                "Board of Trustees Budget Workshop",
+                "https://townoflyons.test/agenda/11-02",
+            )
+        ]
+    }
+    listers = Listers(
+        youtube=lambda cid: [video],
+        documents=lambda source, first, last: rows[source.id],
+        read_documents=lambda docs: (
+            {"documents": [{"url": docs[0].url}]},
+            [docs[0].url],
+        ),
+    )
+
+    found, problems = find_meetings([channel, town], FIRST, LAST, listers)
+
+    assert problems == []
+    assert len(found) == 1
+    assert (found[0].video, found[0].day, found[0].reason) == (
+        "LLLLLLLLLLL",
+        date(2026, 11, 2),
+        "",
+    )
+    assert found[0].documents()[0]["documents"] == [{"url": rows[town.id][0].url}]
+
+
+def test_a_dateless_video_stays_unrun_when_two_listed_days_match():
+    from civiccast_brief.sources import make_source
+
+    town = make_source("civicplus", {"site": "www.townoflyons.com", "bodies": TRUSTEES})
+    channel = Source(kind="youtube", bodies=(TRUSTEES,), channel_id="UC" + "a" * 22)
+    video = NS(
+        video_id="LLLLLLLLLLL",
+        title="Regular Board of Trustees Meeting",
+        published="2026-11-03T05:00:00Z",
+    )
+    rows = {
+        town.id: [
+            _doc(TRUSTEES, date(2026, 11, 1), "Budget Workshop", "https://townoflyons.test/11-01"),
+            _doc(TRUSTEES, date(2026, 11, 2), "Regular Meeting", "https://townoflyons.test/11-02"),
+        ]
+    }
+    listers = Listers(
+        youtube=lambda cid: [video],
+        documents=lambda source, first, last: rows[source.id],
+        read_documents=lambda docs: ({"documents": []}, []),
+    )
+
+    found, _ = find_meetings([channel, town], FIRST, LAST, listers)
+    by_video = {m.video: m for m in found if m.video}
+
+    assert by_video["LLLLLLLLLLL"].reason == "the title names no meeting day"
 
 
 def test_a_channel_video_with_no_meeting_day_in_its_title_is_not_run():

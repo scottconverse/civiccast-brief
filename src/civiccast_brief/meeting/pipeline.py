@@ -82,6 +82,7 @@ def run(
     granicus_host: str | None = None,
     granicus_view_id: int | None = None,
     cablecast_host: str | None = None,
+    meeting_date: str | None = None,
     complete: Complete | None = None,
     judge_complete: Complete | None = None,
     log: Callable[[str], None] = print,
@@ -94,6 +95,7 @@ def run(
 
     ``documents_path`` is the meeting's documents.json (packet and minutes text). With it, and
     the agenda, a voice that introduces itself by a name those documents print is named.
+    ``meeting_date`` supplies a known date when a YouTube title has none.
     """
     if roster_path is None:
         raise PipelineError("a run needs the city's roster file (--roster, or --city)")
@@ -160,7 +162,7 @@ def run(
         log(f"[{video_id}] capture: caption command")
         capture = capture_captions(video_id, raw_dir, python=ytdlp_python)
         title = str(capture.info.get("title") or "")
-        found = transcript_mod.meeting_date_from_title(title)
+        found = meeting_date or transcript_mod.meeting_date_from_title(title)
         if found is None:
             raise PipelineError(f"no meeting date in the title {title!r}")
         meeting_date = found
