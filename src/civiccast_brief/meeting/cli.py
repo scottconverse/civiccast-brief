@@ -119,9 +119,7 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m civiccast_brief.meeting")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -183,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
         help="label caption lines with voices (needs the audio and the diarize extra)",
     )
     run_cmd.set_defaults(run=_run)
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    args = build_parser().parse_args(argv)
     return args.run(args)

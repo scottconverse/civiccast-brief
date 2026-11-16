@@ -101,7 +101,7 @@ def test_the_meeting_command_gets_the_cablecast_host_and_the_show_id(tmp_path):
     run_week(settings, [meeting_found], date(2026, 11, 10), steps)
 
     (argv,) = calls
-    assert argv[:2] == ["run", "746"]
+    assert argv[-2:] == ["--", "746"]
     assert argv[argv.index("--cablecast") + 1] == HOST
     assert "--granicus" not in argv
 
