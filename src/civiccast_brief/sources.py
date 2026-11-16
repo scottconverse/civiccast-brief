@@ -20,6 +20,8 @@ The desk's Sources screen adds, edits and removes them. The file::
          "bodies": ["Planning Commission"]},
         {"id": "escribe:bouldercounty", "kind": "escribe", "tenant": "bouldercounty",
          "bodies": ["Board of County Commissioners"]},
+        {"id": "vimeo:svvsd", "kind": "vimeo", "tenant": "svvsd",
+         "bodies": ["Board of Education"]},
         {"id": "civicweb:cilovelandco", "kind": "civicweb", "tenant": "cilovelandco",
          "bodies": ["City Council"]},
         {"id": "civicplus:www.townoflyons.com", "kind": "civicplus",
@@ -45,6 +47,7 @@ Kinds and what each needs:
   ``https://erieco.portal.civicclerk.com``.
 - ``escribe``: an eScribe meetings site, by its tenant: ``bouldercounty`` in
   ``https://pub-bouldercounty.escribemeetings.com``.
+- ``vimeo``: a public Vimeo account, by its name: ``svvsd`` in ``https://vimeo.com/svvsd``.
 - ``civicweb``: a CivicWeb (iCompass) portal, by its tenant: ``cilovelandco`` in
   ``https://cilovelandco.civicweb.net``.
 - ``civicplus``: a CivicPlus town site with an Agenda Center or an Archive Center, by its host:
@@ -79,6 +82,7 @@ KINDS: Final = (
     "gdrive",
     "civicclerk",
     "escribe",
+    "vimeo",
     "civicweb",
     "civicplus",
     "laserfiche",
@@ -92,6 +96,7 @@ KIND_LABELS: Final = {
     "gdrive": "Google Drive folder",
     "civicclerk": "CivicClerk portal",
     "escribe": "eScribe meetings site",
+    "vimeo": "Vimeo account",
     "civicweb": "CivicWeb portal",
     "civicplus": "CivicPlus Agenda Center or Archive Center",
     "laserfiche": "Laserfiche WebLink folder (read in Chrome)",
@@ -106,6 +111,8 @@ _VIEW_ID: Final = re.compile(r"^[0-9]{1,6}$")
 _FOLDER_ID: Final = re.compile(r"^[A-Za-z0-9_-]{10,100}$")
 _CLERK_HOST: Final = re.compile(rf"^({_LABEL})\.(?:portal|api)\.civicclerk\.com$")
 _ESCRIBE_HOST: Final = re.compile(rf"^pub-({_LABEL})\.escribemeetings\.com$")
+_VIMEO_HOST: Final = re.compile(r"^(?:www\.)?vimeo\.com$")
+_VIMEO_ACCOUNT: Final = re.compile(r"^[A-Za-z0-9_-]{2,100}$")
 _CIVICWEB_HOST: Final = re.compile(rf"^({_LABEL})\.civicweb\.net$")
 _TENANT: Final = re.compile(rf"^{_LABEL}$")
 _SITE: Final = re.compile(rf"^(?:{_LABEL}\.)+[a-z]{{2,24}}$")
@@ -147,7 +154,7 @@ class Source:
             return f"{self.kind}:{self.url}"
         if self.kind == "gdrive":
             return f"gdrive:{self.folder_id}"
-        if self.kind in ("civicclerk", "escribe", "civicweb"):
+        if self.kind in ("civicclerk", "escribe", "vimeo", "civicweb"):
             return f"{self.kind}:{self.tenant}"
         if self.kind == "civicplus":
             return f"civicplus:{self.site}"
@@ -168,6 +175,8 @@ class Source:
             return f"https://{self.tenant}.portal.civicclerk.com"
         if self.kind == "escribe":
             return f"https://pub-{self.tenant}.escribemeetings.com"
+        if self.kind == "vimeo":
+            return f"https://vimeo.com/{self.tenant}"
         if self.kind == "civicweb":
             return f"https://{self.tenant}.civicweb.net"
         if self.kind == "civicplus":
@@ -188,7 +197,7 @@ class Source:
                 data["follow"] = self.follow
         elif self.kind == "gdrive":
             data["folder_id"] = self.folder_id
-        elif self.kind in ("civicclerk", "escribe", "civicweb"):
+        elif self.kind in ("civicclerk", "escribe", "vimeo", "civicweb"):
             data["tenant"] = self.tenant
         elif self.kind == "civicplus":
             data["site"] = self.site
@@ -367,6 +376,28 @@ def _tenant(value: str, host: re.Pattern[str], field: str, example: str) -> str:
     return text
 
 
+def _vimeo_account(value: str) -> str:
+    text = value.strip()
+    if not text:
+        raise SourceError("enter the Vimeo account name, like svvsd", "vimeo_account")
+    if "://" in text or "/" in text:
+        parts = urlsplit(text if "://" in text else f"https://{text}")
+        host = (parts.hostname or "").lower()
+        if not _VIMEO_HOST.match(host):
+            raise SourceError(
+                f"{value.strip()!r} is not a Vimeo account; it looks like https://vimeo.com/svvsd",
+                "vimeo_account",
+            )
+        text = parts.path.strip("/").split("/")[0]
+    if not _VIMEO_ACCOUNT.match(text):
+        raise SourceError(
+            f"{value.strip()!r} is not a Vimeo account name; it is the name in "
+            "https://vimeo.com/<name>",
+            "vimeo_account",
+        )
+    return text
+
+
 def _site(value: str) -> str:
     text = value.strip().lower()
     if not text:
@@ -437,6 +468,10 @@ def make_source(kind: str, fields: Mapping[str, Any]) -> Source:
             value, _ESCRIBE_HOST, "escribe_tenant", "https://pub-yourcounty.escribemeetings.com"
         )
         return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=tenant)
+    if kind == "vimeo":
+        value = str(fields.get("vimeo_account") or fields.get("tenant") or "")
+        account = _vimeo_account(value)
+        return Source(kind, parse_bodies(fields.get("bodies") or ""), tenant=account)
     if kind == "civicweb":
         value = str(fields.get("civicweb_tenant") or fields.get("tenant") or "")
         tenant = _tenant(value, _CIVICWEB_HOST, "civicweb_tenant", "https://yourtown.civicweb.net")

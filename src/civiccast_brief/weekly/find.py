@@ -9,6 +9,10 @@
 - A **Granicus** archive lists its clips with their names and dates.
 - A **Cablecast** site lists its shows that have a video; a title must name one of the source's
   bodies (the site also carries shows that are not meetings).
+- A **CivicClerk**, **eScribe** or **Vimeo** source also lists meetings with a direct media
+  address (MP4 or HLS) and, usually, the source's own caption file. The meeting's day is the
+  one its title names, else the listing's date. A meeting whose source lists no captions is
+  kept with that reason: the pipeline does not transcribe audio.
 - A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **CivicWeb**, **web page** or **Google Drive**
   source lists a body's agendas, packets and minutes by date, and no video
   (:mod:`civiccast_brief.weekly.listed`). They go with the video meeting of the same body on the
@@ -25,6 +29,7 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from functools import partial
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -62,6 +67,10 @@ class Found:
     granicus_host: str = ""
     granicus_view_id: int | None = None
     cablecast_host: str = ""
+    #: A direct media address (MP4 or HLS) for a CivicClerk, eScribe or Vimeo meeting.
+    media_url: str = ""
+    #: The source's public caption file (usually VTT), when it exposes one.
+    captions_url: str = ""
     agenda: Agenda | None = None
     #: Fetches the meeting's documents when called: (documents.json data, report lines). None
     #: when the source lists no documents (a channel or an archive).
@@ -77,6 +86,8 @@ class Found:
             return f"granicus:{self.granicus_host}/{self.video}"
         if self.cablecast_host:
             return f"cablecast:{self.cablecast_host}/{self.video}"
+        if self.media_url:
+            return f"{self.source_id}/{self.video}"
         if self.video:
             return f"youtube:{self.video}"
         return f"{self.source_id}:{self.day.isoformat()}:{self.title}"
@@ -98,6 +109,11 @@ class Listers:
     granicus: Callable[[str, int], Sequence[Any]] | None = None
     #: (host) -> shows with .show_id, .name, .date ("October 6, 2026"); only shows with a video
     cablecast: Callable[[str], Sequence[Any]] | None = None
+    #: (tenant or account, first day, last day) -> VideoListings with .video_id, .title,
+    #: .published, .media_url, .captions_url
+    civicclerk: Callable[[str, date, date], Sequence[Any]] | None = None
+    escribe: Callable[[str, date, date], Sequence[Any]] | None = None
+    vimeo: Callable[[str, date, date], Sequence[Any]] | None = None
     #: (source, first day, last day) -> listed.Doc rows, for the kinds in listed.KINDS
     documents: Callable[[Source, date, date], Sequence[Any]] | None = None
     #: (one meeting's listed.Doc rows) -> (documents.json data, report lines); fetched when called
@@ -159,10 +175,14 @@ def _day(value: Any) -> date | None:
         lambda t: datetime.fromisoformat(t).date(),
         lambda t: datetime.strptime(t, "%B %d, %Y").date(),
         lambda t: datetime.strptime(t, "%Y%m%d").date(),
+        # an eScribe calendar's "2026/11/05 09:00:00"
+        lambda t: datetime.strptime(t[:19], "%Y/%m/%d %H:%M:%S").date(),
+        # a Vimeo feed's RFC 2822 "Wed, 11 Nov 2026 21:52:16 -0500"
+        lambda t: parsedate_to_datetime(t).date(),
     ):
         try:
             return parse(text)
-        except ValueError:
+        except (ValueError, TypeError):
             continue
     return None
 
@@ -361,6 +381,55 @@ def _cablecast(source: Source, first: date, last: date, listers: Listers) -> lis
     return found
 
 
+NO_CAPTIONS = (
+    "the source lists no captions for this meeting; CivicCast Brief does not transcribe audio"
+)
+NO_MEDIA = "the source lists no playable media for this meeting"
+
+
+def _video_source(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
+    """Meetings a CivicClerk, eScribe or Vimeo listing names, with their direct media."""
+    lister = getattr(listers, source.kind)
+    found: list[Found] = []
+    for video in lister(source.tenant, first, last):
+        title = str(video.title)
+        posted = _day(video.published)
+        # A Vimeo item is posted after its meeting, so the title's day wins when it has one.
+        day = title_day(title) or posted
+        in_days = any(d is not None and first <= d <= last for d in (day, posted))
+        if day is None or not in_days:
+            continue
+        body = match_body(title, source.bodies, listers.city)
+        if not body and source.kind == "civicclerk":
+            # CivicClerk's event category is the body; Erie's titles name it too.
+            body = match_body(str(video.channel_id), source.bodies, listers.city)
+        if not body:
+            # The tenant carries every body's meetings; one the source does not cover is not
+            # its meeting, as for a Cablecast site's shows.
+            continue
+        if "cancel" in title.lower():
+            reason = "the meeting was cancelled"
+        elif not video.media_url:
+            reason = NO_MEDIA
+        elif not video.captions_url:
+            reason = NO_CAPTIONS
+        else:
+            reason = ""
+        found.append(
+            Found(
+                body,
+                day,
+                title,
+                source.id,
+                f"{source.kind}-{source.tenant}-{video.video_id}",
+                media_url=str(video.media_url or ""),
+                captions_url=str(video.captions_url or ""),
+                reason=reason,
+            )
+        )
+    return found
+
+
 NO_VIDEO = "only the meeting's documents are listed; no source lists its video"
 
 
@@ -402,6 +471,8 @@ READERS = {
     "cablecast": _cablecast,
 }
 LISTED_KINDS = ("laserfiche", "civicplus", "civicclerk", "escribe", "civicweb", "webpage", "gdrive")
+#: The kinds whose listing also names meetings with a direct media address.
+VIDEO_KINDS = ("civicclerk", "escribe", "vimeo")
 
 
 def _city_body(meeting: Found, city_bodies: Sequence[str], last: date, city: str = "") -> Found:
@@ -457,41 +528,52 @@ def find_meetings(
     listed: list[Found] = []
     city_bodies = sorted({b for s in sources for b in s.bodies})
     for source in sources:
-        reader = _listed if source.kind in LISTED_KINDS else READERS.get(source.kind)
-        lister = "documents" if source.kind in LISTED_KINDS else source.kind
-        if reader is None or getattr(listers, lister, None) is None:
+        readers: list[tuple[str, Any]] = []
+        if source.kind in LISTED_KINDS:
+            readers.append(("documents", _listed))
+        if source.kind in VIDEO_KINDS:
+            readers.append((source.kind, _video_source))
+        if not readers:
+            readers.append((source.kind, READERS.get(source.kind)))
+        ready = [
+            (lister, reader)
+            for lister, reader in readers
+            if reader is not None and getattr(listers, lister, None) is not None
+        ]
+        if not ready:
             problems.append(f"{source.id}: no reader for {source.kind} sources")
             continue
-        # Listed sources supply dateless-video join candidates from two days before the
-        # window. A lookback meeting is kept only when a video joins it; otherwise it is not
-        # added to the run.
-        fetch_first = first - _JOIN_LOOKBACK if reader is _listed else first
-        try:
-            meetings = reader(source, fetch_first, last, listers)
-        except Exception as exc:  # noqa: BLE001 - one broken source must not stop the others
-            problems.append(f"{source.id}: {exc}")
-            continue
-        if reader is _listed:
-            listed += meetings
-            continue
-        if source.kind == "youtube":
-            meetings = [_city_body(m, city_bodies, last, listers.city) for m in meetings]
-        for meeting in meetings:
-            held = by_key.get(meeting.key)
-            if held is None:
-                by_key[meeting.key] = meeting
-            elif held.agenda is None and meeting.agenda is not None:
-                by_key[meeting.key] = replace(
-                    held, agenda=meeting.agenda, documents=held.documents or meeting.documents
-                )
-            elif held.reason and not meeting.reason:
-                by_key[meeting.key] = replace(
-                    meeting,
-                    agenda=meeting.agenda or held.agenda,
-                    documents=meeting.documents or held.documents,
-                )
-            elif held.documents is None and meeting.documents is not None:
-                by_key[meeting.key] = replace(held, documents=meeting.documents)
+        for _lister, reader in ready:
+            # Listed sources supply dateless-video join candidates from two days before the
+            # window. A lookback meeting is kept only when a video joins it; otherwise it is
+            # not added to the run.
+            fetch_first = first - _JOIN_LOOKBACK if reader is _listed else first
+            try:
+                meetings = reader(source, fetch_first, last, listers)
+            except Exception as exc:  # noqa: BLE001 - one broken source must not stop the others
+                problems.append(f"{source.id}: {exc}")
+                continue
+            if reader is _listed:
+                listed += meetings
+                continue
+            if source.kind == "youtube":
+                meetings = [_city_body(m, city_bodies, last, listers.city) for m in meetings]
+            for meeting in meetings:
+                held = by_key.get(meeting.key)
+                if held is None:
+                    by_key[meeting.key] = meeting
+                elif held.agenda is None and meeting.agenda is not None:
+                    by_key[meeting.key] = replace(
+                        held, agenda=meeting.agenda, documents=held.documents or meeting.documents
+                    )
+                elif held.reason and not meeting.reason:
+                    by_key[meeting.key] = replace(
+                        meeting,
+                        agenda=meeting.agenda or held.agenda,
+                        documents=meeting.documents or held.documents,
+                    )
+                elif held.documents is None and meeting.documents is not None:
+                    by_key[meeting.key] = replace(held, documents=meeting.documents)
     joined = _join_dateless_youtube(by_key, listed)
     _one_video_per_meeting(by_key, listers.city)
     # Documents go with the body's video meeting that day; a day with none is its own entry.

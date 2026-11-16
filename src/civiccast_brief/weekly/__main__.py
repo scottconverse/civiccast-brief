@@ -39,6 +39,9 @@ def real_listers(client: Any) -> Listers:
     """The readers for live portals, channels and archives, over one ``httpx.Client``."""
     from civiccast_brief.meeting import cablecast, granicus
     from civiccast_brief.record.adapters.primegov import PrimeGovAdapter
+    from civiccast_brief.record.video.civicclerk.listing import civicclerk_lister
+    from civiccast_brief.record.video.escribe.listing import escribe_lister
+    from civiccast_brief.record.video.vimeo.listing import vimeo_lister
     from civiccast_brief.record.video.youtube.channel import channel_lister
 
     adapters: dict[str, PrimeGovAdapter] = {}
@@ -79,6 +82,15 @@ def real_listers(client: Any) -> Listers:
     def read_listed(docs: Any) -> tuple[dict[str, Any], list[str]]:
         return listed.read_all(docs, pages)
 
+    def civicclerk(tenant: str, first: date, last: date) -> list[Any]:
+        return civicclerk_lister(client, tenant).list_videos(first, last)
+
+    def escribe(tenant: str, first: date, last: date) -> list[Any]:
+        return escribe_lister(client, tenant).list_videos(first, last)
+
+    def vimeo(account: str, first: date, last: date) -> list[Any]:
+        return vimeo_lister(client, account).list_videos(first, last)
+
     channel = channel_lister(client)
     listers = Listers(
         primegov=primegov,
@@ -87,6 +99,9 @@ def real_listers(client: Any) -> Listers:
         youtube=channel.list_videos,
         granicus=granicus.list_clips,
         cablecast=cablecast.list_shows,
+        civicclerk=civicclerk,
+        escribe=escribe,
+        vimeo=vimeo,
         documents=documents,
         read_documents=read_listed,
     )

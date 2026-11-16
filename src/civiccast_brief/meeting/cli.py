@@ -2,6 +2,7 @@
 
     python -m civiccast_brief.meeting run <youtube_video_id> --out DIR
     python -m civiccast_brief.meeting run <clip_id> --granicus HOST --view-id N --out DIR
+    python -m civiccast_brief.meeting run <meeting_id> --media-url URL --captions-url VTT --out DIR
     python -m civiccast_brief.meeting run <video_or_clip_id> --city CITY_DIR --out DIR
         [--agenda AGENDA.txt] [--documents documents.json] [--roster ROSTER.json]
         [--meeting-date "November 2, 2026"] [--ytdlp-python PATH]
@@ -24,6 +25,7 @@ from civiccast_brief import models
 from civiccast_brief.city import CityError, load_city
 from civiccast_brief.meeting import cablecast as cablecast_mod
 from civiccast_brief.meeting import capture as capture_mod
+from civiccast_brief.meeting import direct as direct_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
@@ -100,12 +102,16 @@ def _run(args: argparse.Namespace) -> int:
             granicus_host=args.granicus,
             granicus_view_id=args.view_id,
             cablecast_host=args.cablecast,
+            media_url=args.media_url,
+            captions_url=args.captions_url,
+            title=args.title,
             meeting_date=args.meeting_date,
         )
     except (
         capture_mod.CaptureError,
         granicus_mod.GranicusError,
         cablecast_mod.CablecastError,
+        direct_mod.DirectError,
         CityError,
         PipelineError,
         llm.ModelError,
@@ -126,7 +132,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd = commands.add_parser("run", help="capture, speakers and recap for one video")
     run_cmd.add_argument(
         "video_id",
-        help="the YouTube video id (e.g. uHFuCfd5MVQ), or with --granicus the clip id, or with --cablecast the show id",
+        help="the YouTube video id (e.g. uHFuCfd5MVQ), with --granicus the clip id, with "
+        "--cablecast the show id, or with --media-url the source's meeting id",
     )
     run_cmd.add_argument(
         "--granicus", metavar="HOST", help="Granicus host, e.g. oakland.granicus.com"
@@ -138,6 +145,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--cablecast",
         metavar="HOST",
         help="Cablecast host, e.g. reflect-yourcity.cablecast.tv; the video id is the show id",
+    )
+    run_cmd.add_argument(
+        "--media-url",
+        help="a source's own MP4 or HLS address (CivicClerk, eScribe, Vimeo); the video id is "
+        "the source's meeting id",
+    )
+    run_cmd.add_argument(
+        "--captions-url",
+        help="the source's public caption file (WebVTT) for --media-url",
+    )
+    run_cmd.add_argument(
+        "--title",
+        help="the listing's title for a --media-url meeting, when it has no date of its own",
     )
     run_cmd.add_argument("--out", type=Path, required=True, help="output folder")
     run_cmd.add_argument("--agenda", type=Path, help="official agenda text file (see agenda.py)")

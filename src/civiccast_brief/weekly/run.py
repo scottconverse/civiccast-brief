@@ -287,7 +287,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             raise StepFailed(
                 f"no roster for {meeting.body} (add rosters/{slug(meeting.body)}.json)"
             )
-        youtube = meeting.video and not (meeting.granicus_host or meeting.cablecast_host)
+        direct = bool(meeting.media_url)
+        youtube = meeting.video and not (meeting.granicus_host or meeting.cablecast_host or direct)
         if settings.worker is not None and youtube:
             inbox = WorkerFolder(settings.worker)
             if not inbox.copy_into(CAPTIONS, meeting.video, folder / "raw"):
@@ -316,6 +317,18 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             ]
         if meeting.cablecast_host:
             argv += ["--cablecast", meeting.cablecast_host]
+        if direct:
+            # A CivicClerk, eScribe or Vimeo meeting: the source's own media and captions.
+            argv += [
+                "--media-url",
+                meeting.media_url,
+                "--title",
+                meeting.title,
+                "--meeting-date",
+                f"{meeting.day:%B} {meeting.day.day}, {meeting.day.year}",
+            ]
+            if meeting.captions_url:
+                argv += ["--captions-url", meeting.captions_url]
         if settings.diarize:
             argv.append("--diarize")
         # argparse would read a leading-dash id as an option; -- keeps it positional.

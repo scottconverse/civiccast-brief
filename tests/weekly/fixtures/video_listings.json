@@ -1,0 +1,80 @@
+{
+  "civicclerk": [
+    {
+      "video_id": "101",
+      "title": "Town Council Meeting",
+      "published": "2026-11-10T19:30:00Z",
+      "channel_id": "Town Council",
+      "source_method": "civicclerk",
+      "media_url": "https://cpmedia.azureedge.net/erieco/council-2026-11-10.mp4",
+      "captions_url": null
+    },
+    {
+      "video_id": "102",
+      "title": "Planning Commission Meeting",
+      "published": "2026-11-09T18:30:00Z",
+      "channel_id": "Planning Commission",
+      "source_method": "civicclerk",
+      "media_url": "https://cpmedia.azureedge.net/erieco/planning-2026-11-09.mp4",
+      "captions_url": "https://cpmedia.azureedge.net/erieco/planning-2026-11-09.vtt"
+    },
+    {
+      "video_id": "103",
+      "title": "Tree Advisory Board",
+      "published": "2026-11-08T17:00:00Z",
+      "channel_id": "Tree Advisory Board",
+      "source_method": "civicclerk",
+      "media_url": "https://cpmedia.azureedge.net/erieco/tree-2026-11-08.mp4",
+      "captions_url": "https://cpmedia.azureedge.net/erieco/tree-2026-11-08.vtt"
+    }
+  ],
+  "escribe": [
+    {
+      "video_id": "meeting-101",
+      "title": "Board of County Commissioners - Regular Meeting",
+      "published": "2026/11/05 09:00:00",
+      "channel_id": "bouldercounty",
+      "source_method": "escribe",
+      "media_url": "https://video.isilive.ca/bouldercounty/BOCC_2026-11-05.mp4",
+      "captions_url": "https://video.isilive.ca/bouldercounty/BOCC_2026-11-05.mp4.vtt"
+    },
+    {
+      "video_id": "meeting-102",
+      "title": "Planning Commission - Regular Meeting",
+      "published": "2026/10/21 13:30:00",
+      "channel_id": "bouldercounty",
+      "source_method": "escribe",
+      "media_url": "https://video.isilive.ca/bouldercounty/PC_2026-10-21.mp4",
+      "captions_url": "https://video.isilive.ca/bouldercounty/PC_2026-10-21.mp4.vtt"
+    }
+  ],
+  "vimeo": [
+    {
+      "video_id": "111111111",
+      "title": "2026-11-11 Board of Education Regular Meeting",
+      "published": "Wed, 11 Nov 2026 21:52:16 -0500",
+      "channel_id": "svvsd",
+      "source_method": "vimeo_ytdlp",
+      "media_url": "https://cdn.example.test/111-720.mp4",
+      "captions_url": "https://cdn.example.test/111.en.vtt"
+    },
+    {
+      "video_id": "222222222",
+      "title": "2026-10-28 Board of Education Study Session",
+      "published": "Wed, 28 Oct 2026 18:35:57 -0500",
+      "channel_id": "svvsd",
+      "source_method": "vimeo_player",
+      "media_url": "https://cdn.example.test/222-540.mp4",
+      "captions_url": null
+    },
+    {
+      "video_id": "333333333",
+      "title": "2026-11-05 Superintendent Update",
+      "published": "Thu, 05 Nov 2026 12:00:00 -0500",
+      "channel_id": "svvsd",
+      "source_method": "vimeo_player",
+      "media_url": "https://cdn.example.test/333-540.mp4",
+      "captions_url": "https://cdn.example.test/333.en.vtt"
+    }
+  ]
+}
