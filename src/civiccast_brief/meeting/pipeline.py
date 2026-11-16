@@ -23,6 +23,7 @@ from typing import Any
 
 from civiccast_brief.meeting import cablecast as cablecast_mod
 from civiccast_brief.meeting import diarize as diarize_mod
+from civiccast_brief.meeting import direct as direct_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.meeting.agenda import load_agenda
@@ -82,13 +83,18 @@ def run(
     granicus_host: str | None = None,
     granicus_view_id: int | None = None,
     cablecast_host: str | None = None,
+    media_url: str | None = None,
+    captions_url: str | None = None,
+    title: str | None = None,
     meeting_date: str | None = None,
     complete: Complete | None = None,
     judge_complete: Complete | None = None,
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
-    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id, or with
-    ``cablecast_host`` the Cablecast show id.
+    """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id, with
+    ``cablecast_host`` the Cablecast show id, or with ``media_url`` the meeting's own id. A
+    ``media_url`` meeting reads the source's public caption file at ``captions_url``; ``title``
+    is the listing's title, used when the command cannot read one.
 
     ``complete`` writes the recap drafts and ``judge_complete`` judges the claims; each falls
     back to the Ollama ``model``. ``models.complete_for`` makes them from the city's picks.
@@ -157,6 +163,33 @@ def run(
 
         def fetch_audio(audio_dir: Path) -> Path:
             return cablecast_mod.fetch_audio(ccap, audio_dir)
+
+    elif media_url:
+        log(f"[{video_id}] capture: direct media {media_url}")
+        try:
+            dcap = direct_mod.capture(media_url, captions_url, raw_dir, meeting_id=video_id)
+        except direct_mod.DirectError as exc:
+            raise PipelineError(str(exc)) from exc
+        title = title or video_id
+        if meeting_date is None:
+            found = transcript_mod.meeting_date_from_title(title)
+            if found is None:
+                raise PipelineError(f"no meeting date for {title!r} (pass --meeting-date)")
+            meeting_date = found
+        items = dcap.items
+        caption_kind = "supplied_captions"
+        source = {
+            "platform": "direct",
+            "media_url": media_url,
+            "captions_url": captions_url or "",
+            "caption_kind": caption_kind,
+            "caption_file": dcap.caption_file.name,
+            "caption_download_reused": dcap.caption_reused,
+            "capture": "the source's own public caption file (WebVTT)",
+        }
+
+        def fetch_audio(audio_dir: Path) -> Path:
+            return direct_mod.fetch_audio(media_url, audio_dir, video_id)
 
     else:
         log(f"[{video_id}] capture: caption command")
@@ -343,6 +376,7 @@ def _diarize(
         diarize_mod.DiarizeError,
         granicus_mod.GranicusError,
         cablecast_mod.CablecastError,
+        direct_mod.DirectError,
     ) as exc:
         log(f"[{video_id}] diarize FAILED: {exc}")
         return {"status": "failed", "reason": str(exc)}
