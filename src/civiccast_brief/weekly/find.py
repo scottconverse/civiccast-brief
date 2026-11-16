@@ -238,20 +238,73 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
     return found
 
 
+_DISTINGUISHING_WORDS = frozenset(
+    {
+        "workshop",
+        "special",
+        "study",
+        "joint",
+        "budget",
+        "retreat",
+        "executive",
+        "regular",
+        "emergency",
+        "hearing",
+    }
+)
+
+
+def _distinguishing_words(title: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", title.casefold())) & _DISTINGUISHING_WORDS
+
+
 def _join_dateless_youtube(by_key: dict[str, Found], listed: Sequence[Found]) -> None:
-    """Date a dateless channel video from the one listed meeting just before its upload."""
-    listed_days = {(meeting.body, meeting.day) for meeting in listed}
-    for key, meeting in list(by_key.items()):
-        if not key.startswith("youtube:") or not meeting.body or meeting.reason != NO_MEETING_DAY:
-            continue
-        posted = meeting.day
-        candidates = {
-            day
-            for body, day in listed_days
-            if body == meeting.body and posted - timedelta(days=2) <= day <= posted
-        }
-        if len(candidates) == 1:
-            by_key[key] = replace(meeting, day=next(iter(candidates)), reason="")
+    """Assign dateless channel videos to nearby listed meetings, one video per day."""
+    videos = [
+        (key, meeting)
+        for key, meeting in by_key.items()
+        if key.startswith("youtube:") and meeting.body and meeting.reason == NO_MEETING_DAY
+    ]
+    candidates = {
+        key: [
+            meeting
+            for meeting in listed
+            if meeting.body == video.body
+            and video.day - timedelta(days=2) <= meeting.day <= video.day
+        ]
+        for key, video in videos
+    }
+    claimed: set[tuple[str, date]] = set()
+    assigned: set[str] = set()
+
+    def assign(key: str, video: Found, meeting: Found) -> None:
+        claimed.add((meeting.body, meeting.day))
+        assigned.add(key)
+        by_key[key] = replace(video, day=meeting.day, reason="")
+
+    for key, video in videos:
+        words = _distinguishing_words(video.title)
+        matches = [
+            meeting
+            for meeting in candidates[key]
+            if (meeting.body, meeting.day) not in claimed
+            and words & _distinguishing_words(meeting.title)
+        ]
+        if len(matches) == 1:
+            assign(key, video, matches[0])
+
+    changed = True
+    while changed:
+        changed = False
+        for key, video in videos:
+            if key in assigned:
+                continue
+            remaining = [
+                meeting for meeting in candidates[key] if (meeting.body, meeting.day) not in claimed
+            ]
+            if len(remaining) == 1:
+                assign(key, video, remaining[0])
+                changed = True
 
 
 def _granicus(source: Source, first: date, last: date, listers: Listers) -> list[Found]:

@@ -308,28 +308,41 @@ def test_a_short_name_in_parentheses_does_not_hide_the_body():
     assert match_body(title, bodies) == "Longmont Housing Authority Advisory Board"
 
 
-def test_a_dateless_video_joins_the_one_listed_meeting_just_before_it():
+def test_dateless_videos_are_assigned_to_the_lyons_meeting_agendas():
     from civiccast_brief.sources import make_source
 
     town = make_source("civicplus", {"site": "www.townoflyons.com", "bodies": TRUSTEES})
     channel = Source(kind="youtube", bodies=(TRUSTEES,), channel_id="UC" + "a" * 22)
-    video = NS(
-        video_id="LLLLLLLLLLL",
-        title="Board of Trustees Budget Workshop",
-        published="2026-11-03T05:00:00Z",
-    )
+    videos = [
+        NS(
+            video_id="regular0001",
+            title="Regular Board of Trustees Meeting",
+            published="2026-11-03T05:00:00Z",
+        ),
+        NS(
+            video_id="budget00001",
+            title="Board of Trustees Budget Workshop",
+            published="2026-11-04T05:00:00Z",
+        ),
+    ]
     rows = {
         town.id: [
             _doc(
                 TRUSTEES,
                 date(2026, 11, 2),
-                "Board of Trustees Budget Workshop",
+                "Board of Trustees agenda",
                 "https://townoflyons.test/agenda/11-02",
-            )
+            ),
+            _doc(
+                TRUSTEES,
+                date(2026, 11, 3),
+                "November 3, 2026 Special Board of Trustees Budget Workshop Agenda",
+                "https://townoflyons.test/agenda/11-03",
+            ),
         ]
     }
     listers = Listers(
-        youtube=lambda cid: [video],
+        youtube=lambda cid: videos,
         documents=lambda source, first, last: rows[source.id],
         read_documents=lambda docs: (
             {"documents": [{"url": docs[0].url}]},
@@ -338,31 +351,44 @@ def test_a_dateless_video_joins_the_one_listed_meeting_just_before_it():
     )
 
     found, problems = find_meetings([channel, town], FIRST, LAST, listers)
+    by_video = {m.video: m for m in found if m.video}
 
     assert problems == []
-    assert len(found) == 1
-    assert (found[0].video, found[0].day, found[0].reason) == (
-        "LLLLLLLLLLL",
-        date(2026, 11, 2),
-        "",
-    )
-    assert found[0].documents()[0]["documents"] == [{"url": rows[town.id][0].url}]
+    assert [
+        (by_video[video].body, by_video[video].day, by_video[video].reason)
+        for video in ("regular0001", "budget00001")
+    ] == [
+        (TRUSTEES, date(2026, 11, 2), ""),
+        (TRUSTEES, date(2026, 11, 3), ""),
+    ]
+    assert by_video["regular0001"].documents()[0]["documents"] == [{"url": rows[town.id][0].url}]
+    assert by_video["budget00001"].documents()[0]["documents"] == [{"url": rows[town.id][1].url}]
 
 
-def test_a_dateless_video_stays_unrun_when_two_listed_days_match():
+def test_a_dateless_video_stays_unrun_when_two_listed_days_remain_ambiguous():
     from civiccast_brief.sources import make_source
 
     town = make_source("civicplus", {"site": "www.townoflyons.com", "bodies": TRUSTEES})
     channel = Source(kind="youtube", bodies=(TRUSTEES,), channel_id="UC" + "a" * 22)
     video = NS(
         video_id="LLLLLLLLLLL",
-        title="Regular Board of Trustees Meeting",
+        title="Board of Trustees Meeting",
         published="2026-11-03T05:00:00Z",
     )
     rows = {
         town.id: [
-            _doc(TRUSTEES, date(2026, 11, 1), "Budget Workshop", "https://townoflyons.test/11-01"),
-            _doc(TRUSTEES, date(2026, 11, 2), "Regular Meeting", "https://townoflyons.test/11-02"),
+            _doc(
+                TRUSTEES,
+                date(2026, 11, 1),
+                "Board of Trustees agenda",
+                "https://townoflyons.test/11-01",
+            ),
+            _doc(
+                TRUSTEES,
+                date(2026, 11, 2),
+                "Board of Trustees minutes",
+                "https://townoflyons.test/11-02",
+            ),
         ]
     }
     listers = Listers(
@@ -374,7 +400,10 @@ def test_a_dateless_video_stays_unrun_when_two_listed_days_match():
     found, _ = find_meetings([channel, town], FIRST, LAST, listers)
     by_video = {m.video: m for m in found if m.video}
 
-    assert by_video["LLLLLLLLLLL"].reason == "the title names no meeting day"
+    assert (by_video["LLLLLLLLLLL"].day, by_video["LLLLLLLLLLL"].reason) == (
+        date(2026, 11, 3),
+        "the title names no meeting day",
+    )
 
 
 def test_a_channel_video_with_no_meeting_day_in_its_title_is_not_run():
