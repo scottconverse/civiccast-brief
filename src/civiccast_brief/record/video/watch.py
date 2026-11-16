@@ -756,10 +756,19 @@ _MONTH_NUMBERS |= {
     if short != name
 }
 _MONTH = "|".join(_MONTH_NUMBERS)
-#: "November 3, 2026" and "3 November 2026", the two spellings the Longmont
-#: channels title a sitting with, and "11/3/26" from the portal's own titles.
-_MONTH_DAY_YEAR = re.compile(rf"\b({_MONTH})\.?\s+(\d{{1,2}}),?\s+(\d{{4}})\b", re.IGNORECASE)
-_DAY_MONTH_YEAR = re.compile(rf"\b(\d{{1,2}})\s+({_MONTH})\.?\s+(\d{{4}})\b", re.IGNORECASE)
+#: The suffix a channel writes behind a day ("September 15th, 2026"). Nederland's
+#: channel writes every date this way, and an optional suffix reads those titles
+#: and the ones without it (see ``_MONTH_DAY_YEAR``).
+_ORDINAL = r"(?:st|nd|rd|th)?"
+#: "November 3, 2026", "September 15th, 2026" and "3 November 2026", the
+#: spellings the channels title a sitting with, and "11/3/26" from the portal's
+#: own titles.
+_MONTH_DAY_YEAR = re.compile(
+    rf"\b({_MONTH})\.?\s+(\d{{1,2}}){_ORDINAL},?\s+(\d{{4}})\b", re.IGNORECASE
+)
+_DAY_MONTH_YEAR = re.compile(
+    rf"\b(\d{{1,2}}){_ORDINAL}\s+({_MONTH})\.?\s+(\d{{4}})\b", re.IGNORECASE
+)
 #: "11/3/26", and "11-09-26" as Boulder's channel titles its boards' meetings.
 _SLASH_DATE = re.compile(r"\b(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})\b")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
