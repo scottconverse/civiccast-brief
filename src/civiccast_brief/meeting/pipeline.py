@@ -93,8 +93,9 @@ def run(
 ) -> dict[str, Any]:
     """``video_id`` is the YouTube video id, or with ``granicus_host`` the Granicus clip id, with
     ``cablecast_host`` the Cablecast show id, or with ``media_url`` the meeting's own id. A
-    ``media_url`` meeting reads the source's public caption file at ``captions_url``; ``title``
-    is the listing's title, used when the command cannot read one.
+    ``media_url`` meeting reads the source's public caption file at ``captions_url``, or
+    transcribes its audio on this machine when the source lists no captions; ``title`` is the
+    listing's title, used when the command cannot read one.
 
     ``complete`` writes the recap drafts and ``judge_complete`` judges the claims; each falls
     back to the Ollama ``model``. ``models.complete_for`` makes them from the city's picks.
@@ -177,7 +178,7 @@ def run(
                 raise PipelineError(f"no meeting date for {title!r} (pass --meeting-date)")
             meeting_date = found
         items = dcap.items
-        caption_kind = "supplied_captions"
+        caption_kind = "local_speech_to_text" if dcap.transcribed else "supplied_captions"
         source = {
             "platform": "direct",
             "media_url": media_url,
@@ -185,7 +186,12 @@ def run(
             "caption_kind": caption_kind,
             "caption_file": dcap.caption_file.name,
             "caption_download_reused": dcap.caption_reused,
-            "capture": "the source's own public caption file (WebVTT)",
+            "capture": (
+                "this machine's speech program (civiccast_brief.speech), from the source's "
+                "media audio; the source lists no captions"
+                if dcap.transcribed
+                else "the source's own public caption file (WebVTT)"
+            ),
         }
 
         def fetch_audio(audio_dir: Path) -> Path:

@@ -3,25 +3,44 @@
 CivicClerk, eScribe and Vimeo listings name a direct MP4 or HLS address. The source usually
 also publishes the captions it made for the meeting (CivicClerk's closed-caption URL, eScribe's
 iSiLive ``.vtt`` beside the MP4, a Vimeo text track). That file is the transcript: it is
-downloaded into ``raw/`` and parsed with the same WebVTT reader the archives use. A source that
-lists no caption file stops the run with that reason; nothing is transcribed from audio here.
+downloaded into ``raw/`` and parsed with the same WebVTT reader the archives use.
 
-The media address is used only for the audio ``--diarize`` asks for, as Granicus and Cablecast
-do.
+A source that lists media but no caption file (Erie and Superior's CivicClerk MP4s do not) is
+transcribed on this machine: the audio is fetched with ffmpeg, and the local speech program
+(``python -m civiccast_brief.speech transcribe``) turns it into the same caption items, through
+the helpers of :mod:`civiccast_brief.record.stt.textflowkit` that the record pipeline uses. No
+hosted model is called and nothing beyond the source's own media is downloaded. A meeting with
+neither captions nor media stops the run with that reason.
+
+The media address is also what ``--diarize`` asks for audio, as Granicus and Cablecast do.
 """
 
 from __future__ import annotations
 
 import subprocess
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from civiccast_brief.record.captions.parse import CaptionParseError, parse_vtt
+from civiccast_brief.record.stt.textflowkit import (
+    parse_textflowkit_json,
+    speech_command,
+    textflowkit_argv,
+    transcription_timeout_s,
+)
 
 FETCH_TIMEOUT_S = 120
 AUDIO_TIMEOUT_S = 3600
+
+#: The reason recorded when a direct-media meeting has no media address at all.
+NO_MEDIA = "the source lists no playable media for this meeting"
+
+#: How one child process is run. Tests pass a fake that writes the transcript the speech
+#: program would have written, so no test runs a model or reaches the network.
+Runner = Callable[[list[str], float], subprocess.CompletedProcess[bytes]]
 
 
 class DirectError(RuntimeError):
@@ -33,6 +52,8 @@ class DirectCapture:
     caption_file: Path
     caption_reused: bool
     items: list[dict[str, Any]]
+    #: True when the lines came from this machine's speech program rather than the source.
+    transcribed: bool = False
 
 
 def _fetch(url: str) -> str:
@@ -51,13 +72,16 @@ def capture(
     *,
     meeting_id: str = "",
 ) -> DirectCapture:
-    """The meeting's caption file, saved in ``raw_dir`` and parsed. Reused when already saved."""
+    """The meeting's captions, saved in ``raw_dir`` and parsed. Reused when already saved.
+
+    The source's own caption file is read when it lists one. Otherwise the audio of
+    ``media_url`` is transcribed on this machine; a meeting with no media address cannot run.
+    """
     name = meeting_id or "meeting"
     if not captions_url:
-        raise DirectError(
-            f"{name} has no public caption file; this source keeps no captions for it, and "
-            "CivicCast Brief does not transcribe audio"
-        )
+        if not media_url:
+            raise DirectError(f"{name} cannot run: {NO_MEDIA}")
+        return transcribe(media_url, raw_dir, name)
     raw_dir.mkdir(parents=True, exist_ok=True)
     caption_file = raw_dir / "captions.vtt"
     reused = caption_file.exists() and caption_file.stat().st_size > 0
@@ -74,11 +98,88 @@ def capture(
     except CaptionParseError as exc:
         raise DirectError(f"the caption file for {name} could not be read: {exc}") from exc
     if not items:
-        raise DirectError(
-            f"{name} has no caption lines; this source keeps no captions for it, and "
-            "CivicCast Brief does not transcribe audio"
-        )
+        raise DirectError(f"the caption file for {name} holds no caption lines ({captions_url})")
     return DirectCapture(caption_file=caption_file, caption_reused=reused, items=items)
+
+
+def _run(argv: list[str], timeout_s: float) -> subprocess.CompletedProcess[bytes]:
+    """Run the speech program as a child of this process."""
+    return subprocess.run(argv, capture_output=True, timeout=timeout_s, check=False)
+
+
+def _transcript_file(stdout: bytes, out_dir: Path) -> Path | None:
+    """The JSON file the speech program wrote: the path it printed, else the newest here."""
+    text = stdout.decode("utf-8", errors="replace") if stdout else ""
+    for line in text.splitlines():
+        candidate = line.strip().strip("'\"")
+        if not candidate.endswith(".json"):
+            continue
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = out_dir / candidate
+        if path.is_file():
+            return path
+    written = [entry for entry in out_dir.glob("*.json") if entry.is_file()]
+    return max(written, key=lambda entry: entry.stat().st_mtime) if written else None
+
+
+def transcribe(
+    media_url: str,
+    raw_dir: Path,
+    meeting_id: str,
+    *,
+    ffmpeg: str = "ffmpeg",
+    speech: list[str] | None = None,
+    runner: Runner | None = None,
+) -> DirectCapture:
+    """Transcribe the meeting's audio on this machine, as caption items.
+
+    The audio comes from ``fetch_audio`` (16 kHz mono WAV; the video is not downloaded), and
+    the speech program is the one the record pipeline runs. Its JSON is kept in
+    ``raw/transcript/`` and reused on a later run. A failed or empty transcription stops the
+    run with its reason.
+    """
+    out_dir = raw_dir / "transcript"
+    name = meeting_id or "meeting"
+    reused: list[Path] = (
+        sorted(out_dir.glob("*.json"), key=lambda entry: entry.stat().st_mtime)
+        if out_dir.is_dir()
+        else []
+    )
+    if reused:
+        transcript_file = reused[-1]
+    else:
+        audio = fetch_audio(media_url, raw_dir / "audio", name, ffmpeg=ffmpeg)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        argv = [*(speech or speech_command()), *textflowkit_argv(str(audio), str(out_dir))[1:]]
+        run = runner or _run
+        try:
+            done = run(argv, transcription_timeout_s(None))
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise DirectError(f"could not run the speech program for {name}: {exc}") from exc
+        if done.returncode != 0:
+            tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()[-1:]
+            raise DirectError(f"transcription failed for {name}: {tail}")
+        found = _transcript_file(done.stdout, out_dir)
+        if found is None:
+            raise DirectError(f"the speech program wrote no transcript for {name}")
+        transcript_file = found
+    try:
+        segments = parse_textflowkit_json(transcript_file.read_bytes())
+    except (CaptionParseError, OSError) as exc:
+        raise DirectError(f"the transcript for {name} could not be read: {exc}") from exc
+    items = [
+        {"start_ms": segment.start_ms, "end_ms": segment.end_ms, "text": segment.text}
+        for segment in segments
+    ]
+    if not items:
+        raise DirectError(f"the speech program transcribed {name} to no lines")
+    return DirectCapture(
+        caption_file=transcript_file,
+        caption_reused=bool(reused),
+        items=items,
+        transcribed=True,
+    )
 
 
 def fetch_audio(media_url: str, work_dir: Path, meeting_id: str, *, ffmpeg: str = "ffmpeg") -> Path:

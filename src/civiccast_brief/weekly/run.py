@@ -318,7 +318,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
         if meeting.cablecast_host:
             argv += ["--cablecast", meeting.cablecast_host]
         if direct:
-            # A CivicClerk, eScribe or Vimeo meeting: the source's own media and captions.
+            # A CivicClerk, eScribe or Vimeo meeting: the source's own media and its caption
+            # file when it lists one; without captions the run transcribes the audio.
             argv += [
                 "--media-url",
                 meeting.media_url,
