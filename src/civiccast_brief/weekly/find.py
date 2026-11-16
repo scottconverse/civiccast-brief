@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import partial
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -108,7 +108,8 @@ class Listers:
 
 
 def _fold(text: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
+    text = text.replace("&", " and ").lower()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text).split())
 
 
 def match_body(title: str, bodies: Iterable[str], city: str = "") -> str:
@@ -200,12 +201,15 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
     return found
 
 
+NO_MEETING_DAY = "the title names no meeting day"
+
+
 def _day_reason(title: str, last: date) -> str:
     """Why a channel video of a known body cannot run yet, or ''."""
     named = title_day(title)
     if named is None:
-        # The meeting run takes the date from the title, so it would fail ("November 2026").
-        return "the title names no meeting day"
+        # Without a listed meeting to join, an upload day is not the meeting's day.
+        return NO_MEETING_DAY
     if named > last:
         # A live stream is listed days before it starts; it has no captions yet.
         return f"the meeting is on {named.isoformat()}, after this run"
@@ -232,6 +236,75 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
             reason = f"the title names no body this source covers ({body_name(title)})"
         found.append(Found(body, day, title, source.id, str(video.video_id), reason=reason))
     return found
+
+
+_DISTINGUISHING_WORDS = frozenset(
+    {
+        "workshop",
+        "special",
+        "study",
+        "joint",
+        "budget",
+        "retreat",
+        "executive",
+        "regular",
+        "emergency",
+        "hearing",
+    }
+)
+
+
+def _distinguishing_words(title: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", title.casefold())) & _DISTINGUISHING_WORDS
+
+
+def _join_dateless_youtube(by_key: dict[str, Found], listed: Sequence[Found]) -> None:
+    """Assign dateless channel videos to nearby listed meetings, one video per day."""
+    videos = [
+        (key, meeting)
+        for key, meeting in by_key.items()
+        if key.startswith("youtube:") and meeting.body and meeting.reason == NO_MEETING_DAY
+    ]
+    candidates = {
+        key: [
+            meeting
+            for meeting in listed
+            if meeting.body == video.body
+            and video.day - timedelta(days=2) <= meeting.day <= video.day
+        ]
+        for key, video in videos
+    }
+    claimed: set[tuple[str, date]] = set()
+    assigned: set[str] = set()
+
+    def assign(key: str, video: Found, meeting: Found) -> None:
+        claimed.add((meeting.body, meeting.day))
+        assigned.add(key)
+        by_key[key] = replace(video, day=meeting.day, reason="")
+
+    for key, video in videos:
+        words = _distinguishing_words(video.title)
+        matches = [
+            meeting
+            for meeting in candidates[key]
+            if (meeting.body, meeting.day) not in claimed
+            and words & _distinguishing_words(meeting.title)
+        ]
+        if len(matches) == 1:
+            assign(key, video, matches[0])
+
+    changed = True
+    while changed:
+        changed = False
+        for key, video in videos:
+            if key in assigned:
+                continue
+            remaining = [
+                meeting for meeting in candidates[key] if (meeting.body, meeting.day) not in claimed
+            ]
+            if len(remaining) == 1:
+                assign(key, video, remaining[0])
+                changed = True
 
 
 def _granicus(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
@@ -413,6 +486,7 @@ def find_meetings(
                 )
             elif held.documents is None and meeting.documents is not None:
                 by_key[meeting.key] = replace(held, documents=meeting.documents)
+    _join_dateless_youtube(by_key, listed)
     _one_video_per_meeting(by_key, listers.city)
     # Documents go with the body's video meeting that day; a day with none is its own entry.
     for meeting in listed:

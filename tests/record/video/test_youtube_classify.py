@@ -101,6 +101,7 @@ def test_the_seed_lists_are_the_documented_ones() -> None:
         "Advisory Board",
         "Commission",
         "Authority",
+        "Trustees",
         "Study Session",
         "Regular Session",
     )
@@ -185,6 +186,18 @@ def test_the_seed_lists_classify_the_recorded_feeds(
     assert len(city) == CITY_MEETINGS
     assert len(public) == PUBLIC_MEDIA_MEETINGS
     assert all(video.video_id for video in city + public)
+
+
+def test_trustees_titles_are_meetings() -> None:
+    classifier_ = classifier()
+
+    regular = classifier_.verdict("Regular Board of Trustees Meeting")
+    workshop = classifier_.verdict("Board of Trustees Budget Workshop")
+
+    assert regular.is_meeting is True
+    assert regular.matched_keywords == ("Trustees",)
+    assert workshop.is_meeting is True
+    assert workshop.matched_keywords == ("Trustees",)
 
 
 def test_a_phrase_matches_on_word_boundaries() -> None:

@@ -180,6 +180,25 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     assert entry["done"] == ["roster", "recap", "script", "episode", "article"]
 
 
+def test_a_dateless_video_runs_on_the_date_found_for_its_meeting(tmp_path):
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=("Board of Trustees",))
+    meeting = Found(
+        "Board of Trustees",
+        date(2026, 11, 2),
+        "Board of Trustees Budget Workshop",
+        "civicplus:www.townoflyons.com",
+        "LLLLLLLLLLL",
+    )
+
+    report = run_week(settings, [meeting], LAST, fake.steps())
+
+    assert report.failed == 0
+    run_argv = fake.calls[0][1]
+    assert _opt(run_argv, "--meeting-date") == "November 2, 2026"
+    assert Path(_opt(run_argv, "--out")).name == ("2026-11-02-board-of-trustees-lllllllllll")
+
+
 def test_a_failing_script_is_written_again_with_the_report_then_repaired(tmp_path):
     fake = Fake(fail={"write": 2})
     settings = _settings(tmp_path)

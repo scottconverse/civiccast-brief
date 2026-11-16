@@ -36,6 +36,7 @@ DEFAULT_MEETING_KEYWORDS: tuple[str, ...] = (
     "Advisory Board",
     "Commission",
     "Authority",
+    "Trustees",
     "Study Session",
     "Regular Session",
 )

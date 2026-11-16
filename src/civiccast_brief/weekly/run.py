@@ -295,6 +295,12 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
                 raise Waiting("waiting for its captions from the PC worker")
         argv = ["run", meeting.video, "--out", str(folder), "--city", str(settings.city)]
         argv += ["--roster", str(roster)]
+        if youtube:
+            # The joined listed meeting is authoritative when the upload title has no day.
+            argv += [
+                "--meeting-date",
+                f"{meeting.day:%B} {meeting.day.day}, {meeting.day.year}",
+            ]
         if meeting.agenda is not None:
             agenda = folder / "agenda.txt"
             agenda.write_text(meeting.agenda.text(date.today()), encoding="utf-8", newline="\n")
