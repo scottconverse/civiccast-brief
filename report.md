@@ -114,7 +114,7 @@ Superior:
 | 2026-10-26 | Town Council | Town Council Meeting | cpmedia.azureedge.net | no | **yes** (transcribe) |
 | 2026-10-16 | (none) | Historical Commission (HC) 10/16/26 | youtube | no | no — title names no covered body |
 | 2026-10-18 | (none) | Historical Commission (HC) 10/18/26 | youtube | no | no — title names no covered body |
-| 2026-11-20 | (none) | Historical Commission (HC) 11/20/26 | youtube | no | no — title names no covered body (and after the window) |
+| 2026-11-20 | (none) | Historical Commission (HC) 11/20/26 | youtube | no | no — title names no covered body (its day is also after the window) |
 
 The Sept 14 Town Council meeting from the earlier survey falls outside this 60-day window.
 The Oct 12/26 Town Council YouTube uploads were not listed by the channel reader in this run
@@ -141,4 +141,4 @@ No source problems were reported for either city.
 
 ### PR
 
-Pending at the time this report was first written; see the branch `transcribe-direct-media`.
+https://github.com/scottconverse/civiccast-brief/pull/94
