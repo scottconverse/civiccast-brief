@@ -11,8 +11,9 @@
   bodies (the site also carries shows that are not meetings).
 - A **CivicClerk**, **eScribe** or **Vimeo** source also lists meetings with a direct media
   address (MP4 or HLS) and, usually, the source's own caption file. The meeting's day is the
-  one its title names, else the listing's date. A meeting whose source lists no captions is
-  kept with that reason: the pipeline does not transcribe audio.
+  one its title names, else the listing's date. A meeting whose source lists media but no
+  captions is runnable: the run transcribes its audio on this machine. One that lists no media
+  at all is kept with that reason.
 - A **Laserfiche**, **CivicPlus**, **CivicClerk**, **eScribe**, **CivicWeb**, **web page** or **Google Drive**
   source lists a body's agendas, packets and minutes by date, and no video
   (:mod:`civiccast_brief.weekly.listed`). They go with the video meeting of the same body on the
@@ -381,9 +382,6 @@ def _cablecast(source: Source, first: date, last: date, listers: Listers) -> lis
     return found
 
 
-NO_CAPTIONS = (
-    "the source lists no captions for this meeting; CivicCast Brief does not transcribe audio"
-)
 NO_MEDIA = "the source lists no playable media for this meeting"
 
 
@@ -411,9 +409,8 @@ def _video_source(source: Source, first: date, last: date, listers: Listers) -> 
             reason = "the meeting was cancelled"
         elif not video.media_url:
             reason = NO_MEDIA
-        elif not video.captions_url:
-            reason = NO_CAPTIONS
         else:
+            # No caption file is not a skip: the run transcribes the media's audio.
             reason = ""
         found.append(
             Found(

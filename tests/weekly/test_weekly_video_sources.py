@@ -5,13 +5,10 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-import pytest
-
 from civiccast_brief.meeting import direct
 from civiccast_brief.record.video.youtube.listing import VideoListing
 from civiccast_brief.sources import Source, make_source
 from civiccast_brief.weekly.find import (
-    NO_CAPTIONS,
     Found,
     Listers,
     find_meetings,
@@ -61,7 +58,8 @@ def test_civicclerk_events_become_meetings_with_their_media_and_captions():
     assert planning.media_url.endswith("planning-2026-11-09.mp4")
     assert planning.captions_url.endswith("planning-2026-11-09.vtt")
     assert planning.reason == ""
-    assert found[1].reason == NO_CAPTIONS
+    # A CivicClerk meeting with media and no captions is runnable: the run transcribes it.
+    assert found[1].reason == ""
     # The Tree Advisory Board is another body's event on the same tenant.
     assert all("Tree" not in m.title for m in found)
 
@@ -102,7 +100,7 @@ def test_vimeo_meetings_take_the_day_their_title_names():
 
     assert problems == []
     assert [(m.day, m.video, m.reason) for m in found] == [
-        (date(2026, 10, 28), "vimeo-svvsd-222222222", NO_CAPTIONS),
+        (date(2026, 10, 28), "vimeo-svvsd-222222222", ""),
         (date(2026, 11, 11), "vimeo-svvsd-111111111", ""),
     ]
 
@@ -204,9 +202,31 @@ def test_a_direct_capture_reads_the_sources_public_vtt(tmp_path, monkeypatch):
     assert again.caption_reused is True
 
 
-def test_a_direct_capture_without_captions_says_the_pipeline_does_not_transcribe(tmp_path):
-    with pytest.raises(direct.DirectError, match="does not transcribe audio"):
-        direct.capture("https://cdn.test/9.mp4", None, tmp_path / "raw")
+def test_the_meeting_command_leaves_out_captions_it_does_not_have(tmp_path):
+    # The run transcribes the media's audio, so no --captions-url is passed.
+    meeting_found = Found(
+        COUNCIL,
+        date(2026, 11, 10),
+        "Town Council Meeting",
+        "civicclerk:erieco",
+        "civicclerk-erieco-101",
+        media_url="https://cpmedia.azureedge.net/erieco/council-2026-11-10.mp4",
+    )
+
+    argv = _run_found(tmp_path, meeting_found, COUNCIL)
+
+    assert argv[argv.index("--media-url") + 1] == meeting_found.media_url
+    assert "--captions-url" not in argv
+    assert meeting_found.reason == ""
+
+
+def test_a_direct_capture_without_captions_transcribes_the_media(tmp_path, monkeypatch):
+    captured = direct.DirectCapture(
+        tmp_path / "raw" / "transcript.json", False, [], transcribed=True
+    )
+    monkeypatch.setattr(direct, "transcribe", lambda *a, **k: captured)
+
+    assert direct.capture("https://cdn.test/9.mp4", None, tmp_path / "raw") is captured
 
 
 def test_a_vimeo_source_is_made_from_its_account_name_or_address():
