@@ -54,8 +54,7 @@ def test_the_events_request_has_the_odata_range_order_and_top() -> None:
 
     assert url.host == "erieco.api.civicclerk.com"
     assert url.params["$filter"] == (
-        "startDateTime ge 2026-10-17T00:00:00Z "
-        "and startDateTime le 2026-11-16T23:59:59Z"
+        "startDateTime ge 2026-10-17T00:00:00Z and startDateTime le 2026-11-16T23:59:59Z"
     )
     assert url.params["$orderby"] == "startDateTime desc"
     assert url.params["$top"] == "50"

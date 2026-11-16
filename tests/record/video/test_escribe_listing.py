@@ -45,8 +45,7 @@ def test_calendar_post_keeps_only_meetings_with_video_and_builds_mp4_and_vtt() -
     assert video.published == "2026/11/05 09:00:00"
     assert video.source_method == SOURCE_ESCRIBE
     assert video.media_url == (
-        "https://video.isilive.ca/bouldercounty/"
-        "Compact%20Encoder%20101_BOCC_2026-11-05.mp4"
+        "https://video.isilive.ca/bouldercounty/Compact%20Encoder%20101_BOCC_2026-11-05.mp4"
     )
     assert video.captions_url == video.media_url + ".vtt"
     assert json.loads(requested[0].content) == {

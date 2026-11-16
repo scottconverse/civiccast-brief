@@ -113,10 +113,22 @@ def test_ytdlp_prefers_the_tallest_direct_mp4() -> None:
     info = {
         "duration": 20,
         "formats": [
-            {"url": "https://cdn.test/low.mp4", "ext": "mp4", "protocol": "https",
-             "mime_type": "video/mp4", "vcodec": "avc1", "height": 240},
-            {"url": "https://cdn.test/high.mp4", "ext": "mp4", "protocol": "https",
-             "mime_type": "video/mp4", "vcodec": "avc1", "height": 1080},
+            {
+                "url": "https://cdn.test/low.mp4",
+                "ext": "mp4",
+                "protocol": "https",
+                "mime_type": "video/mp4",
+                "vcodec": "avc1",
+                "height": 240,
+            },
+            {
+                "url": "https://cdn.test/high.mp4",
+                "ext": "mp4",
+                "protocol": "https",
+                "mime_type": "video/mp4",
+                "vcodec": "avc1",
+                "height": 1080,
+            },
         ],
         "subtitles": {"en": [{"ext": "vtt", "url": "https://cdn.test/en.vtt"}]},
     }

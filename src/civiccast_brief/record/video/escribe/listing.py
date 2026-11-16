@@ -122,9 +122,7 @@ class EScribeLister:
     def calendar_url(self) -> str:
         return self.base_url + ESCRIBE_CALENDAR
 
-    def parse_calendar(
-        self, body: bytes | str, first: date, last: date
-    ) -> list[dict[str, Any]]:
+    def parse_calendar(self, body: bytes | str, first: date, last: date) -> list[dict[str, Any]]:
         """Calendar rows in the inclusive date range that carry a Video link."""
         try:
             payload = httpx.Response(200, content=body).json()

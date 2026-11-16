@@ -304,7 +304,9 @@ class VimeoLister:
             raise VideoError(f"yt-dlp failed for Vimeo {video.video_id}: {exc}") from exc
         if result.returncode != 0:
             detail = result.last_stderr_line() or "no reason given"
-            raise VideoError(f"yt-dlp exited {result.returncode} for Vimeo {video.video_id}: {detail}")
+            raise VideoError(
+                f"yt-dlp exited {result.returncode} for Vimeo {video.video_id}: {detail}"
+            )
         try:
             info = json.loads(result.stdout.decode("utf-8", errors="replace"))
         except ValueError as exc:
@@ -371,8 +373,7 @@ class VimeoLister:
         videos = [
             video
             for video in self.parse_feed(response.content)
-            if (day := _published_day(video.published or "")) is not None
-            and first <= day <= last
+            if (day := _published_day(video.published or "")) is not None and first <= day <= last
         ]
         resolved: list[VideoListing] = []
         problems: list[str] = []
