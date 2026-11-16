@@ -17,6 +17,10 @@ def _opt(argv, name):
     return argv[argv.index(name) + 1]
 
 
+def _positional(argv):
+    return argv[argv.index("--") + 1]
+
+
 class Fake:
     """Stand-in mains. ``fail`` maps a step name to how many times it fails first."""
 
@@ -47,7 +51,7 @@ class Fake:
         if self._failing("meeting"):
             return 1
         out = Path(_opt(argv, "--out"))
-        video = argv[1]
+        video = _positional(argv)
         recap = {"body": "x", "meeting_date": "November 3, 2026", "video_id": video, "claims": []}
         (out / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
         (out / "transcript.json").write_text(json.dumps({"video_id": video}), encoding="utf-8")
@@ -164,7 +168,7 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     ]
     run_argv = fake.calls[0][1]
     folder = settings.work / "2026-11-03-city-council-owzpzjzjwne"
-    assert run_argv[1] == "oWZpzjzjwnE"
+    assert _positional(run_argv) == "oWZpzjzjwnE"
     assert _opt(run_argv, "--out") == str(folder)
     assert _opt(run_argv, "--roster") == str(settings.city / "roster.json")
     agenda = Path(_opt(run_argv, "--agenda")).read_text(encoding="utf-8")
@@ -178,6 +182,32 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     entry = state["meetings"]["youtube:oWZpzjzjwnE"]
     assert entry["status"] == "done"
     assert entry["done"] == ["roster", "recap", "script", "episode", "article"]
+
+
+def test_a_leading_dash_video_id_is_passed_after_the_option_terminator(tmp_path):
+    fake = Fake()
+    settings = _settings(tmp_path)
+    meeting = Found(
+        COUNCIL,
+        date(2026, 11, 3),
+        "City Council Regular Session",
+        "p",
+        "-kPuLsOsvhk",
+    )
+
+    report = run_week(settings, [meeting], LAST, fake.steps())
+
+    assert report.failed == 0
+    run_argv = next(argv for step, argv in fake.calls if step == "meeting")
+    assert run_argv[-2:] == ["--", "-kPuLsOsvhk"]
+
+
+def test_the_meeting_parser_accepts_a_leading_dash_video_id_after_double_dash():
+    from civiccast_brief.meeting.cli import build_parser
+
+    args = build_parser().parse_args(["run", "--out", "out", "--", "-abc123def45"])
+
+    assert args.video_id == "-abc123def45"
 
 
 def test_a_dateless_video_runs_on_the_date_found_for_its_meeting(tmp_path):
@@ -227,7 +257,7 @@ def test_a_failure_is_recorded_the_next_meeting_still_runs_and_a_rerun_resumes(t
     rerun = Fake()
     report = run_week(settings, [COUNCIL_MEETING, PZ_MEETING], LAST, rerun.steps())
     assert report.failed == 0
-    assert [argv[1] for step, argv in rerun.calls if step == "meeting"] == ["oWZpzjzjwnE"]
+    assert [_positional(argv) for step, argv in rerun.calls if step == "meeting"] == ["oWZpzjzjwnE"]
     assert "2026-11-05 Planning and Zoning Commission: done in an earlier run" in report.lines
 
 

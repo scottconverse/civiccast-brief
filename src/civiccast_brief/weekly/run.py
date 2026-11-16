@@ -293,7 +293,7 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             if not inbox.copy_into(CAPTIONS, meeting.video, folder / "raw"):
                 inbox.want_captions(meeting.video)
                 raise Waiting("waiting for its captions from the PC worker")
-        argv = ["run", meeting.video, "--out", str(folder), "--city", str(settings.city)]
+        argv = ["run", "--out", str(folder), "--city", str(settings.city)]
         argv += ["--roster", str(roster)]
         if youtube:
             # The joined listed meeting is authoritative when the upload title has no day.
@@ -318,6 +318,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             argv += ["--cablecast", meeting.cablecast_host]
         if settings.diarize:
             argv.append("--diarize")
+        # argparse would read a leading-dash id as an option; -- keeps it positional.
+        argv += ["--", meeting.video]
         _call(steps.meeting, argv, "meeting run")
         done.append("recap")
     if "script" not in done:
