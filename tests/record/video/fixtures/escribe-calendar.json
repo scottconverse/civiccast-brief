@@ -1,0 +1,25 @@
+{
+  "d": [
+    {
+      "ID": "meeting-101",
+      "MeetingName": "Board of County Commissioners - Regular Meeting",
+      "StartDate": "2026/11/05 09:00:00",
+      "EndDate": "2026/11/05 11:30:00",
+      "MeetingType": "Board of County Commissioners",
+      "MeetingDocumentLink": [
+        {"Type": "Agenda", "Format": ".pdf", "Title": "Agenda", "Url": "/FileStream.ashx?DocumentId=1"},
+        {"Type": "Video", "Format": "Video", "Title": "Video", "HasVideo": true, "Url": "./Players/ISIStandAlonePlayer.aspx?Id=meeting-101"}
+      ]
+    },
+    {
+      "ID": "meeting-102",
+      "MeetingName": "Planning Commission - Regular Meeting",
+      "StartDate": "2026/10/21 13:30:00",
+      "EndDate": "2026/10/21 15:00:00",
+      "MeetingType": "Planning Commission",
+      "MeetingDocumentLink": [
+        {"Type": "Agenda", "Format": "HTML", "Title": "Agenda (HTML)", "Url": "/Meeting.aspx?Id=meeting-102&Agenda=Agenda"}
+      ]
+    }
+  ]
+}

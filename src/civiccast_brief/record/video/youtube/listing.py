@@ -23,6 +23,12 @@ SOURCE_RSS = "rss"
 SOURCE_CHANNEL_TAB = "tab"
 #: Spec 8.1 step 4: yt-dlp reading the channel's tabs.
 SOURCE_YTDLP = "ytdlp"
+#: Other public meeting-video readers, sharing this listing shape.
+SOURCE_CIVICCLERK = "civicclerk"
+SOURCE_ESCRIBE = "escribe"
+SOURCE_VIMEO_RSS = "vimeo_rss"
+SOURCE_VIMEO_YTDLP = "vimeo_ytdlp"
+SOURCE_VIMEO_PLAYER = "vimeo_player"
 
 #: Spec 8.1: the interface says how the channel was read, in these words.
 SOURCE_LABELS: dict[str, str] = {
@@ -32,9 +38,20 @@ SOURCE_LABELS: dict[str, str] = {
     SOURCE_YTDLP: "Read the public channel listing with yt-dlp",
 }
 
+#: The other public meeting-video readers, kept apart from the YouTube ladder above.
+OTHER_SOURCE_LABELS: dict[str, str] = {
+    SOURCE_CIVICCLERK: "Read the CivicClerk events and media API",
+    SOURCE_ESCRIBE: "Read the eScribe calendar and player",
+    SOURCE_VIMEO_RSS: "Read the Vimeo public feed",
+    SOURCE_VIMEO_YTDLP: "Read the public Vimeo media with yt-dlp",
+    SOURCE_VIMEO_PLAYER: "Read the public Vimeo player configuration",
+}
+
 
 def source_label(method: str) -> str:
     """The words the interface shows for a reading method."""
+    if method in OTHER_SOURCE_LABELS:
+        return OTHER_SOURCE_LABELS[method]
     return SOURCE_LABELS.get(method, f"Read YouTube with {method}")
 
 
@@ -67,6 +84,10 @@ class VideoListing:
     duration_s: int | None = None
     live_broadcast_content: str | None = None
     live_status: str | None = None
+    #: A direct media address when the source exposes one: MP4 or HLS.
+    media_url: str | None = None
+    #: A public caption file when the source exposes one (usually VTT).
+    captions_url: str | None = None
 
     @property
     def label(self) -> str:

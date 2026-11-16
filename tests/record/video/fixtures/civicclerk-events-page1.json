@@ -1,0 +1,22 @@
+{
+  "@odata.context": "https://erieco.api.civicclerk.com/v1/$metadata#Events",
+  "@odata.nextLink": "https://erieco.api.civicclerk.com/v1/Events?$skiptoken=page2",
+  "value": [
+    {
+      "id": 101,
+      "eventName": "Town Council Meeting",
+      "startDateTime": "2026-11-10T19:30:00Z",
+      "durationHrs": 2,
+      "durationMin": 15,
+      "categoryName": "Town Council"
+    },
+    {
+      "id": 102,
+      "eventName": "Tree Advisory Board",
+      "startDateTime": "2026-11-09T18:30:00Z",
+      "durationHrs": 0,
+      "durationMin": 45,
+      "categoryName": "Tree Advisory Board"
+    }
+  ]
+}

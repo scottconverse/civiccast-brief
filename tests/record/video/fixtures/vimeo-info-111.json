@@ -1,0 +1,13 @@
+{
+  "id": "111111111",
+  "title": "2026-11-11 Board of Education Regular Meeting",
+  "duration": 3600,
+  "formats": [
+    {"url": "https://cdn.example.test/111-360.mp4", "ext": "mp4", "protocol": "https", "mime_type": "video/mp4", "vcodec": "avc1", "height": 360},
+    {"url": "https://cdn.example.test/111-720.mp4", "ext": "mp4", "protocol": "https", "mime_type": "video/mp4", "vcodec": "avc1", "height": 720},
+    {"url": "https://cdn.example.test/111.m3u8", "ext": "m3u8", "protocol": "https", "mime_type": "application/x-mpegURL", "vcodec": "avc1", "height": 720}
+  ],
+  "subtitles": {
+    "en": [{"ext": "vtt", "url": "https://cdn.example.test/111.en.vtt"}]
+  }
+}

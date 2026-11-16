@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://erieco.api.civicclerk.com/v1/$metadata#Events",
+  "value": [
+    {
+      "id": 103,
+      "eventName": "Planning Commission Meeting",
+      "startDateTime": "2026-10-21T18:30:00Z",
+      "durationHrs": 0,
+      "durationMin": 0,
+      "categoryName": "Planning Commission"
+    }
+  ]
+}

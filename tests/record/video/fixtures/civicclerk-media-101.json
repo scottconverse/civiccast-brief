@@ -1,0 +1,7 @@
+{
+  "@odata.context": "https://erieco.api.civicclerk.com/v1/$metadata#EventsMedia/$entity",
+  "id": 101,
+  "videoUrl": "https://cpmedia.azureedge.net/erieco/council-2026-11-10.mp4",
+  "closedCaptionUrl": null,
+  "externalVideoUrl": ""
+}
