@@ -3,8 +3,32 @@
     "name": "Longmont",
     "state": "Colorado",
     "url": "https://longmont.civiccastbrief.org/",
+    "bodies": "City Council and 6 city boards",
+    "note": "11 meetings since Sept. 22",
+    "live": true
+  },
+  {
+    "name": "Boulder",
+    "state": "Colorado",
+    "url": "https://boulder.civiccastbrief.org/",
+    "bodies": "4 city advisory boards",
+    "note": "4 meetings since Oct. 28",
+    "live": true
+  },
+  {
+    "name": "Louisville",
+    "state": "Colorado",
+    "url": "https://louisville.civiccastbrief.org/",
     "bodies": "City Council",
-    "note": "5 meetings since Sept. 22",
+    "note": "2 meetings since Nov. 2",
+    "live": true
+  },
+  {
+    "name": "Lafayette",
+    "state": "Colorado",
+    "url": "https://lafayette.civiccastbrief.org/",
+    "bodies": "City Council",
+    "note": "1 meeting since Nov. 2",
     "live": true
   }
 ]
