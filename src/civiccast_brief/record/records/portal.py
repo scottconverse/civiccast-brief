@@ -195,6 +195,29 @@ _LEADING_DATE = re.compile(r"^\s*\d{1,2}([/-])\d{1,2}\1\d{2,4}\s+")
 #: A month a portal hangs off the end of a name.
 _TRAILING_MONTH = re.compile(rf"\s+({'|'.join(_MONTHS)})\s*$", re.IGNORECASE)
 
+#: The days of the week a channel puts in front of the date it names in a title
+#: ("Sustainability Advisory Board Thursday, October 22").
+_WEEKDAYS = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+
+#: A sitting's date a channel hangs off the end of a name, with or without a
+#: weekday in front of it and with or without the ordinal suffix a channel
+#: writes the day with: "Sustainability Advisory Board Thursday, October 22" and
+#: "Nederland Downtown Development Authority October 26th". A date read off a
+#: title says when the sitting is, not what the body is called.
+_TRAILING_SITTING_DATE = re.compile(
+    rf"[\s,]+(?:(?:{'|'.join(_WEEKDAYS)})\.?,?\s+)?"
+    rf"({'|'.join(_MONTHS)})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,?\s+\d{{4}})?\s*$",
+    re.IGNORECASE,
+)
+
 #: An acronym a portal writes in brackets after the name it repeats
 #: ("Longmont Urban Renewal Authority (LURA)").
 _TRAILING_ACRONYM = re.compile(r"\s*\(([A-Z]{2,8})\)\s*$")
@@ -700,15 +723,18 @@ def _without_leading_type(text: str) -> str:
 def _clean_name(text: str) -> str:
     """A name with the annotations a portal hangs on it taken off.
 
-    Three of them, and each is something the portal says about the sitting
-    rather than a part of a body's name: a date ("5/5/26"), the month a
-    sitting is named by ("Transportation Advisory Board May Meeting"), and an
-    acronym in brackets that repeats the name in front of it ("Longmont Urban
-    Renewal Authority (LURA)"). What a marker leaves behind once its word has
-    been read out is tidied away with them.
+    Four of them, and each is something the portal says about the sitting
+    rather than a part of a body's name: a date ("5/5/26"), a sitting date with
+    a weekday and an ordinal before it ("Sustainability Advisory Board
+    Thursday, October 22nd"), the month a sitting is named by ("Transportation
+    Advisory Board May Meeting"), and an acronym in brackets that repeats the
+    name in front of it ("Longmont Urban Renewal Authority (LURA)"). What a
+    marker leaves behind once its word has been read out is tidied away with
+    them.
     """
     text = _LEADING_DATE.sub("", text)
     text = _TRAILING_DATE.sub("", text)
+    text = _TRAILING_SITTING_DATE.sub("", text)
     text = _TRAILING_MONTH.sub("", text)
     text = _without_repeating_acronym(text)
     text = _EMPTY_BRACKETS.sub(" ", text)

@@ -469,6 +469,21 @@ def test_a_video_with_no_meeting_day_stays_unrun_when_another_source_names_its_b
     assert [(m.body, m.reason) for m in found] == [(senior, "the title names no meeting day")]
 
 
+def test_a_channel_video_dated_with_an_ordinal_is_run():
+    """Nederland, 16 November 2026: six videos were passed over with "the title names no meeting
+    day" because the channel writes its dates "November 9th, 2026"."""
+    channel = Source(kind="youtube", bodies=(TRUSTEES,), channel_id="UC" + "a" * 22)
+    videos = [
+        NS(
+            video_id="GGGGGGGGGGG",
+            title="Board of Trustees Regular Meeting November 9th, 2026 PART 1",
+            published="2026-11-10T00:00:00Z",
+        )
+    ]
+    found, _ = find_meetings([channel], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    assert [(m.body, m.day, m.reason) for m in found] == [(TRUSTEES, date(2026, 11, 9), "")]
+
+
 def test_a_live_stream_listed_before_its_meeting_is_not_run_yet():
     """Longmont's channel listed the 17 November council stream on 12 November; the run asked
     for its captions and yt-dlp said the live event would begin in 4 days."""

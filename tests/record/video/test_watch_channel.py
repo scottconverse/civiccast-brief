@@ -1029,6 +1029,22 @@ def test_a_title_day_is_read_with_a_short_month_as_longmont_writes_it() -> None:
     assert title_day("Marching Band Concert 21, 2026") is None
 
 
+def test_a_title_day_is_read_with_the_ordinal_nederland_writes_it_with() -> None:
+    """Nederland's channel, 2026-11-16: the weekly run passed all six of these over with "the
+    title names no meeting day", and dated the one written without an ordinal."""
+    assert title_day("Board of Trustees Meeting September 15th, 2026") == date(2026, 9, 15)
+    assert title_day("Planning Commission Meeting September 23rd, 2026") == date(2026, 9, 23)
+    assert title_day("Board of Trustees Meeting Tuesday, October 6th, 2026") == date(2026, 10, 6)
+    assert title_day("Board of Trustees Meeting Tuesday, October 20th, 2026") == date(2026, 10, 20)
+    assert title_day("Board of Trustees Regular Meeting November 10th, 2026 PART 2") == date(
+        2026, 11, 10
+    )
+    assert title_day("Board of Trustees Regular Meeting November 9th, 2026 PART 1") == date(
+        2026, 11, 9
+    )
+    assert title_day("Planning Commission Meeting Wednesday October 21, 2026") == date(2026, 10, 21)
+
+
 def test_yt_dlps_own_date_spelling_is_read() -> None:
     """yt-dlp spells an upload date ``20261103``; that is a day, not "unreadable"."""
     assert published_day("20261103") == date(2026, 11, 3)

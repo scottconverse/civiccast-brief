@@ -177,6 +177,24 @@ def test_a_title_is_read_down_to_the_body_it_names(title: str, wanted: str) -> N
     assert portal.body_name(title) == wanted
 
 
+#: Nederland's channel titles, 2026-11-16: the date a title names, with the
+#: weekday and the ordinal suffix its channel writes it with, is not a part of
+#: the body's name.
+SITTING_DATE_TITLES = (
+    ("Board of Trustees Meeting September 15th, 2026", "Board of Trustees"),
+    (
+        "Nederland Downtown Development Authority October 26th",
+        "Nederland Downtown Development Authority",
+    ),
+    ("Sustainability Advisory Board Thursday, October 22", "Sustainability Advisory Board"),
+)
+
+
+@pytest.mark.parametrize(("title", "wanted"), SITTING_DATE_TITLES)
+def test_a_sitting_date_hanging_off_a_name_is_not_part_of_it(title: str, wanted: str) -> None:
+    assert portal.body_name(title) == wanted
+
+
 #: The titles of the recorded list that carry a status tail, with the status
 #: the tail names. The status is read out of the title and kept on the meeting
 #: row: ``meetings.is_cancelled`` for the first and ``meetings.is_continued``
