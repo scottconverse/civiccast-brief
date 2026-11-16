@@ -54,10 +54,10 @@ def test_only_live_cities_are_listed(tmp_path: Path) -> None:
     assert "City Council · 5 meetings" in html
 
 
-def test_the_shipped_city_list_has_longmont_and_no_oakland(tmp_path: Path) -> None:
+def test_the_shipped_city_list_has_the_live_towns_and_no_oakland(tmp_path: Path) -> None:
     cities = load_cities(DEFAULT_CITIES)
     live = [city.name for city in cities if city.live]
-    assert live == ["Longmont"]
+    assert live == ["Longmont", "Boulder", "Louisville", "Lafayette"]
     assert all(city.name != "Oakland" for city in cities)
 
 
