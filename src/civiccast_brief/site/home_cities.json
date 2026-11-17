@@ -30,5 +30,37 @@
     "bodies": "City Council",
     "note": "1 meeting since Nov. 2",
     "live": true
+  },
+  {
+    "name": "Lyons",
+    "state": "Colorado",
+    "url": "https://lyons.civiccastbrief.org/",
+    "bodies": "Board of Trustees",
+    "note": "2 meetings since Nov. 2",
+    "live": true
+  },
+  {
+    "name": "Nederland",
+    "state": "Colorado",
+    "url": "https://nederland.civiccastbrief.org/",
+    "bodies": "Board of Trustees and Planning Commission",
+    "note": "6 meetings since Sept. 15",
+    "live": true
+  },
+  {
+    "name": "Superior",
+    "state": "Colorado",
+    "url": "https://superior.civiccastbrief.org/",
+    "bodies": "Town Council",
+    "note": "3 meetings since Sept. 28",
+    "live": true
+  },
+  {
+    "name": "Erie",
+    "state": "Colorado",
+    "url": "https://erie.civiccastbrief.org/",
+    "bodies": "Town Council, Planning Commission and Urban Renewal Authority",
+    "note": "11 meetings since Sept. 22",
+    "live": true
   }
 ]
