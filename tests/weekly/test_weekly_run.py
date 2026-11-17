@@ -799,3 +799,55 @@ def test_publish_site_builds_the_site_from_the_desk_without_running_any_meeting(
     assert fake.names()[0] == ("review", "export")
     assert fake.names()[-1] == ("site", "build")
     assert (site.episodes / "stories" / "owzpzjzjwne.json").is_file()
+
+
+def test_the_site_build_reads_the_city_settings_from_the_episodes_folder(tmp_path):
+    """The site build reads city.json from the episodes folder, so the run puts the city
+    folder's copy there. Erie's 2026-11-16 run failed the site build without it."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    city = {"slug": "longmont", "site_title": "CivicCast Brief: Longmont"}
+    (settings.city / "city.json").write_text(json.dumps(city), encoding="utf-8")
+    fake = Fake()
+    fake.exported = {
+        "0002-article": {"kind": "article", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+
+    report = run_week(
+        settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00"
+    )
+
+    assert report.failed == 0, report.lines
+    assert json.loads((site.episodes / "city.json").read_text(encoding="utf-8")) == city
+
+
+def test_the_real_site_build_succeeds_with_the_city_settings_the_run_put_there(
+    tmp_path, monkeypatch
+):
+    """The real site CLI builds from the episodes folder the run filled, with no network."""
+    from civiccast_brief.site import cli as site_cli
+    from civiccast_brief.site import stills
+    from civiccast_brief.weekly.run import publish_site
+
+    monkeypatch.setattr(stills, "download", lambda video_id: None)
+    fixtures = Path(__file__).parent.parent / "site" / "fixtures" / "episodes"
+    city = json.loads((fixtures / "city.json").read_text(encoding="utf-8"))
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://example.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug=city["slug"],
+    )
+    settings = _settings(tmp_path, site=site)
+    shutil.copytree(fixtures, site.episodes, ignore=shutil.ignore_patterns("city.json"))
+    (settings.city / "city.json").write_text(json.dumps(city), encoding="utf-8")
+    fake = Fake()
+    steps = fake.steps()
+    steps.site = site_cli.main
+
+    report = publish_site(settings, steps, published="2026-11-10T09:00:00-07:00")
+
+    assert report.failed == 0, report.lines
+    assert (site.out / "index.html").is_file()
