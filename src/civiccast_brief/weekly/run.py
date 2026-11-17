@@ -606,6 +606,11 @@ def publish(
     built_from: dict[str, str | None] = state.data.setdefault("built_from", {})
     site.episodes.mkdir(parents=True, exist_ok=True)
     site.media.mkdir(parents=True, exist_ok=True)
+    # The site build reads city.json from the episodes folder, so the run keeps the city
+    # folder's copy there and an edit to the city settings reaches the site on the next build.
+    city_file = settings.city / CITY_FILE
+    if city_file.is_file():
+        shutil.copyfile(city_file, site.episodes / CITY_FILE)
     log += _drop_unpublished_episodes(site, state, items)
     for path, meta in items:
         meeting_id = str(meta.get("meeting_id"))
