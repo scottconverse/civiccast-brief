@@ -43,7 +43,7 @@
 <main id="main">
   <section class="hero" id="top">
     <div class="wrap">
-      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Version 0.2.0 · open source · Windows 11</p>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Version 0.3.0 · open source · Windows 11</p>
       <h1>What did your city government <em>just do?</em></h1>
       <p class="lede">CivicCast Brief reads a city's public meeting videos, agendas, packets and minutes, then writes a
         <strong>news story</strong>, a <strong>recap</strong> and a <strong>two-host podcast episode</strong> for each
@@ -101,6 +101,56 @@
     </div>
   </section>
 
+  <section class="band" id="towns">
+    <div class="wrap">
+      <p class="kicker">Live towns</p>
+      <h2>Eight Colorado towns, published every week.</h2>
+      <p class="intro">Each card opens that town's site: its stories, audio and podcast feed, built by the weekly run.</p>
+      <div class="deploy">
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://longmont.civiccastbrief.org/">Longmont</a></h3>
+          <p>City Council and 6 city boards. 11 meetings since Sept. 22.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://boulder.civiccastbrief.org/">Boulder</a></h3>
+          <p>4 city advisory boards. 4 meetings since Oct. 28.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://louisville.civiccastbrief.org/">Louisville</a></h3>
+          <p>City Council. 2 meetings since Nov. 2.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://lafayette.civiccastbrief.org/">Lafayette</a></h3>
+          <p>City Council. 1 meeting since Nov. 2.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://lyons.civiccastbrief.org/">Lyons</a></h3>
+          <p>Board of Trustees. 2 meetings since Nov. 2.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://nederland.civiccastbrief.org/">Nederland</a></h3>
+          <p>Board of Trustees and Planning Commission. 6 meetings since Sept. 15.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://superior.civiccastbrief.org/">Superior</a></h3>
+          <p>Town Council. 3 meetings since Sept. 28.</p>
+        </div>
+        <div class="card">
+          <span class="tag tag-ok">Live</span>
+          <h3><a href="https://erie.civiccastbrief.org/">Erie</a></h3>
+          <p>Town Council, Planning Commission and Urban Renewal Authority. 11 meetings since Sept. 22.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="band alt" id="how">
     <div class="wrap">
       <p class="kicker">How it works</p>
@@ -109,7 +159,7 @@
         It records each step, so running it again retries only what failed.</p>
       <ol class="steps">
         <li><h3>Find</h3><p><code>city find</code> finds a city's meeting sources, with no AI model. You tick what to keep.</p></li>
-        <li><h3>Capture</h3><p>Video captions, the agenda and, where the platform has them, the packet and the minutes.</p></li>
+        <li><h3>Capture</h3><p>Video captions (or the audio, transcribed on your machine when a source keeps none), the agenda and, where the platform has them, the packet and the minutes.</p></li>
         <li><h3>Transcript</h3><p>Times on every line. Speaker names from the roll call, member list and agenda.</p></li>
         <li><h3>Recap</h3><p>Every claim quotes the meeting word for word, with the time it was said.</p></li>
       </ol>
@@ -150,7 +200,7 @@
         <article class="cap">
           <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
           <h3>Reads the platforms cities use</h3>
-          <p>PrimeGov, Granicus, YouTube, Cablecast, CivicWeb, CivicClerk, CivicPlus, eScribe and Laserfiche, plus web pages, Google Drive and OneDrive shares.</p>
+          <p>PrimeGov, Granicus, YouTube, Cablecast, CivicWeb, CivicClerk, CivicPlus, eScribe, Laserfiche and Vimeo, plus web pages, Google Drive and OneDrive shares.</p>
         </article>
         <article class="cap">
           <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
@@ -358,12 +408,12 @@
     <div class="wrap">
       <p class="kicker">Status</p>
       <h2>Early, working, and honest about the gaps.</h2>
-      <p class="intro">Version 0.2.0. The whole pipeline runs every week for one real city. Some outside services are not connected yet.</p>
+      <p class="intro">Version 0.3.0. The whole pipeline runs every week for eight real Colorado towns. Some outside services are not connected yet.</p>
       <div class="status">
         <div class="col yes">
           <h3>Works today</h3>
           <ul>
-            <li>The Longmont site, built and deployed by the weekly run.</li>
+            <li>Eight Colorado town sites, built and deployed by the weekly run.</li>
             <li>The editor desk with sign-in, auto-publish that holds failed items, Unpublish, Kill and Redraft.</li>
             <li>A weekly run that resumes after a stop and retries only what failed.</li>
             <li>The Windows installer, tested on a fresh Windows runner on GitHub.</li>

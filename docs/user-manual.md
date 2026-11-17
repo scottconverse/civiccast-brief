@@ -1,6 +1,6 @@
 # CivicCast Brief user manual
 
-This manual covers **CivicCast Brief 0.2.0**. It has four parts:
+This manual covers **CivicCast Brief 0.3.0**. It has four parts:
 
 1. [New users](#1-new-users): what the program is and your first hour with it.
 2. [Editors (no technical background needed)](#2-editors): the desk, the buttons, and what readers see.
@@ -187,6 +187,14 @@ Each command takes `--help`.
 Optional `city.json` keys for the site: `apple_podcasts_url`, `spotify_url`, `email_signup` with
 `signup_url`, and `desk_url` (adds an "Editor sign-in" link to the footer).
 
+The two roster files hold the same kind of line. `roster.json` is a single body's roster, used
+when the city has one body or when the file's `body` names it. `rosters/<body>.json` is the
+roster for one body when a city has more than one; its name is the body in lowercase with
+hyphens (`rosters/planning-and-zoning-commission.json`). You do not type members in: the weekly
+run fills each body's roster from the meetings' own records, and the desk's **Roster** page shows
+each member and the record they came from. A meeting whose body has no roster file fails with a
+message that names the file to add.
+
 ### Meeting sources
 
 The weekly run reads PrimeGov, Granicus, YouTube channels, Cablecast (Reflect), CivicWeb
@@ -194,6 +202,33 @@ The weekly run reads PrimeGov, Granicus, YouTube channels, Cablecast (Reflect), 
 meeting documents, public Google Drive folders and OneDrive shares. Where readable, a PrimeGov
 meeting also gives its packet and minutes. `city find` lists the platforms it found but cannot
 read yet, so they can be added by hand.
+
+### The video source kinds
+
+Three source kinds read a meeting from the platform's own video, not from YouTube:
+
+| Kind | What to enter | How it is read |
+|---|---|---|
+| `civicclerk` | the town's CivicClerk tenant (the part before `.portal.civicclerk.com`), or the portal address | the public API lists each event and its media endpoint, which gives a direct MP4 |
+| `escribe` | the town's eScribe tenant (the part before `.escribemeetings.com`), or `pub-<tenant>.escribemeetings.com` | the calendar lists meetings with a Video document; the player gives the iSiLive MP4 and its `.vtt` |
+| `vimeo` | the public Vimeo account name, or the account's page address | the account's public RSS lists videos; yt-dlp or the player page gives the media |
+
+`city find` recognises a CivicClerk portal and an eScribe calendar by their host names, and a
+Vimeo account when you add it by hand. Each of these kinds is also read as meeting documents for
+a body, so a CivicClerk or eScribe meeting can bring its agenda with its video. A Vimeo account
+supplies video only.
+
+### Captions or transcription
+
+The transcript comes from a caption file when the source publishes one: CivicClerk's
+closed-caption URL, eScribe's iSiLive `.vtt` beside the MP4, or a Vimeo text track. That file is
+downloaded into the meeting's `raw/` folder and parsed with the same WebVTT reader the archives use.
+
+When a source lists media but no caption file (Erie and Superior's CivicClerk MP4s do not), the
+meeting is transcribed on your own machine: the audio is fetched with ffmpeg and the local speech
+program turns it into the same caption lines. No hosted model is called and nothing beyond the
+source's own media is downloaded. A meeting with neither captions nor media stops the run with
+that reason.
 
 ### Models
 
@@ -221,6 +256,10 @@ the desk. With two or more meetings, a weekly roundup follows. Then it exports w
 published, makes audio for new episodes and builds the site. `weekly-state.json` records each
 step, so running the same command again retries only what failed. Exit 0 means everything
 finished.
+
+The site build reads `city.json` from the episodes folder, so the run copies the city folder's
+`city.json` into that folder before it builds. An edit to the city settings therefore reaches the
+site on the next weekly run or publish, with no second copy to keep in step.
 
 To run it every week, add a Windows scheduled task, or run the station (below).
 

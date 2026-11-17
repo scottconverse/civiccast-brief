@@ -1,9 +1,9 @@
 # CivicCast Brief
 
 CivicCast Brief answers one question for a town: *what did my local government just do?* It reads a city's public meeting videos, agendas, packets and minutes, and makes a cited recap, a news story and a two-host podcast episode for each meeting.
-Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.2.0.
+Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.3.0.
 
-[Website](https://scottconverse.github.io/civiccast-brief/) · [Live example: Longmont, Colo.](https://longmont.civiccastbrief.org) · [User manual](docs/user-manual.md) · [Set up a city](docs/set-up-a-city.md) · [Releases](https://github.com/scottconverse/civiccast-brief/releases)
+[Website](https://scottconverse.github.io/civiccast-brief/) · [Live sites](https://civiccastbrief.org): Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie, Colo. · [User manual](docs/user-manual.md) · [Set up a city](docs/set-up-a-city.md) · [Releases](https://github.com/scottconverse/civiccast-brief/releases)
 
 ## Published Townlight shared importer
 
@@ -25,8 +25,8 @@ captions through its existing paths.
 ## What it does
 
 1. Finds new meetings each week from PrimeGov, Granicus, YouTube channels, Cablecast, CivicWeb,
-   CivicClerk, CivicPlus, eScribe, Laserfiche WebLink, plain web pages, public Google Drive folders
-   and OneDrive shares.
+   CivicClerk, CivicPlus, eScribe, Laserfiche WebLink, Vimeo, plain web pages, public Google Drive
+   folders and OneDrive shares.
 2. Makes a transcript with times. A speaker is named only when a city record prints the name.
 3. Writes a recap and a news story. A checker drops any claim, number or name that is not in the
    meeting's own words or documents.
@@ -61,7 +61,8 @@ Ollama or a Claude subscription for the writing model, and an NVIDIA GPU for aud
 
 ## Project status
 
-Version 0.2.0. Actively developed. The weekly run publishes the live Longmont site. Built and tested
+Version 0.3.0. Actively developed. The weekly run publishes eight live Colorado town sites
+(Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie). Built and tested
 on Windows 11.
 
 Not yet:

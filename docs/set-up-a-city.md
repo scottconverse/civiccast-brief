@@ -159,6 +159,27 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | Google Drive folder | the public folder's address or id | `https://drive.google.com/drive/folders/15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2` |
 | CivicWeb portal | the portal's address or its tenant, the part before `.civicweb.net` | `https://yourtown.civicweb.net` |
 | Cablecast video archive | the archive's host, `<name>.cablecast.tv` (an `https://` address is cut down to its host) | `reflect-cityofloveland-co.cablecast.tv` |
+| CivicClerk portal | the tenant, the part before `.portal.civicclerk.com`, or the portal address | `erieco`, `https://erieco.portal.civicclerk.com` |
+| eScribe meetings site | the tenant, the part after `pub-` and before `.escribemeetings.com`, or the site address | `bouldercounty`, `https://pub-bouldercounty.escribemeetings.com` |
+| Vimeo account | the public account name, the part after `vimeo.com/` | `svvsd` |
+
+A CivicClerk or eScribe source reads both the meeting's documents and its video: the public API
+or calendar lists the meetings, and its media endpoint gives a direct MP4 (and, for eScribe, the
+`.vtt` caption file beside it). A CivicClerk event category or an eScribe meeting type names the
+body. A Vimeo account supplies video only, and is added by hand in `sources.json` (the desk does
+not have a field for one yet): a line like
+`{"id": "vimeo:svvsd", "kind": "vimeo", "tenant": "svvsd", "bodies": ["Board of Education"]}`.
+
+### Captions or transcription
+
+A transcript comes from the source's own caption file when it publishes one: CivicClerk's
+closed-caption URL, eScribe's iSiLive `.vtt`, or a Vimeo text track. That file is downloaded into
+the meeting's `raw/` folder and parsed like any other WebVTT.
+
+A source that lists media but no captions is transcribed on your machine instead: the audio is
+fetched with ffmpeg and the local speech program turns it into caption lines. Erie and Superior's
+CivicClerk MP4s have no caption file and take this path. No hosted model is called. A meeting with
+neither captions nor media is listed with the reason and not run.
 
 A Cablecast source reads the archive's list of the newest 200 shows that have a video. A body's
 meeting is the newest show dated today or earlier whose title names the body (a title may leave off
@@ -424,6 +445,10 @@ Add `--article exported/<article item>` to put the published story on the episod
 not published, is for another meeting, or fails the check after desk edits. The site build reads
 `city.json` and every episode JSON in the folder (not `roster.json`) and publishes only approved
 episodes. Upload `site/` to the static host and the MP3s to the media address.
+
+The site build reads `city.json` from the episodes folder, so the weekly run copies the city
+folder's `city.json` into the episodes folder before it builds. An edit to the city settings
+reaches the site on the next run or publish; there is no second copy to keep in step.
 
 Optional `city.json` settings for the site:
 
