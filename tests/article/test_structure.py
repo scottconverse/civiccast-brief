@@ -70,6 +70,33 @@ def test_an_announcement_appears_once_in_one_sentence() -> None:
     assert changes
 
 
+def test_only_one_announcement_sentence_survives_in_the_also_section() -> None:
+    article = Article(
+        headline="Council meets",
+        sections=(
+            Section(None, (Paragraph("The lead.", ("c01",)),)),
+            Section(
+                "Also on the agenda",
+                (
+                    Paragraph(
+                        "The cemetery would be open Saturday for a tombstone tour. "
+                        "Ballots had to reach the clerk by 7 p.m. on November 3. "
+                        "Items 3c and 3f were pulled from the consent agenda.",
+                        ("c02", "c03", "c04"),
+                    ),
+                ),
+            ),
+        ),
+    )
+    out, changes = condense_announcements(article)
+    also = next(s for s in out.sections if s.heading == "Also on the agenda")
+    text = also.paragraphs[0].text
+    assert text.count("tombstone") == 1
+    assert "Ballots" not in text
+    assert "Items 3c and 3f" in text
+    assert changes
+
+
 def test_a_garbled_caption_phrase_is_dropped() -> None:
     article = Article(
         headline="Council meets",
@@ -138,7 +165,7 @@ def test_a_roundup_also_section_holds_real_items_not_announcements() -> None:
     assert changes
 
 
-def test_a_headline_outrunning_the_kept_story_falls_back_to_the_lead_claim() -> None:
+def test_a_headline_is_never_replaced_with_a_raw_claim() -> None:
     from civiccast_brief.article.writer import drop_unsupported
     from civiccast_brief.script.recap import Claim, Recap
 
@@ -156,9 +183,86 @@ def test_a_headline_outrunning_the_kept_story_falls_back_to_the_lead_claim() -> 
         headline="Program reports growth since 2021 contract",
         sections=(Section(None, (Paragraph("The council opened a public hearing.", ("c01",)),)),),
     )
-    fixed, dropped = drop_unsupported(recap, article)
-    assert fixed.headline == "The council opened a public hearing."
-    assert dropped.texts
+    fixed, _dropped = drop_unsupported(recap, article)
+    # No fallback to the lead claim's own words: a copied claim is not a headline.
+    assert fixed.headline == "Program reports growth since 2021 contract"
+
+
+def test_a_copied_cut_off_claim_is_not_a_headline() -> None:
+    from civiccast_brief.article.writer import headline_issues
+    from civiccast_brief.script.recap import Claim, Recap
+
+    recap = Recap(
+        city="Superior",
+        body="Town Council",
+        meeting_date="October 12, 2026",
+        video_id="roundup",
+        claims=(
+            Claim(
+                "m1-c01",
+                "October 12, 2026: Budget",
+                "[October 12, 2026 meeting] Sales tax revenues were $17.6 million, flat from the "
+                "current year.",
+                "1:24:08",
+                "sales tax revenues were 17.6 million flat",
+            ),
+        ),
+    )
+    issues = headline_issues(
+        recap,
+        "[October 12, 2026 meeting] Sales tax revenues were $17.6 million, flat from the current",
+        roundup=True,
+    )
+    codes = {issue.code for issue in issues}
+    assert {"claim_label", "raw_claim"} <= codes
+
+
+def test_a_written_headline_naming_the_news_passes() -> None:
+    from civiccast_brief.article.writer import headline_issues
+    from civiccast_brief.script.recap import Claim, Recap
+
+    recap = Recap(
+        city="Superior",
+        body="Town Council",
+        meeting_date="October 26, 2026",
+        video_id="abc12345678",
+        claims=(
+            Claim(
+                "c01",
+                "Council resignation",
+                "A council member said they needed to resign their council seat over conflicts "
+                "with their day job.",
+                "0:04:47",
+                "I needed to resign my council seat",
+            ),
+        ),
+    )
+    assert headline_issues(recap, "Superior council member announces resignation") == []
+
+
+def test_a_board_interview_section_is_one_short_paragraph() -> None:
+    from civiccast_brief.article.writer import limit_interviews
+
+    article = Article(
+        headline="Council meets",
+        sections=(
+            Section(None, (Paragraph("The lead.", ("c01",)),)),
+            Section(
+                "Parks and Recreation Advisory Committee interviews",
+                (
+                    Paragraph(
+                        "One applicant sought a seat. The council heard the outcome.", ("c02",)
+                    ),
+                    Paragraph("The applicant spoke about e-bikes and DEI.", ("c03",)),
+                ),
+            ),
+        ),
+    )
+    out, changes = limit_interviews(article)
+    interview = out.sections[1]
+    assert len(interview.paragraphs) == 1
+    assert "e-bikes" not in interview.paragraphs[0].text
+    assert changes
 
 
 def test_a_vote_with_no_subject_is_not_printable() -> None:

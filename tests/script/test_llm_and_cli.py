@@ -125,6 +125,41 @@ def test_cli_rejects_missing_command():
         main([])
 
 
+def test_cli_write_asks_once_more_when_the_model_answers_nothing(tmp_path, monkeypatch, capsys):
+    from civiccast_brief.script import cli
+
+    recap_path = _fixture_recap(tmp_path)
+    answer = "\n".join(
+        json.dumps(line)
+        for line in [
+            {"speaker": "S1", "text": "CivicCast Brief, Longmont.", "claim_ids": ["c01"]},
+            {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
+            {"speaker": "S1", "text": "The council voted.", "claim_ids": ["c01"]},
+            {
+                "speaker": "S2",
+                "text": "Watch it on the city's YouTube channel.",
+                "claim_ids": ["c01"],
+            },
+        ]
+    )
+    calls = []
+
+    def writer(args, recap):
+        def complete(prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                raise llm.ModelError("model answer was empty")
+            return answer
+
+        return complete
+
+    monkeypatch.setattr(cli, "_writer", writer)
+    out = tmp_path / "script.txt"
+    assert main(["write", "--recap", str(recap_path), "--out", str(out)]) == 0
+    assert len(calls) == 2
+    assert "asking once more" in capsys.readouterr().err
+
+
 def test_cli_write_drops_a_chapter_mark_with_no_line_in_it(tmp_path, monkeypatch, capsys):
     from civiccast_brief.audio.lines import read_script
     from civiccast_brief.script import cli

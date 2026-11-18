@@ -297,3 +297,91 @@ def test_a_possessive_of_a_word_nothing_backs_is_still_dropped():
     )
     assert claims == []
     assert report["dropped_items"][0]["reason"].endswith(": Calcoffer's")
+
+
+RESIGNATION = "I needed to resign my council seat due to potential conflicts with my day job."
+
+
+def test_the_resignation_line_is_kept_when_the_quote_is_that_one_sentence():
+    # Oct 26, 2026, 0:04:47. The extraction lost this fact because the model appended the next,
+    # garbled caption line; quoted alone, the line verifies and the claim survives.
+    segments = [
+        seg(287.0, RESIGNATION),
+        seg(292.0, "Tonight's playing last council meeting."),
+        seg(300.0, "I just finally just want to say Mark, Mr. Mayor thank you for your service"),
+    ]
+    claims, report = check(
+        [
+            item(
+                "An unidentified speaker said they needed to resign their council seat over "
+                "conflicts with their day job.",
+                RESIGNATION,
+                "0:04:47",
+            )
+        ],
+        segments=segments,
+    )
+    assert report["dropped_items"] == []
+    assert [c.quote for c in claims] == [RESIGNATION]
+
+
+def test_a_council_member_role_is_backed_by_the_council_seat_in_the_quote():
+    # Oct 26, 2026: the speaker key does not name the resigning member, but the quote itself
+    # says "my council seat", so the claim may call the speaker a council member.
+    segments = [seg(287.0, RESIGNATION)]
+    claims, report = check(
+        [
+            item(
+                "A council member said they needed to resign their council seat over conflicts "
+                "with their day job.",
+                RESIGNATION,
+                "0:04:47",
+            )
+        ],
+        segments=segments,
+    )
+    assert report["dropped_items"] == []
+    assert [c.text[:16] for c in claims] == ["A council member"]
+
+
+def test_a_mangled_surname_in_a_roll_call_still_names_the_record_member():
+    from civiccast_brief.meeting.roster import roster_from_dict
+
+    roster = roster_from_dict(
+        {
+            "city": "Superior",
+            "body": "Town Council",
+            "state": "CO",
+            "members": [
+                {
+                    "name": "Heather Cracraft",
+                    "first": "Heather",
+                    "last": "Cracraft",
+                    "role": "Council Member",
+                }
+            ],
+        }
+    )
+    segments = [
+        seg(4169.6, "Council Member Miller?"),
+        seg(4170.7, "Yes.", speaker="Stephanie Miller"),
+        seg(4173.9, "Council Member Craigcraft?"),
+        seg(4175.4, "Yes."),
+    ]
+    index = V.TranscriptIndex(segments)
+    claims, report = V.verify(
+        [
+            item(
+                "Heather Cracraft voted yes.",
+                "Council Member Craigcraft? Yes.",
+                "1:09:33",
+            )
+        ],
+        index,
+        segments,
+        roster,
+        VOCAB,
+        speaker_at=lambda position: segments[position].speaker,
+    )
+    assert report["dropped_items"] == [], report["dropped_items"]
+    assert [c.text for c in claims] == ["Heather Cracraft voted yes."]

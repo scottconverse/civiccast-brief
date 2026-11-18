@@ -42,19 +42,22 @@ def test_a_title_built_from_its_claims_passes() -> None:
 
 def test_a_title_with_a_name_or_number_its_claims_lack_fails() -> None:
     codes = {i.code for i in check_title(RECAP, Title("Mayor Peck wins 7-0 vote", ("m2-c01",)))}
-    assert codes == {"name", "number"}
+    assert {"name", "number", "news_headline"} <= codes
     # The commission's 5-0 is a claim, but not one this title cites.
     issues = check_title(RECAP, Title("Council votes 5-0", ("m2-c01",)))
-    assert [i.message for i in issues] == [
+    assert [i.message for i in issues if i.code == "number"] == [
         "number 0 is not in the cited claims",
         "number 5 is not in the cited claims",
     ]
 
 
 def test_a_title_without_claims_or_too_long_fails() -> None:
-    assert [i.code for i in check_title(RECAP, Title("Council meets", ()))] == ["uncited"]
+    assert {i.code for i in check_title(RECAP, Title("Council meets", ()))} == {
+        "uncited",
+        "news_headline",
+    }
     long = Title(" ".join(["council"] * 15), ("m2-c01",))
-    assert [i.code for i in check_title(RECAP, long)] == ["length"]
+    assert {i.code for i in check_title(RECAP, long)} == {"length", "news_headline"}
 
 
 def test_write_title_rewrites_once_with_the_problems() -> None:
@@ -78,3 +81,12 @@ def test_write_title_rewrites_once_with_the_problems() -> None:
 def test_write_title_gives_none_when_both_drafts_fail() -> None:
     assert write_title(RECAP, lambda _: answer("Mayor Peck approves it", ["m2-c01"])) is None
     assert write_title(RECAP, lambda _: "no json here") is None
+
+
+def test_a_title_that_copies_a_claim_is_not_a_title() -> None:
+    raw = Title(
+        "[October 6, 2026 meeting] The commission recommended the Sunset rezoning 5-0",
+        ("m1-c01",),
+    )
+    codes = {issue.code for issue in check_title(RECAP, raw)}
+    assert {"claim_label", "raw_claim"} <= codes

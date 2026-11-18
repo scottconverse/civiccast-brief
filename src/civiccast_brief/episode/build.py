@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.names import People, fixes, load_people
+from civiccast_brief.article.names import People, fixes, load_people, seat_fixes
 from civiccast_brief.article.title import check_title, load_title, render_issues
 from civiccast_brief.article.writer import (
     ArticleFormatError,
@@ -227,16 +227,25 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
     return load_people(rosters, pages, str(documents) if documents else "")
 
 
-def _name_fixes(recap: Recap, people: People) -> list[dict[str, str]]:
-    """The speech-to-text -> record name pairs for the recap the site prints beside a story.
+def _name_fixes(
+    recap: Recap, people: People, transcript_texts: list[str] | tuple[str, ...] = ()
+) -> list[dict[str, str]]:
+    """The speech-to-text -> record name pairs for the recap and transcript the site prints.
 
-    The raw transcript is left as the speech program wrote it: it is the record of what was
-    heard, and guessing at every capitalised phrase in free text would rewrite it wrongly.
+    A name the site prints in the recap, a quote or a transcript page is set to the record's
+    spelling. The correction is the names.py rule: a surname that matches the record (by sound
+    or spelling, and by the printed seat or title) is certain; a phrase the record does not hold
+    is left as the transcript has it, because guessing at every capitalised phrase in free text
+    would rewrite the record wrongly.
     """
     pairs: list[tuple[str, str]] = []
     for claim in recap.claims:
-        pairs += fixes(claim.text, people)
-        pairs += fixes(claim.quote, people)
+        for text in (claim.text, claim.quote):
+            pairs += seat_fixes(text, people)
+            pairs += fixes(text, people)
+    for text in transcript_texts:
+        pairs += seat_fixes(text, people)
+        pairs += fixes(text, people)
     out: list[dict[str, str]] = []
     seen: set[str] = set()
     for wrong, right in pairs:
@@ -304,7 +313,11 @@ def assemble_story(
         "video_url": _video_url(data),
         "media_url": _media_url(data),
         "article": article,
-        "name_fixes": _name_fixes(recap, _people_of(meeting_dir, meeting_dir / "documents.json")),
+        "name_fixes": _name_fixes(
+            recap,
+            _people_of(meeting_dir, meeting_dir / "documents.json"),
+            [s.text for s in segments],
+        ),
     }
 
 
@@ -386,6 +399,7 @@ def assemble(
         "name_fixes": _name_fixes(
             recap,
             _people_of(meeting_dir, meeting_dir / "documents.json", roundup),
+            [] if roundup else [s.text for s in segments],
         ),
         "transcript": None
         if roundup

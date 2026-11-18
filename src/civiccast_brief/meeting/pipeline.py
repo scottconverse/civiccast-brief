@@ -316,6 +316,9 @@ def run(
         out=out,
         complete=judge_complete or complete or (lambda prompt: llm.chat(prompt, model=model)),
         log=lambda line: log(f"[{video_id}] {line}"),
+        # The official spellings the judge may accept or repair: the agenda and documents'
+        # terms, and the roster's full names (a roll call says "Council Member Miller").
+        terms=[*sorted(vocabulary), *(m.name for m in roster.members)][:200],
     )
     recap = Recap(
         city=roster.city,
@@ -409,9 +412,10 @@ def _judged(
     out: Path,
     complete: Complete,
     log: Callable[[str], None],
+    terms: list[str] | tuple[str, ...] = (),
 ) -> list[Claim]:
     """Run the claim judge, write judge.json, add its drops to the report, renumber the rest."""
-    judgments, calls = judge_claims(claims, complete, log=log)
+    judgments, calls = judge_claims(claims, complete, log=log, terms=terms)
     _write(
         out / "judge.json",
         {"claims": [j.to_json() for j in judgments], "calls": calls},

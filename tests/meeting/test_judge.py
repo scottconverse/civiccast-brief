@@ -184,3 +184,69 @@ def test_prompt_holds_claim_and_quote_only():
 def test_parse_rows_rejects_bad_answers(bad):
     with pytest.raises(ValueError):
         J.parse_rows(bad)
+
+
+def test_a_garbled_last_sentence_costs_only_that_sentence():
+    assert (
+        J.trim_garbled_tail(
+            "I needed to resign my council seat due to potential conflicts with my day job. "
+            "Tonight's playing last council meeting."
+        )
+        == "I needed to resign my council seat due to potential conflicts with my day job."
+    )
+    assert J.trim_garbled_tail("One sentence only.") == ""
+
+
+def test_a_claim_is_kept_on_its_clean_first_sentence_after_a_garbled_tail():
+    resignation = claim(
+        1,
+        "A council member said they needed to resign their council seat over conflicts with "
+        "their day job.",
+        "I needed to resign my council seat due to potential conflicts with my day job. "
+        "Tonight's playing last council meeting.",
+    )
+    prompts = []
+
+    def complete(prompt):
+        prompts.append(prompt)
+        if "Tonight's playing" in prompt:
+            return answer(
+                [
+                    {
+                        "index": 0,
+                        "verdict": "Needs a human",
+                        "evidence": "Tonight's playing",
+                        "reason": "Final sentence is garbled and unclear.",
+                    }
+                ]
+            )
+        return answer(
+            [
+                {
+                    "index": 0,
+                    "verdict": "Supported",
+                    "evidence": "needed to resign my council seat due to potential conflicts",
+                    "reason": "the clear sentence says it",
+                }
+            ]
+        )
+
+    judgments, calls = J.judge([resignation], complete)
+    assert judgments[0].kept
+    assert judgments[0].claim.quote.endswith("my day job.")
+    assert len(prompts) == 2
+    assert calls[-1]["count"] == 1
+
+
+def test_the_judge_is_told_the_records_terms():
+    prompt = J.build_prompt([SEP22_C01], ["SURA", "International Fire Code"])
+    assert "OFFICIAL TERMS" in prompt
+    assert "SURA" in prompt and "International Fire Code" in prompt
+    assert "not garbling by itself" in prompt
+
+
+def test_the_judge_is_told_a_roster_full_name_may_back_a_surname_in_the_quote():
+    prompt = J.build_prompt([SEP22_C01], ["Stephanie Miller", "Heather Cracraft"])
+    assert "Stephanie Miller" in prompt
+    assert "Council Member Miller" in prompt
+    assert "chair's call and the member's answer" in prompt

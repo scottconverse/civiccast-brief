@@ -68,7 +68,15 @@ def _write(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     feedback = args.feedback.read_text(encoding="utf-8") if args.feedback else ""
     try:
-        lines = write_script(recap, _writer(args, recap), feedback=feedback)
+        try:
+            lines = write_script(recap, _writer(args, recap), feedback=feedback)
+        except llm.ModelError as exc:
+            # The model sometimes answers with nothing at all. One more ask is worth it: an
+            # empty answer is not the story failing a check, it is no answer.
+            if "empty" not in str(exc):
+                raise
+            print("the model answered nothing; asking once more", file=sys.stderr)
+            lines = write_script(recap, _writer(args, recap), feedback=feedback)
     except (
         llm.ModelError,
         models.ModelCallError,

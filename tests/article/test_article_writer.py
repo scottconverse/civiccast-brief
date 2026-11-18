@@ -90,6 +90,8 @@ def test_a_paragraph_without_a_claim_or_with_an_unknown_one_fails() -> None:
         ("paragraph 2", "uncited"),
         ("headline", "unknown_claim"),
         ("headline", "uncited"),
+        # The story cites nothing the check can call the meeting's news.
+        ("lead", "news_lead"),
     }
 
 
@@ -101,21 +103,27 @@ def test_the_headline_is_checked_against_the_claims_the_article_cites() -> None:
             headline="Council closes Sunset pool",
         ),
     )
-    assert [(i.where, i.code) for i in report.issues] == [("headline", "name")]
+    assert [(i.where, i.code) for i in report.issues] == [
+        ("headline", "name"),
+        # The headline names no money, land or law vote, the meeting's biggest news.
+        ("headline", "news_headline"),
+    ]
 
 
 def test_one_speaker_is_not_a_count_but_one_ordinance_is() -> None:
+    lead = Paragraph("The council approved the annexation 6-1.", ("c01",))
     passes = Paragraph("One speaker asked to keep the Sunset pool open.", ("c02",))
     fails = Paragraph("One ordinance asked to keep the Sunset pool open.", ("c02",))
-    assert check_article(RECAP, article(passes)).passed
-    assert [i.code for i in check_article(RECAP, article(fails)).issues] == ["number"]
+    assert check_article(RECAP, article(lead, passes)).passed
+    assert [i.code for i in check_article(RECAP, article(lead, fails)).issues] == ["number"]
 
 
 def test_a_common_word_that_opens_a_sentence_is_not_a_name_but_a_name_still_is() -> None:
+    lead = Paragraph("The council approved the annexation 6-1.", ("c01",))
     text = "During public comment, one speaker asked to keep the Sunset pool open."
-    assert check_article(RECAP, article(Paragraph(text, ("c02",)))).passed
+    assert check_article(RECAP, article(lead, Paragraph(text, ("c02",)))).passed
     named = "During public comment, Waters asked to keep the Sunset pool open."
-    issues = check_article(RECAP, article(Paragraph(named, ("c02",)))).issues
+    issues = check_article(RECAP, article(lead, Paragraph(named, ("c02",)))).issues
     assert [i.message for i in issues] == ["name 'Waters' is not in the cited claims"]
 
 
@@ -182,7 +190,7 @@ def test_a_name_or_number_said_near_the_claim_passes_and_one_said_later_fails() 
 
     windows = caption_windows(RECAP, _segments())
     assert "Waters" in windows["c01"] and "2026-99" not in windows["c01"]
-    near = Paragraph("Waters moved Ordinance O-2026-70; it passed 6-1.", ("c01",))
+    near = Paragraph("Waters moved the annexation Ordinance O-2026-70; it passed 6-1.", ("c01",))
     assert check_article(RECAP, article(near), windows).passed
     far = Paragraph("The council approved Ordinance 2026-99 6-1.", ("c01",))
     issues = check_article(RECAP, article(far), windows).issues
@@ -316,6 +324,59 @@ def test_a_story_that_leads_on_consent_when_a_resignation_is_cited_is_flagged() 
     assert lead_is_routine(NEWS_RECAP, led) is None
 
 
+def test_a_story_whose_lead_and_headline_bury_the_resignation_fails() -> None:
+    buried = Article(
+        headline="Superior council moves fundraising advisor agreement",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "The council moved to approve the fundraising advisor agreement.",
+                        ("c03",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    codes = [(issue.where, issue.code) for issue in check_article(NEWS_RECAP, buried).issues]
+    assert ("lead", "news_lead") in codes
+    assert ("headline", "news_headline") in codes
+    led = Article(
+        headline="Superior council member announces resignation over day-job conflicts",
+        sections=(
+            Section(
+                None,
+                (Paragraph("A council member said they needed to resign.", ("c01",)),),
+            ),
+        ),
+    )
+    report = check_article(NEWS_RECAP, led)
+    assert report.passed, report.render()
+
+
+def test_a_passing_mention_of_a_contract_is_not_a_money_vote() -> None:
+    from civiccast_brief.article.writer import news_value
+    from civiccast_brief.script.recap import Claim
+
+    background = Claim(
+        "c09",
+        "Program",
+        "The Superior contract started in 2021.",
+        "0:29:22",
+        "our contract started in 2021",
+    )
+    assert news_value(background) < 60
+    decision = Claim(
+        "c10",
+        "Budget",
+        "The council approved the 2027 budget of $65.5 million.",
+        "1:14:48",
+        "the budget passes",
+    )
+    assert news_value(decision) >= 70
+
+
 def test_the_prompt_lists_the_news_order_and_a_roundup_uses_the_week_prompt() -> None:
     from civiccast_brief.article.writer import build_prompt
 
@@ -428,3 +489,24 @@ def test_a_passing_story_under_the_length_floor_is_flagged_for_one_rewrite() -> 
     )
     assert story_words(long) >= MIN_STORY_WORDS
     assert not story_too_short(enough, long)
+
+
+def test_a_routine_appointment_resolution_is_not_the_meeting_news() -> None:
+    from civiccast_brief.article.writer import news_value
+    from civiccast_brief.script.recap import Claim
+
+    appointment = Claim(
+        "c18",
+        "Appointments",
+        "The Town Council considered Resolution No. R-96 making appointments to the Parks and "
+        "Rec Advisory Committee.",
+        "1:40:00",
+        "move to approve the resolution making the appointments",
+    )
+    assert news_value(appointment) == 0
+
+
+def test_a_short_month_is_not_a_name() -> None:
+    from civiccast_brief.article.writer import _names
+
+    assert _names("The council met Oct. 26 and again Nov. 2.") == []

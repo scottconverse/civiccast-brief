@@ -47,6 +47,7 @@ from civiccast_brief.article.writer import (
     condense_announcements,
     drop_unsupported,
     lead_is_routine,
+    limit_interviews,
     load_article,
     load_documents,
     merge_announcements,
@@ -244,6 +245,9 @@ def _write(args: argparse.Namespace) -> int:
         )
         article = _repair(article, people)
         report = check_article(recap, article, windows, pages, speakers, people)
+        # Every draft is kept: a rewrite can be shorter and worse, and the first draft may
+        # pass once its unsupported paragraphs are dropped.
+        candidates = [article]
         routine = lead_is_routine(recap, article)
         if not report.passed:
             print("first draft failed the check; writing again with the report", file=sys.stderr)
@@ -259,6 +263,7 @@ def _write(args: argparse.Namespace) -> int:
                 people=people,
             )
             article = _repair(article, people)
+            candidates.append(article)
             report = check_article(recap, article, windows, pages, speakers, people)
             routine = lead_is_routine(recap, article)
         if routine is not None:
@@ -280,6 +285,7 @@ def _write(args: argparse.Namespace) -> int:
                 people=people,
             )
             article = _repair(article, people)
+            candidates.append(article)
             report = check_article(recap, article, windows, pages, speakers, people)
         if report.passed and story_too_short(recap, article):
             # A valid but thin story. Ask once for the length the meeting supports.
@@ -301,10 +307,20 @@ def _write(args: argparse.Namespace) -> int:
         print(f"write failed: {exc}", file=sys.stderr)
         return 1
     if not report.passed:
-        article, dropped = drop_unsupported(recap, article, windows, pages, speakers, people)
+        # Trim every draft and take the longest that passes. A rewrite can lose the news the
+        # first draft had; the first draft, minus its unsupported paragraphs, may still pass.
+        attempts = []
+        for candidate in candidates:
+            kept, dropped = drop_unsupported(recap, candidate, windows, pages, speakers, people)
+            attempts.append(
+                (kept, dropped, check_article(recap, kept, windows, pages, speakers, people))
+            )
+        passing = [attempt for attempt in attempts if attempt[2].passed]
+        article, dropped, report = (
+            max(passing, key=lambda attempt: story_words(attempt[0])) if passing else attempts[-1]
+        )
         for line in dropped.lines():
             print(line, file=sys.stderr)
-        report = check_article(recap, article, windows, pages, speakers, people)
         if report.passed and story_too_short(recap, article):
             # Dropping the unsupported parts can leave a thin story. Ask once for a longer one
             # that passes; keep the shorter passing story when the longer draft does not.
@@ -332,6 +348,9 @@ def _write(args: argparse.Namespace) -> int:
         print(f"structure: {line}", file=sys.stderr)
     article, condensed = condense_announcements(article, roundup)
     for line in condensed:
+        print(f"structure: {line}", file=sys.stderr)
+    article, shortened = limit_interviews(article)
+    for line in shortened:
         print(f"structure: {line}", file=sys.stderr)
     json_path, md_path = save_article(recap, article, args.out, pages, people)
     print(f"wrote {json_path} and {md_path}")
@@ -383,6 +402,9 @@ def _stage(args: argparse.Namespace) -> int:
         print(f"structure: {line}", file=sys.stderr)
     article, condensed = condense_announcements(article, recap.video_id == ROUNDUP_ID)
     for line in condensed:
+        print(f"structure: {line}", file=sys.stderr)
+    article, shortened = limit_interviews(article)
+    for line in shortened:
         print(f"structure: {line}", file=sys.stderr)
     report = check_article(recap, article, windows, pages, speakers, people)
     meeting_id = f"roundup {recap.meeting_date}" if recap.video_id == ROUNDUP_ID else recap.video_id

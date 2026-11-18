@@ -170,7 +170,7 @@ def test_pipeline_judges_with_the_judge_writer_when_one_is_given(tmp_path, monke
     )
     used = []
 
-    def judged(claims, report, *, out, complete, log):
+    def judged(claims, report, *, out, complete, log, terms=()):
         used.append(complete)
         return claims
 

@@ -239,6 +239,7 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
             recap,
             "--article",
             str(article),
+            *city,
             *docs,
         ],
         "article stage",
@@ -417,6 +418,8 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
                         recap,
                         "--article",
                         str(out.with_suffix(".json")),
+                        "--city",
+                        str(settings.city),
                     ],
                     "roundup article stage",
                 )

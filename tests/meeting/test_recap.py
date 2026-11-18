@@ -174,3 +174,55 @@ def test_draft_window_keeps_items_from_a_good_answer():
     draft = R.draft_window(complete, "prompt", 1)
     assert draft.error is None
     assert draft.items[0]["quote"] == "y"
+
+
+def test_the_prompt_quotes_only_the_words_that_prove_one_fact():
+    # The Oct 26 meeting: the model appended a garbled next line to the resignation quote, and
+    # the whole claim was lost. The prompt names that line and says to stop at the clean one.
+    segments = [
+        seg(
+            287.0, "I needed to resign my council seat due to potential conflicts with my day job."
+        ),
+        seg(292.0, "Tonight's playing last council meeting."),
+    ]
+    window = R.windows(segments, 1800)[0]
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=1,
+        window=window,
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="",
+    )
+    assert (
+        "I needed to resign my council seat due to potential conflicts with my day job." in prompt
+    )
+    assert "never append a following line that states a different fact" in prompt
+    assert "write two items and give each its own quote" in prompt
+
+
+def test_the_prompt_asks_for_a_roll_call_item_per_member_with_the_call_and_answer():
+    segments = [
+        seg(4169.6, "Council Member Miller?"),
+        seg(4170.7, "Yes.", speaker="Stephanie Miller"),
+        seg(4173.9, "Council Member Craigcraft?"),
+        seg(4175.4, "Yes.", speaker="Heather Cracraft"),
+    ]
+    window = R.windows(segments, 1800)[0]
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=1,
+        window=window,
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="",
+    )
+    assert "one item for each member whose vote the captions state" in prompt
+    assert '"Council Member Miller? Yes."' in prompt
+    assert 'not "budget amendment"' in prompt

@@ -421,6 +421,9 @@ def test_the_meetings_documents_are_written_passed_to_the_story_and_reported(tmp
     articles = [argv for step, argv in fake.calls if step == "article"]
     assert [a[0] for a in articles] == ["write", "write", "stage"]
     assert all(_opt(a, "--documents") == str(written) for a in articles)
+    # The stage check needs the roster, as the write check does: without it a seat is named
+    # from the packet's surname alone and the printed name is repaired twice.
+    assert all(_opt(a, "--city") == str(settings.city) for a in articles)
     assert report.lines[:3] == [
         "2026-11-03 City Council Regular Session: done",
         "2026-11-03 City Council Regular Session: packet: 38 pages",
