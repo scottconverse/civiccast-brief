@@ -29,6 +29,12 @@ from civiccast_brief.meeting.transcript import Segment, hms, normalize_quote, se
 from civiccast_brief.script.recap import Claim
 
 WINDOW_S = 60.0
+#: Speech-to-text noise that states no fact ("read the Superior sample for accurate dates").
+#: A claim built on such a phrase is dropped, never printed.
+_NONSENSE_RE = re.compile(
+    r"\b(?:read|reading|see|check|consult)\b[^.]*\bsample\b[^.]*\b(?:accurate|correct)\b",
+    re.IGNORECASE,
+)
 #: Role words a claim may use only when the quote says them, or when the speaker key gives the
 #: title (the roll call gives "council member" for an unmatched name).
 ROLE_PHRASES = (
@@ -180,6 +186,9 @@ def verify(
         quote = normalize_quote(raw_quote)
         if not text or not quote or not re.match(r"^\d{1,2}:\d{2}:\d{2}$", cited):
             drop(position, text, "missing text, quote or timestamp")
+            continue
+        if _NONSENSE_RE.search(text) or _NONSENSE_RE.search(quote):
+            drop(position, text, "the quote is garbled speech-to-text that states no fact")
             continue
         occurrences = index.occurrences(quote)
         if not occurrences:

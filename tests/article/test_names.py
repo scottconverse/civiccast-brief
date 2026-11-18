@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from civiccast_brief.article.names import load_people, repair_article, repair_text
+from civiccast_brief.article.names import (
+    fill_roll_call_names,
+    load_people,
+    repair_article,
+    repair_text,
+)
 from civiccast_brief.article.writer import (
     Article,
     DocPage,
@@ -126,6 +131,39 @@ def test_a_quote_word_name_is_repaired_too() -> None:
     words = quote_words(recap, Quote("c01", "A speaker"), PEOPLE)
     assert "Hannah Hippely" in words
     assert "Mahanni" not in words
+
+
+def test_a_roll_call_names_the_record_mayor_pro_tem() -> None:
+    text = "Council Member Foster, Mayor Lacis and Mayor Pro Tem voted yes."
+    out, changes = fill_roll_call_names(text, PEOPLE)
+    assert "Mayor Pro Tem Jenn Kaaoush voted yes" in out
+    assert changes and "Kaaoush" in changes[0]
+
+
+def test_a_seat_in_plain_prose_is_not_given_a_name() -> None:
+    text = "The Mayor Pro Tem spoke about the budget."
+    out, changes = fill_roll_call_names(text, PEOPLE)
+    assert out == text
+    assert changes == []
+
+
+def test_repair_article_names_a_seat_only_voter() -> None:
+    article = Article(
+        headline="Superior hears fire code",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "The council approved the contract; Mayor Pro Tem voted yes.",
+                        ("c01",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, PEOPLE)
+    assert "Mayor Pro Tem Jenn Kaaoush voted yes" in fixed.paragraphs[0].text
 
 
 def test_a_vote_line_prints_the_record_spelling() -> None:

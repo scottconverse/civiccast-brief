@@ -283,10 +283,10 @@ NEWS JUDGMENT (this decides the order, not the agenda's):
 1. Lead with the most newsworthy thing in the meeting: a resignation, removal or vacancy; a vote on money (a budget, contract, fee, tax, purchase, grant), land (annexation, zoning, development) or a law (ordinance, resolution); a divided or contested vote; a decision that changes what residents must do; public outcry or a crowd at public comment.
 2. A routine consent agenda, the approval of minutes, a proclamation, an appointment or a meeting date is not the lead. Put those at the end in one short section headed "Also on the agenda".
 3. Within the lead, say what happened, who did it (the body and, when the record names them, the members), the vote if there was one, who voted how, the amount or date if there was one, and what happens next when a claim says it.
-4. Give context a reader needs from the meeting itself: what the item does, who spoke for and against it, and the numbers. Do not pad and do not repeat a fact to reach a length.
+4. Give context a reader needs from the meeting itself: what the item does, who spoke for and against it, and the numbers. Use every claim that adds news: each vote, figure, date, outcome, presenter point and point of public comment. Do not pad and do not repeat a fact to reach a length.
 5. A vote claim whose captions name the members in a roll call ("Neal Shah: Yes.") is written out: name each member and how they voted, and the tally. The captions are the record of the vote.
 6. Do not start sentence after sentence with "A speaker said". When the record gives no name, use the role the captions show (a resident during public comment, a business owner, town staff, the applicant, a council member) or fold the statement into its item ("The council heard that...", "Under the contract, ..."). "A speaker" belongs in a section at most once, and never twice in one paragraph.
-7. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also on the agenda". Never give them a section or a heading of their own.
+7. Announcements, event dates, tours, recognitions and reminders are not news: put each one once, in one sentence, in ONE short paragraph under "Also on the agenda". Never give them a section or a heading of their own. Never repeat an announcement, and never pass on words the captions garbled.
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -306,7 +306,7 @@ ROUNDUP_PROMPT = """You write the week's news story for a local news site, cover
 
 FACTS: use only the claims listed at the end. Every fact, number, name, vote and date must come from a claim, and every claim's topic says which meeting it came from ("September 28, 2026: ..."). Add no causes, reasons, background or outside context. Do not invent who a speaker is: name a council or board member only when the claim or its captions name that person; otherwise use the role the record supports (someone resigning a council seat is "a council member", a presenter is "town staff", a public commenter is "a resident") or "a speaker". Never write "an unidentified speaker".
 
-NEWS JUDGMENT: this is one story about the week, not a list of meetings. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also this week", never a section of their own. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section.
+NEWS JUDGMENT: this is one story about the week, not a list of meetings. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Use every claim that adds news. Announcements, event dates, tours, recognitions and reminders are not news: the roundup's "Also this week" holds the week's real agenda items, not announcements. Put a real item once, and never pass on words the captions garbled. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section.
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -892,6 +892,31 @@ class Dropped:
         return out
 
 
+#: Ways a claim says who spoke, which a headline does not need.
+_SPOKEN_PREFIX_RE = re.compile(
+    r"^(?:An?\s+(?:unidentified\s+)?speaker\s+said\s+|A\s+council\s+member\s+said\s+|"
+    r"The\s+council\s+heard\s+that\s+)",
+    re.IGNORECASE,
+)
+
+
+def _headline_from_lead(article: Article, recap: Recap) -> str:
+    """A headline built from the lead paragraph's first claim, 14 words or fewer."""
+    lead = article.paragraphs[0]
+    claim = next(
+        (recap.claim(claim_id) for claim_id in lead.claim_ids if recap.claim(claim_id)), None
+    )
+    if claim is None:
+        return ""
+    text = _SPOKEN_PREFIX_RE.sub("", claim.text).strip()
+    if not text:
+        return ""
+    words = text.split()
+    if len(words) > 14:
+        text = " ".join(words[:14]).rstrip(" ,.;:")
+    return text[:1].upper() + text[1:]
+
+
 def drop_unsupported(
     recap: Recap,
     article: Article,
@@ -929,6 +954,17 @@ def drop_unsupported(
     if out.dek and fails("dek", out.dek, out.cited, out.cited_pages):
         dropped.texts.append(out.dek)
         out = replace(out, dek="")
+    if out.paragraphs and fails("headline", out.headline, out.cited, out.cited_pages):
+        # The story may have dropped the paragraph that carried the headline's fact. State the
+        # lead paragraph's own claim instead, so the headline cannot outrun the kept story.
+        fallback = _headline_from_lead(out, recap)
+        if (
+            fallback
+            and fallback != out.headline
+            and not fails("headline", fallback, out.cited, out.cited_pages)
+        ):
+            dropped.texts.append(out.headline)
+            out = replace(out, headline=fallback)
     votes, quotes = [], []
     for vote in out.votes:
         issues: list[Issue] = []
@@ -940,9 +976,6 @@ def drop_unsupported(
         (dropped.quotes if issues else quotes).append(quote)
     return replace(out, votes=tuple(votes), quotes=tuple(quotes)), dropped
 
-
-#: A story with fewer words than this is too thin for a meeting that had this much news.
-MIN_STORY_WORDS = 450
 
 #: A heading about an announcement, event or reminder gets no section of its own.
 _ANNOUNCEMENT_RE = re.compile(
@@ -981,14 +1014,87 @@ def merge_announcements(article: Article, roundup: bool = False) -> tuple[Articl
     return replace(article, sections=tuple(kept)), changes
 
 
+#: An automatic-caption phrase that sends readers to a publication that does not exist ("read
+#: the Superior sample for accurate dates"). It is speech-to-text noise, not a fact.
+_GARBLED_SENTENCE_RE = re.compile(
+    r"\b(?:read|reading|see|check|consult)\b[^.]*\bsample\b[^.]*\b(?:accurate|correct)\b"
+    # A name the record does not hold was replaced with a role ("a speaker") in a place where
+    # no person was meant: "the a speaker project", "training with a speaker staff".
+    r"|\b(?:a|an|the)\s+(?:a|an)\s+speaker\b"
+    r"|\ba speaker\s+(?:staff|project|business|company|place|program|series|office|department)\b",
+    re.IGNORECASE,
+)
+#: The events that make a sentence an announcement instead of news. Each can appear once, in one
+#: sentence, in the "Also..." section; a roundup's "Also this week" holds only real items.
+_ANNOUNCEMENT_GROUPS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(cemetery|tombstone|tour)\b", re.IGNORECASE),
+    re.compile(r"\b(celebration|festival|resilient)\b", re.IGNORECASE),
+    re.compile(r"\b(holiday|passport|sign up|sign-up)\b", re.IGNORECASE),
+    re.compile(r"\b(ballot|postmark|election)\b", re.IGNORECASE),
+    re.compile(r"\b(volunteer|recognition|proclamation)\b", re.IGNORECASE),
+)
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _announcement_group(sentence: str) -> int | None:
+    for number, pattern in enumerate(_ANNOUNCEMENT_GROUPS):
+        if pattern.search(sentence):
+            return number
+    return None
+
+
+def condense_announcements(article: Article, roundup: bool = False) -> tuple[Article, list[str]]:
+    """Keep announcements to one sentence each in the "Also..." section, and no filler in a roundup.
+
+    A garbled caption phrase is dropped wherever it appears. A duplicate announcement is dropped.
+    The roundup's "Also this week" keeps real agenda items, not tours, celebrations or reminders.
+    """
+    changes: list[str] = []
+    seen: set[int] = set()
+    sections: list[Section] = []
+    for section in article.sections:
+        also = (section.heading or "").strip().lower() in _ALSO_HEADINGS
+        paragraphs: list[Paragraph] = []
+        for paragraph in section.paragraphs:
+            kept: list[str] = []
+            for sentence in _SENTENCE_RE.split(paragraph.text.strip()):
+                if not sentence:
+                    continue
+                if _GARBLED_SENTENCE_RE.search(sentence):
+                    changes.append(f"dropped a garbled caption phrase: {sentence[:80]}")
+                    continue
+                group = _announcement_group(sentence) if also else None
+                if group is not None:
+                    if roundup:
+                        changes.append(f"dropped an announcement from the roundup: {sentence[:80]}")
+                        continue
+                    if group in seen:
+                        changes.append(f"dropped a repeated announcement: {sentence[:80]}")
+                        continue
+                    seen.add(group)
+                kept.append(sentence)
+            if kept:
+                paragraphs.append(replace(paragraph, text=" ".join(kept)))
+        if paragraphs:
+            sections.append(replace(section, paragraphs=tuple(paragraphs)))
+    if not changes:
+        return article, []
+    return replace(article, sections=tuple(sections)), changes
+
+
 def story_words(article: Article) -> int:
     return sum(len(p.text.split()) for p in article.paragraphs)
 
 
+#: A story under this many words is thin when the recap holds enough facts to fill it.
+MIN_STORY_WORDS = 600
+#: The claim count that makes the length target fair: fewer facts cannot support 600 words.
+MIN_CLAIMS_FOR_LENGTH = 15
+
+
 def story_too_short(recap: Recap, article: Article) -> bool:
-    """Whether a passing story is too thin: under :data:`MIN_STORY_WORDS` while the recap holds
-    at least five claims to build from."""
-    return len(recap.claims) >= 5 and story_words(article) < MIN_STORY_WORDS
+    """Whether a passing story is too thin for the facts the recap holds."""
+    return len(recap.claims) >= MIN_CLAIMS_FOR_LENGTH and story_words(article) < MIN_STORY_WORDS
 
 
 def video_link(recap: Recap, timestamp: str) -> str:

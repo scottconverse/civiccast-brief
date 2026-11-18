@@ -26,7 +26,7 @@ from civiccast_brief.meeting import diarize as diarize_mod
 from civiccast_brief.meeting import direct as direct_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting import transcript as transcript_mod
-from civiccast_brief.meeting.agenda import load_agenda
+from civiccast_brief.meeting.agenda import document_vocabulary, load_agenda
 from civiccast_brief.meeting.capture import caption_origin, capture_captions
 from civiccast_brief.meeting.judge import judge as judge_claims
 from civiccast_brief.meeting.recap import (
@@ -34,6 +34,7 @@ from civiccast_brief.meeting.recap import (
     WindowDraft,
     build_prompt,
     draft_window,
+    split_window,
     windows,
 )
 from civiccast_brief.meeting.roster import load_roster
@@ -270,7 +271,9 @@ def run(
         f"{speakers['counts']['segments']} caption lines named"
     )
 
-    vocabulary = agenda.vocabulary if agenda else frozenset()
+    vocabulary = (agenda.vocabulary if agenda else frozenset()) | document_vocabulary(
+        documents_path
+    )
     index = TranscriptIndex(segments)
     cut = windows(segments, window_s)
     drafts = _drafts(
@@ -468,7 +471,8 @@ def _drafts(
     answers = out / "draft-answers"
     answers.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
-    for window in cut:
+
+    def run_one(window, suffix: str) -> list[dict[str, Any]]:
         prompt = build_prompt(
             title=title,
             meeting_date=meeting_date,
@@ -481,23 +485,37 @@ def _drafts(
             agenda_text=agenda_text,
         )
         log(
-            f"[{video_id}] recap part {window.index}/{len(cut)} "
+            f"[{video_id}] recap part {window.index}/{len(cut)}{suffix} "
             f"({transcript_mod.hms(window.start)} to {transcript_mod.hms(window.end)})"
         )
         try:
             draft: WindowDraft = draft_window(call, prompt, window.index)
         except (llm.ModelError, ModelCallError, OSError) as exc:
             draft = WindowDraft(window.index, [], "", "", f"model call failed: {exc}")
-        (answers / f"window-{window.index:02d}.txt").write_text(draft.answer, encoding="utf-8")
-        results.append(
-            {
-                "window": window.index,
-                "start": transcript_mod.hms(window.start),
-                "end": transcript_mod.hms(window.end),
-                "items": draft.items,
-                "error": draft.error,
-                "receipt": draft.receipt,
-            }
+        (answers / f"window-{window.index:02d}{suffix}.txt").write_text(
+            draft.answer, encoding="utf-8"
         )
+        entry = {
+            "window": window.index,
+            "start": transcript_mod.hms(window.start),
+            "end": transcript_mod.hms(window.end),
+            "items": draft.items,
+            "error": draft.error,
+            "receipt": draft.receipt,
+        }
+        # A cut-off answer is no answer. The window is split in half and asked again: a long,
+        # fact-dense part can ask for more output than the model will give in one call.
+        if draft.error and "output cap" in draft.error:
+            halves = split_window(window, segments)
+            if len(halves) > 1:
+                log(f"[{video_id}] recap part {window.index}{suffix} hit the output cap; splitting")
+                out_entries: list[dict[str, Any]] = []
+                for half_suffix, half in zip("ab", halves):
+                    out_entries.extend(run_one(half, suffix + half_suffix))
+                return out_entries
+        return [entry]
+
+    for window in cut:
+        results.extend(run_one(window, ""))
         _write(draft_file, {"model": model, "windows": results})
     return results

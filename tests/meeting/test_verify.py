@@ -102,6 +102,26 @@ def test_timestamp_is_corrected_to_the_quote_line_and_reported():
     assert report["timestamp_corrections"] == ["The public hearing closed. 0:01:05 -> 0:01:10"]
 
 
+def test_a_garbled_caption_phrase_that_states_no_fact_is_dropped():
+    segments = [
+        seg(10.0, "so everybody be reading your superior sample for accurate dates"),
+        seg(200.0, "Okay, we are adjourned."),
+    ]
+    claims, report = check(
+        [
+            item(
+                "A speaker gave the celebration date and said people should read the "
+                "Superior sample for accurate dates.",
+                "so everybody be reading your superior sample for accurate dates",
+                "0:00:10",
+            )
+        ],
+        segments=segments,
+    )
+    assert claims == []
+    assert report["drop_reasons"]["the quote is garbled speech-to-text that states no fact"] == 1
+
+
 def test_quote_not_in_the_transcript_is_dropped():
     claims, report = check([item("The vote was seven to zero.", "Seven to nothing", "0:01:10")])
     assert claims == []

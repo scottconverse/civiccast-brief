@@ -399,38 +399,32 @@ def test_a_passing_story_under_the_length_floor_is_flagged_for_one_rewrite() -> 
     )
     assert story_words(short) == 4
     assert not story_too_short(NEWS_RECAP, short)  # only three claims to build from
-    five = replace(
+    enough = replace(
         NEWS_RECAP,
         claims=NEWS_RECAP.claims
-        + (
+        + tuple(
             Claim(
-                id="c04",
+                id=f"c{number:02d}",
                 topic="Roads",
-                text="The council approved a road plan.",
-                timestamp="1:30:00",
-                quote="road plan approved",
-            ),
-            Claim(
-                id="c05",
-                topic="Parks",
-                text="The council approved a park plan.",
-                timestamp="1:40:00",
-                quote="park plan approved",
-            ),
+                text=f"The council approved road plan {number}.",
+                timestamp=f"1:{number:02d}:00",
+                quote=f"road plan {number} approved",
+            )
+            for number in range(4, 4 + 12)
         ),
     )
-    assert story_too_short(five, short)
+    assert story_too_short(enough, short)
     long = Article(
         headline="Superior council approves consent agenda",
         sections=(
             Section(
                 None,
                 tuple(
-                    Paragraph("The council approved the consent agenda. " * 20, ("c02",))
+                    Paragraph("The council approved the consent agenda. " * 40, ("c02",))
                     for _ in range(4)
                 ),
             ),
         ),
     )
     assert story_words(long) >= MIN_STORY_WORDS
-    assert not story_too_short(five, long)
+    assert not story_too_short(enough, long)

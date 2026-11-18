@@ -17,7 +17,10 @@ from civiccast_brief.meeting.speakers import UNKNOWN, Turn
 from civiccast_brief.meeting.transcript import Segment, hms
 
 DEFAULT_WINDOW_S = 1800.0
-MAX_ITEMS_PER_WINDOW = 12
+#: The most facts one window may draft. A long meeting has many separate facts (each item acted
+#: on, each figure, each roll call, each presenter point), so this is a ceiling, not a target: a
+#: low cap is what kept recaps to a dozen claims for a two-hour meeting.
+MAX_ITEMS_PER_WINDOW = 60
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,34 @@ def windows(segments: list[Segment], window_s: float = DEFAULT_WINDOW_S) -> list
             )
         )
     return result
+
+
+def split_window(window: Window, segments: list[Segment]) -> list[Window]:
+    """Cut one window in half by start time, keeping whole lines. One half when it cannot split."""
+    mid = (window.start + window.end) / 2
+    cut_at = next(
+        (position for position in range(window.first, window.last + 1)
+         if segments[position].start >= mid),
+        None,
+    )  # fmt: skip
+    if cut_at is None or cut_at <= window.first or cut_at > window.last:
+        return [window]
+    return [
+        Window(
+            index=window.index,
+            start=window.start,
+            end=segments[cut_at - 1].end,
+            first=window.first,
+            last=cut_at - 1,
+        ),
+        Window(
+            index=window.index,
+            start=segments[cut_at].start,
+            end=window.end,
+            first=cut_at,
+            last=window.last,
+        ),
+    ]
 
 
 def _named(segment: Segment) -> bool:
@@ -144,11 +175,12 @@ RULES
 1. Output only a JSON array. Each item is an object with the keys "topic", "text", "timestamp" and "quote".
 2. "quote": copy words exactly from the transcript lines, with the same spelling, capitals and punctuation. Join consecutive lines with one space. Leave out ">>", the [Name] and the timestamps. Keep it to one to three lines.
 3. "timestamp": the time (H:MM:SS) of the transcript line where the quote starts.
-4. "text": one plain past-tense sentence stating one fact the quote supports. Add nothing the quote does not say.
-5. Cover decisions (approved, denied, continued, directed), votes with the count as stated, dollar amounts and budgets, dates and deadlines, and public comment (what a speaker asked for or opposed). Skip greetings, the pledge, the roll call and procedure that decides nothing.
-6. Names and roles: name a person only when the speaker key names that person for that time, or the quote itself contains the name. Use a role word ("city manager", "council member", "resident", "applicant", "presiding officer") only when the quote itself says that role, or the speaker key gives that role for that time. Otherwise write "an unidentified speaker". Never guess a name or a role from the transcript.
-7. Spell boards, streets and items as the OFFICIAL AGENDA does. Do not copy a misheard term into "text".
-8. At most {max_items} items. If nothing in this part qualifies, output [].
+4. "text": one plain past-tense sentence stating one fact the quote supports. Copy every number, amount, percentage, date and time exactly as the quote gives it, in the same words or digits. Add nothing the quote does not say.
+5. List every separate fact, one item each. Cover: every agenda item acted on (each ordinance, resolution, contract, appeal, budget, fee, appointment, consent item); every dollar amount, budget figure and percentage; each motion and who moved and seconded it; every roll-call vote with each member's vote and the tally; staff presentation key facts (a figure, date, place, comparison, schedule, what happens next); and the substance of public comment (what a speaker asked for, opposed or reported). When one quote supports two separate facts, write two items. Skip greetings, the pledge, pure procedure and anything that decides nothing.
+6. Names and roles: name a person only when the speaker key names that person for that time, or the quote itself contains the name. Use a role word ("city manager", "council member", "mayor", "presiding officer", "presenter", "staff", "resident", "applicant", "commenter") only when the quote itself says that role, or the speaker key gives that role for that time. Otherwise write "an unidentified speaker". A staff presentation is "an unidentified speaker" unless the key names the presenter or the quote says the role: never write "a presenter" or "town staff" from the context. Never guess a name or a role from the transcript.
+7. Spell boards, streets, items and people as the OFFICIAL AGENDA and COUNCIL ROSTER do. Write a company, place, board or program name only when the agenda, roster or quote prints it; if the caption garbled it, describe it in plain words. Do not copy a misheard term into "text".
+8. Skip a quote that is too garbled to restate clearly. Never write a fact you cannot state plainly from the quote.
+9. Up to {max_items} items. The cap is a ceiling, not a target: a long part with many facts should use most of it. If nothing in this part qualifies, output [].
 
 TRANSCRIPT ("H:MM:SS  text"; ">>" marks a change of speaker; [Name] is the speaker when known):
 {lines}

@@ -8,6 +8,7 @@ example "Gulf Course" for "Golf Course") is dropped rather than printed.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,3 +71,23 @@ def load_agenda(path: Path | None) -> Agenda | None:
     source, body = _body_lines(raw)
     vocabulary = frozenset(w.lower() for w in _WORD_RE.findall(body) if len(w) > 1)
     return Agenda(source=source, text=body, vocabulary=vocabulary)
+
+
+def document_vocabulary(path: Path | None) -> frozenset[str]:
+    """The words the meeting's own documents print (its ``documents.json`` packet and minutes).
+
+    The term check lets a claim name a company, place or program the official record prints.
+    Those names are often in the packet but not in the short agenda ("Republic Services",
+    "Windy Gap Firming Project"), and dropping them cost the recap real facts.
+    """
+    if path is None or not Path(path).is_file():
+        return frozenset()
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    words: set[str] = set()
+    for document in data.get("documents") or []:
+        for page in document.get("pages") or []:
+            words.update(w.lower() for w in _WORD_RE.findall(str(page.get("text") or "")))
+    return frozenset(w for w in words if len(w) > 1)

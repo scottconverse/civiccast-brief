@@ -88,7 +88,28 @@ def test_prompt_carries_agenda_roster_speaker_key_and_lines():
     assert "Susie Hidalgo-Fahring (Mayor)" in prompt
     assert "0:00:05  >> Council member Popkin" in prompt
     assert "Part 1 of 1" in prompt
-    assert "At most 12 items" in prompt
+    assert f"Up to {R.MAX_ITEMS_PER_WINDOW} items" in prompt
+
+
+def test_a_long_transcript_is_not_capped_to_a_dozen_claims():
+    """A two-hour meeting has far more than twelve checkable facts; the cap must not stop them."""
+    assert R.MAX_ITEMS_PER_WINDOW >= 40
+    segments = [seg(float(n) * 60, f"line {n}") for n in range(120)]
+    windows = R.windows(segments, 1800)
+    assert len(windows) >= 4
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=len(windows),
+        window=windows[0],
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="AGENDA\nBudget",
+    )
+    assert "every agenda item acted on" in prompt
+    assert "each motion and who moved and seconded it" in prompt
 
 
 def test_prompt_without_agenda_says_so():
@@ -106,6 +127,16 @@ def test_prompt_without_agenda_says_so():
         agenda_text="",
     )
     assert "no agenda file was given" in prompt
+
+
+def test_a_window_that_hits_the_output_cap_is_split_in_half():
+    segments = [seg(float(n) * 60, f"line {n}") for n in range(31)]
+    window = R.windows(segments, 1800)[0]
+    halves = R.split_window(window, segments)
+    assert len(halves) == 2
+    assert halves[0].first == window.first and halves[0].last + 1 == halves[1].first
+    assert halves[1].last == window.last
+    assert halves[0].start == window.start and halves[1].end == window.end
 
 
 def test_parse_items_ignores_text_around_the_array():

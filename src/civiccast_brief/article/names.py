@@ -577,7 +577,9 @@ def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]
 
     def fix(text: str) -> str:
         new, lines = repair_text(text, people)
+        new, seat_lines = fill_roll_call_names(new, people)
         changes.extend(lines)
+        changes.extend(seat_lines)
         return new
 
     sections = tuple(
@@ -611,6 +613,42 @@ def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]
         ),
         changes,
     )
+
+
+#: A roll call names the seat and not the person ("Mayor Pro Tem: Yes", "and Mayor Pro Tem
+#: voted yes"). The roster prints the holder, so the voter is named from the record.
+_SEAT_ONLY = {
+    "mayor pro tem": re.compile(r"\bMayor\s+Pro[- ]?[Tt]em\b(?!\s+[A-Z])"),
+    "mayor": re.compile(r"(?<!Pro[- ])\bMayor\b(?!\s+Pro[- ]?[Tt]em)(?!\s+[A-Z])"),
+}
+#: Words that mark a passage as a roll call or a vote.
+_VOTE_CONTEXT_RE = re.compile(r"\b(voted?|votes?|roll[- ]call|aye|yes|nay|no)\b", re.IGNORECASE)
+
+
+def fill_roll_call_names(text: str, people: People | None) -> tuple[str, list[str]]:
+    """Name a seat-only voter ("Mayor Pro Tem voted yes") from the record's roster.
+
+    Every voter the record supports is named, with the record's spelling. A passage with no vote
+    cue is left alone, so ordinary prose ("the mayor said") is not rewritten.
+    """
+    if people is None or not people.persons or not _VOTE_CONTEXT_RE.search(text):
+        return text, []
+    changes: list[str] = []
+    out = text
+    for seat, pattern in _SEAT_ONLY.items():
+        person = next(
+            (p for p in people.persons if _role_key(p.role) == _role_key(seat)),
+            None,
+        )
+        if person is None:
+            continue
+        replacement = f"Mayor Pro Tem {person.name}" if seat == "mayor pro tem" else person.name
+        match = pattern.search(out)
+        if match is None:
+            continue
+        out = out[: match.start()] + replacement + out[match.end() :]
+        changes.append(f"roll call {match.group(0)!r} -> {replacement!r} ({person.source})")
+    return out, changes
 
 
 #: A presented-by line: "Presented By: Matt Magley, Town Manager, Leslie Clark, ...".

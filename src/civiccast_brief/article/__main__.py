@@ -30,6 +30,7 @@ import re
 import sys
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ from civiccast_brief.article.writer import (
     caption_windows,
     check_article,
     claim_speakers,
+    condense_announcements,
     drop_unsupported,
     lead_is_routine,
     load_article,
@@ -50,6 +52,7 @@ from civiccast_brief.article.writer import (
     merge_announcements,
     save_article,
     story_too_short,
+    story_words,
     write_article,
 )
 from civiccast_brief.meeting import transcript as transcript_mod
@@ -58,6 +61,14 @@ from civiccast_brief.review.desk import stage_item
 from civiccast_brief.review.store import ReviewError
 from civiccast_brief.script.recap import load_recap
 from civiccast_brief.script.writer import ROUNDUP_ID
+
+#: The note for a story that passes the check but is thinner than the facts support.
+LENGTH_NOTE = (
+    "The story passed the check but is too thin. Write it again with two to four full sentences "
+    "in every paragraph and the detail the claims and captions give (what each item does, who "
+    "spoke, the numbers, who voted how), to 600 words or more. Add no fact the claims and "
+    "captions do not state, and cite the claim for every detail."
+)
 
 
 def _complete(args: argparse.Namespace, body: str, task: str = "article") -> Callable[[str], str]:
@@ -151,11 +162,31 @@ def _people(args: argparse.Namespace, recap, pages: dict[str, DocPage] | None) -
     documents = args.documents or args.recap.with_name("documents.json")
     if recap.video_id == ROUNDUP_ID and pages is None:
         merged = dict(pages or {})
-        for sibling in sorted(args.recap.parent.glob("*/documents.json")):
+        # The weekly run keeps the roundup folder beside the meeting folders, not inside its
+        # own folder; look in both places so the roundup checks names against every meeting's
+        # packet and minutes. Without the documents, a company or a place was replaced with
+        # "a speaker" ("A speaker program" for the co-responder program).
+        dates = []
+        for part in recap.meeting_date.split(" and "):
             try:
-                merged.update(load_documents(sibling))
+                dates.append(datetime.strptime(part.strip(), "%B %d, %Y").date().isoformat())
+            except ValueError:
+                continue
+        found: dict[Path, None] = {}
+        for root in (args.recap.parent, args.recap.parent.parent):
+            for sibling in sorted(root.glob("*/documents.json")):
+                if dates and not any(day in sibling.parent.name for day in dates):
+                    continue
+                found.setdefault(sibling, None)
+        for number, sibling in enumerate(found):
+            try:
+                loaded = load_documents(sibling)
             except (OSError, ValueError):
                 continue
+            # Each meeting's page ids start at d1p1, so a plain update would keep only the last
+            # meeting's pages and every other meeting's names would look absent from the record.
+            for page_id, page in loaded.items():
+                merged[f"m{number}-{page_id}"] = page
         pages = merged or None
     return load_people(
         _rosters(args, recap),
@@ -253,12 +284,7 @@ def _write(args: argparse.Namespace) -> int:
         if report.passed and story_too_short(recap, article):
             # A valid but thin story. Ask once for the length the meeting supports.
             print("the story is too short; writing once more", file=sys.stderr)
-            note = (
-                "The story passed the check but is too thin. Write it again with two to four "
-                "full sentences in every paragraph and the detail the claims and captions give "
-                "(what each item does, who spoke, the numbers, who voted how), to 600 words or "
-                "more. Add no fact the claims and captions do not state."
-            )
+            note = LENGTH_NOTE
             article = write_article(
                 recap,
                 complete,
@@ -279,8 +305,33 @@ def _write(args: argparse.Namespace) -> int:
         for line in dropped.lines():
             print(line, file=sys.stderr)
         report = check_article(recap, article, windows, pages, speakers, people)
+        if report.passed and story_too_short(recap, article):
+            # Dropping the unsupported parts can leave a thin story. Ask once for a longer one
+            # that passes; keep the shorter passing story when the longer draft does not.
+            print("the checked story is too short; writing once more", file=sys.stderr)
+            try:
+                longer = write_article(
+                    recap,
+                    complete,
+                    feedback=LENGTH_NOTE,
+                    windows=windows,
+                    pages=pages,
+                    roundup=roundup,
+                    speakers=speakers,
+                    people=people,
+                )
+            except (models.ModelCallError, ArticleFormatError) as exc:
+                print(f"the longer rewrite failed: {exc}", file=sys.stderr)
+            else:
+                longer = _repair(longer, people)
+                longer_report = check_article(recap, longer, windows, pages, speakers, people)
+                if longer_report.passed and story_words(longer) > story_words(article):
+                    article, report = longer, longer_report
     article, moved = merge_announcements(article, roundup)
     for line in moved:
+        print(f"structure: {line}", file=sys.stderr)
+    article, condensed = condense_announcements(article, roundup)
+    for line in condensed:
         print(f"structure: {line}", file=sys.stderr)
     json_path, md_path = save_article(recap, article, args.out, pages, people)
     print(f"wrote {json_path} and {md_path}")
@@ -329,6 +380,9 @@ def _stage(args: argparse.Namespace) -> int:
     article = _repair(article, people)
     article, moved = merge_announcements(article, recap.video_id == ROUNDUP_ID)
     for line in moved:
+        print(f"structure: {line}", file=sys.stderr)
+    article, condensed = condense_announcements(article, recap.video_id == ROUNDUP_ID)
+    for line in condensed:
         print(f"structure: {line}", file=sys.stderr)
     report = check_article(recap, article, windows, pages, speakers, people)
     meeting_id = f"roundup {recap.meeting_date}" if recap.video_id == ROUNDUP_ID else recap.video_id
