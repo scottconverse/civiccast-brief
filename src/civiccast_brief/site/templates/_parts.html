@@ -14,12 +14,12 @@
 </article>
 {% endmacro %}
 
-{# The meeting still, or a plain colored block with the board name when there is none. #}
+{# A frame from the meeting video, or an illustration of the story's topic. #}
 {% macro thumb(c, extra="") %}
 {% if c.still %}
-<a class="thumb {{ extra }}" href="{{ c.href }}" tabindex="-1" aria-hidden="true"><img src="{{ c.still }}" alt="" width="640" height="360" loading="lazy" decoding="async"></a>
+<a class="thumb {{ extra }}" href="{{ c.href }}"><img src="{{ c.still }}" alt="{{ c.still_alt }}" width="640" height="360" loading="lazy" decoding="async"></a>
 {% else %}
-<a class="thumb block c{{ c.color }} {{ extra }}" href="{{ c.href }}" tabindex="-1" aria-hidden="true"><span>{{ c.board }}</span></a>
+<a class="thumb {{ extra }}" href="{{ c.href }}"><img src="{{ c.graphic }}" alt="{{ c.graphic_alt }}" width="640" height="360" loading="lazy" decoding="async"></a>
 {% endif %}
 {% endmacro %}
 

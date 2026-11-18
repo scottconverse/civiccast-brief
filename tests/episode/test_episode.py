@@ -148,6 +148,31 @@ def test_staged_and_approved_meeting_builds_into_the_site(tmp_path, meeting, mon
     assert report.episodes == 1
 
 
+def test_the_meetings_own_media_address_is_saved_for_the_still(tmp_path, meeting, monkeypatch):
+    """A CivicClerk, eScribe or Vimeo meeting keeps its media address: the site takes a frame
+    from it, because its video link is not a YouTube id."""
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 61.0)
+    transcript = json.loads((meeting_dir / "transcript.json").read_text())
+    transcript["source"] = {
+        "platform": "direct",
+        "media_url": "https://cpmedia.azureedge.net/superiorco/meeting.mp4",
+    }
+    (meeting_dir / "transcript.json").write_text(json.dumps(transcript))
+    item_dir = _approved_export(tmp_path, meeting_dir)
+
+    episode = _assemble(item_dir, meeting_dir, audio)
+
+    assert episode["media_url"] == "https://cpmedia.azureedge.net/superiorco/meeting.mp4"
+
+
+def test_a_youtube_meeting_saves_no_media_address(tmp_path, meeting, monkeypatch):
+    meeting_dir, audio = meeting
+    monkeypatch.setattr(B, "probe_duration", lambda path: 61.0)
+    item_dir = _approved_export(tmp_path, meeting_dir)
+    assert _assemble(item_dir, meeting_dir, audio)["media_url"] is None
+
+
 def test_assemble_refuses_a_script_changed_after_approval(tmp_path, meeting, monkeypatch):
     meeting_dir, audio = meeting
     monkeypatch.setattr(B, "probe_duration", lambda path: 1.0)

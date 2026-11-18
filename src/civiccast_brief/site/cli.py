@@ -38,8 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--stills",
         action="store_true",
-        help="download each meeting video's still image once (kept in <episodes>/stills) "
-        "and serve it from the site",
+        help="take each meeting video's still image once (kept in <episodes>/stills) "
+        "and serve it from the site: a YouTube thumbnail, or an ffmpeg frame from the "
+        "meeting's own media",
     )
     home = commands.add_parser("home", help="write the civiccastbrief.org home page")
     home.add_argument(
@@ -84,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.out,
             args.base_url,
             fetch_still=stills.download if args.stills else None,
+            fetch_media=stills.media_still if args.stills else None,
         )
     except InputError as exc:
         for problem in exc.problems:

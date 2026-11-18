@@ -10,11 +10,11 @@ from datetime import date, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from civiccast_brief.site import seo
+from civiccast_brief.site import graphics, seo
 from civiccast_brief.site.feed import FEED_PATH, artwork_path
 from civiccast_brief.site.model import Article, City, Claim, Episode, SiteInput, Story
 from civiccast_brief.site.render import date_long, file_size
-from civiccast_brief.site.stills import youtube_id
+from civiccast_brief.site.stills import still_key
 from civiccast_brief.site.timecode import clock, timecode
 from civiccast_brief.site.titles import MONTHS_SHORT, split_meeting_label
 from civiccast_brief.site.topics import TOPICS, slugify, topics_for
@@ -53,7 +53,8 @@ MORE_COUNT = 3
 SIDEBAR_EPISODES = 4
 SIDEBAR_BOARDS = 6
 BOARD_COLORS = 6
-"""Plain color blocks for stories with no still image; one class per board (c0 to c5)."""
+"""Board colors (c0 to c5). Cards now use a video still or a topic illustration; the colors
+remain for the board filter's styling."""
 
 Item = Episode | Story
 
@@ -313,7 +314,12 @@ def _card(
         vote = item.article.votes[0]
         first_vote = vote_badge(vote.result, vote.tally)
     audio = item.audio if isinstance(item, Episode) else None
-    still = (stills or {}).get(youtube_id(item.video_url) or "")
+    key = still_key(item.video_url, item.media_url)
+    still = (stills or {}).get(key or "")
+    topic = topics_for(item)[0]
+    name = item.meeting_name
+    label = name if name.lower().endswith("meeting") else f"{name} meeting"
+    meeting = f"{label} on {date_long(item.meeting_date)}"
     return {
         "id": item.id,
         "headline": item.display_headline,
@@ -334,6 +340,9 @@ def _card(
         "vote": first_vote,
         "month": month_key(item.meeting_date),
         "still": urls.href(still) if still else None,
+        "still_alt": f"Video still from the {meeting}" if still else None,
+        "graphic": None if still else urls.href(graphics.asset_path(topic.slug)),
+        "graphic_alt": f"Illustration of {topic.name.lower()}" if not still else None,
         "color": (colors or {}).get(item.board, 0),
         "top": False,
     }
@@ -418,8 +427,8 @@ def build_pages(
 ) -> tuple[list[PageSpec], list[str]]:
     """Return every HTML page and the sitemap paths for the site.
 
-    The second value is the list of page paths that the sitemap lists. ``stills`` maps a YouTube
-    video id to the site path of its still image.
+    The second value is the list of page paths that the sitemap lists. ``stills`` maps a still key
+    (see :func:`civiccast_brief.site.stills.still_key`) to the site path of its image.
     """
     city = site.city
     episodes = site.episodes

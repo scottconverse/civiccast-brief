@@ -198,6 +198,8 @@ class Episode:
     video_url: str | None
     transcript: tuple[TranscriptLine, ...] | None
     article: Article | None = None
+    #: The meeting's own media (CivicClerk, eScribe, Vimeo MP4 or HLS), when not on YouTube.
+    media_url: str | None = None
 
     @property
     def meeting_name(self) -> str:
@@ -238,6 +240,7 @@ class Story:
     claims: tuple[Claim, ...]
     article: Article
     video_url: str | None
+    media_url: str | None = None
     sample: bool = False
     tags: tuple[str, ...] = ()
 
@@ -502,6 +505,7 @@ def _load_story(path: Path, problems: list[str]) -> Story | None:
     sample = check.boolean(data, "sample", False)
     claims = _claims(check, data)
     video_url = check.url(data, "video_url", required=False)
+    media_url = check.url(data, "media_url", required=False)
     if data.get("article") is None:
         check.fail("article", "is required in a story file")
         return None
@@ -520,6 +524,7 @@ def _load_story(path: Path, problems: list[str]) -> Story | None:
         claims=claims,
         article=article,
         video_url=video_url,
+        media_url=media_url,
         sample=sample,
     )
 
@@ -680,6 +685,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
     chapters_url = check.url(data, "chapters_url", required=False)
     vtt_url = check.url(data, "vtt_url", required=False)
     video_url = check.url(data, "video_url", required=False)
+    media_url = check.url(data, "media_url", required=False)
     transcript = _transcript(check, data)
     article = _article(check, data, len(claims))
 
@@ -706,6 +712,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
         chapters_url=chapters_url,
         vtt_url=vtt_url,
         video_url=video_url,
+        media_url=media_url,
         transcript=transcript,
         article=article,
     )

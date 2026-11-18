@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from civiccast_brief.site import images, seo, stills
+from civiccast_brief.site import graphics, images, seo, stills
 from civiccast_brief.site.feed import artwork_path, build_feed
 from civiccast_brief.site.model import InputError, SiteInput, load_site_input
 from civiccast_brief.site.pages import (
@@ -85,7 +85,11 @@ def write_static(out_dir: Path) -> int:
             write_file(out_dir, f"assets/{rel}", source.read_bytes())
             count += 1
     write_file(out_dir, FAVICON_PNG, images.favicon_png())
-    return count + 1
+    count += 1
+    for slug in graphics.slugs():
+        write_file(out_dir, graphics.asset_path(slug), graphics.svg(slug))
+        count += 1
+    return count
 
 
 def _write_assets(site: SiteInput, out_dir: Path) -> int:
@@ -112,28 +116,39 @@ def build_site(
     *,
     now: datetime | None = None,
     fetch_still: stills.Fetch | None = None,
+    fetch_media: stills.MediaFetch | None = None,
 ) -> BuildReport:
     """Build the site. Raises InputError for bad input and ValueError for an unsafe output folder.
 
-    ``fetch_still`` downloads a meeting video's still image (see :mod:`stills`); without it only
-    stills already in the cache folder are used."""
+    ``fetch_still`` downloads a YouTube meeting video's still image; ``fetch_media`` takes one
+    frame from a meeting's own media (see :mod:`stills`). Without them only stills already in the
+    cache folder are used."""
     urls = Urls.from_base(base_url)
     site = load_site_input(episodes_dir)
     if not site.episodes and not site.stories:
         raise InputError([f"{episodes_dir}: no approved episodes or stories to build"])
     stamp = now or datetime.now().astimezone()
-    video_ids = [
-        video_id
-        for item in (*site.episodes, *site.stories)
-        if (video_id := stills.youtube_id(item.video_url))
-    ]
-    found = stills.collect(video_ids, episodes_dir / stills.CACHE_DIR, fetch_still)
-    still_paths = {video_id: stills.still_path(video_id) for video_id in found}
+    requests: list[stills.StillRequest] = []
+    for item in (*site.episodes, *site.stories):
+        key = stills.still_key(item.video_url, item.media_url)
+        if key is None:
+            continue
+        requests.append(
+            stills.StillRequest(
+                key=key,
+                # One source only: the meeting's own media wins over its video link.
+                youtube_id=None if item.media_url else stills.youtube_id(item.video_url),
+                media_url=item.media_url,
+                seconds=stills.lead_seconds(item),
+            )
+        )
+    found = stills.collect(requests, episodes_dir / stills.CACHE_DIR, fetch_still, fetch_media)
+    still_paths = {key: stills.still_path(key) for key in found}
     pages, sitemap_paths = build_pages(site, urls, stamp, still_paths)
     prepare_output(out_dir)
     files = _write_assets(site, out_dir)
-    for video_id, data in found.items():
-        write_file(out_dir, still_paths[video_id], data)
+    for key, data in found.items():
+        write_file(out_dir, still_paths[key], data)
         files += 1
 
     env = make_environment(urls)

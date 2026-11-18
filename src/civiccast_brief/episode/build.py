@@ -216,6 +216,7 @@ def assemble_story(
             ]
         },
         "video_url": _video_url(data),
+        "media_url": _media_url(data),
         "article": article,
     }
 
@@ -294,6 +295,7 @@ def assemble(
         "chapters_url": f"{base}/{slug}-chapters.json",
         "vtt_url": f"{base}/{slug}.vtt",
         "video_url": None if roundup else _video_url(data),
+        "media_url": None if roundup else _media_url(data),
         "transcript": None
         if roundup
         else [
@@ -317,6 +319,12 @@ def _video_url(data: dict[str, Any]) -> str:
     """The meeting video: the capture's own link, or YouTube for transcripts made before it."""
     source = data.get("source") or {}
     return str(source.get("video_url") or f"https://www.youtube.com/watch?v={data['video_id']}")
+
+
+def _media_url(data: dict[str, Any]) -> str | None:
+    """The source's own media address, for a meeting that is not on YouTube. None otherwise."""
+    source = data.get("source") or {}
+    return str(source.get("media_url") or "") or None
 
 
 def _speaker(segment: transcript_mod.Segment, names: dict[str, str]) -> str:
