@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from civiccast_brief.article.terms import load_record
 from civiccast_brief.article.writer import (
     Article,
     ArticleFormatError,
@@ -17,6 +18,7 @@ from civiccast_brief.article.writer import (
     check_article,
     citations,
     drop_unsupported,
+    missing_money,
     parse_article,
     render_markdown,
     site_article,
@@ -510,3 +512,96 @@ def test_a_short_month_is_not_a_name() -> None:
     from civiccast_brief.article.writer import _names
 
     assert _names("The council met Oct. 26 and again Nov. 2.") == []
+
+
+# --- Who did what: the same-speaker link and a recusal the record does not name -------------
+
+
+class _Page:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def _record(text: str = "The council appointed members to the board."):
+    return load_record({"d1p1": _Page(text)})
+
+
+def test_the_same_speaker_link_fails_when_the_claims_have_different_speakers() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The same speaker also asked to keep the Sunset pool open.", ("c01", "c02")),
+    )
+    speakers = {"c01": "Neal Shah", "c02": "Stephanie Miller"}
+    codes = [issue.code for issue in check_article(RECAP, story, speakers=speakers).issues]
+    assert "same_speaker" in codes
+
+
+def test_the_same_speaker_link_passes_when_the_record_names_one_speaker() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The same speaker also asked to keep the Sunset pool open.", ("c01", "c02")),
+    )
+    speakers = {"c01": "Neal Shah", "c02": "Neal Shah"}
+    report = check_article(RECAP, story, speakers=speakers)
+    assert "same_speaker" not in [issue.code for issue in report.issues]
+
+
+def test_a_named_recusal_fails_when_the_documents_do_not_name_the_person() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph(
+            "The council appointed members, with the mayor recusing himself because of a conflict.",
+            ("c01",),
+        ),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=_record()).issues]
+    assert "recusal_name" in codes
+    assert "pronoun" in codes
+
+
+def test_a_neutral_recusal_passes() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph(
+            "The council appointed members, with a council member recusing themselves "
+            "because of a conflict.",
+            ("c01",),
+        ),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=_record()).issues]
+    assert "recusal_name" not in codes and "pronoun" not in codes
+
+
+def test_a_recusal_the_documents_name_is_allowed() -> None:
+    record = _record(
+        "The council appointed members. Mayor Mark Lacis recused himself from the appointment vote."
+    )
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The council appointed members, with the mayor recusing himself.", ("c01",)),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=record).issues]
+    assert "recusal_name" not in codes and "pronoun" not in codes
+
+
+def test_a_dollar_figure_a_claim_states_is_reported_when_the_story_leaves_it_out() -> None:
+    recap = replace(
+        RECAP,
+        claims=(
+            *RECAP.claims,
+            Claim(
+                id="c03",
+                topic="Budget",
+                text="The urban renewal authority property tax movement was $250,000.",
+                timestamp="1:49:59",
+                quote="two hundred fifty thousand",
+            ),
+        ),
+    )
+    short = article(Paragraph("The council approved the annexation 6-1.", ("c01",)))
+    assert missing_money(recap, short) == ["$250,000 (claim c03)"]
+    full = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The property tax movement was $250,000.", ("c03",)),
+    )
+    assert missing_money(recap, full) == []

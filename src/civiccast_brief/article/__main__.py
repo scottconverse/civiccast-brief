@@ -36,6 +36,7 @@ from typing import Any
 
 from civiccast_brief import models
 from civiccast_brief.article.names import People, load_people, repair_article
+from civiccast_brief.article.terms import load_record, repair_terms
 from civiccast_brief.article.title import save_title, write_title
 from civiccast_brief.article.writer import (
     ArticleFormatError,
@@ -51,6 +52,7 @@ from civiccast_brief.article.writer import (
     load_article,
     load_documents,
     merge_announcements,
+    missing_money,
     save_article,
     story_too_short,
     story_words,
@@ -154,41 +156,49 @@ def _roster(args: argparse.Namespace, recap):
     return rosters[0][0] if rosters else None
 
 
-def _people(args: argparse.Namespace, recap, pages: dict[str, DocPage] | None) -> People:
-    """Every person the city rosters and this meeting's documents name.
+def _record_pages(args: argparse.Namespace, recap) -> dict[str, DocPage] | None:
+    """The documents whose terms and names the story is checked against.
 
-    A weekly roundup covers several meetings, so its records are the documents of every
-    meeting run beside it, not one meeting's.
+    A weekly roundup covers several meetings, so its record is every meeting's documents, not
+    one meeting's. Each meeting's page ids start at d1p1, so they are prefixed to keep apart.
     """
+    path = args.documents or args.recap.with_name("documents.json")
+    merged: dict[str, DocPage] = {}
+    if path.exists():
+        merged.update(load_documents(path))
+    if recap.video_id != ROUNDUP_ID:
+        return merged or None
+    # The weekly run keeps the roundup folder beside the meeting folders, not inside its own
+    # folder; look in both places so the roundup checks names against every meeting's packet
+    # and minutes. Without the documents, a company or a place was replaced with "a speaker"
+    # ("A speaker program" for the co-responder program).
+    dates = []
+    for part in recap.meeting_date.split(" and "):
+        try:
+            dates.append(datetime.strptime(part.strip(), "%B %d, %Y").date().isoformat())
+        except ValueError:
+            continue
+    found: dict[Path, None] = {}
+    for root in (args.recap.parent, args.recap.parent.parent):
+        for sibling in sorted(root.glob("*/documents.json")):
+            if dates and not any(day in sibling.parent.name for day in dates):
+                continue
+            found.setdefault(sibling, None)
+    for number, sibling in enumerate(found):
+        try:
+            loaded = load_documents(sibling)
+        except (OSError, ValueError):
+            continue
+        for page_id, page in loaded.items():
+            merged[f"m{number}-{page_id}"] = page
+    return merged or None
+
+
+def _people(args: argparse.Namespace, recap, pages: dict[str, DocPage] | None) -> People:
+    """Every person the city rosters and this meeting's documents name."""
     documents = args.documents or args.recap.with_name("documents.json")
-    if recap.video_id == ROUNDUP_ID and pages is None:
-        merged = dict(pages or {})
-        # The weekly run keeps the roundup folder beside the meeting folders, not inside its
-        # own folder; look in both places so the roundup checks names against every meeting's
-        # packet and minutes. Without the documents, a company or a place was replaced with
-        # "a speaker" ("A speaker program" for the co-responder program).
-        dates = []
-        for part in recap.meeting_date.split(" and "):
-            try:
-                dates.append(datetime.strptime(part.strip(), "%B %d, %Y").date().isoformat())
-            except ValueError:
-                continue
-        found: dict[Path, None] = {}
-        for root in (args.recap.parent, args.recap.parent.parent):
-            for sibling in sorted(root.glob("*/documents.json")):
-                if dates and not any(day in sibling.parent.name for day in dates):
-                    continue
-                found.setdefault(sibling, None)
-        for number, sibling in enumerate(found):
-            try:
-                loaded = load_documents(sibling)
-            except (OSError, ValueError):
-                continue
-            # Each meeting's page ids start at d1p1, so a plain update would keep only the last
-            # meeting's pages and every other meeting's names would look absent from the record.
-            for page_id, page in loaded.items():
-                merged[f"m{number}-{page_id}"] = page
-        pages = merged or None
+    if recap.video_id == ROUNDUP_ID:
+        pages = _record_pages(args, recap)
     return load_people(
         _rosters(args, recap),
         pages,
@@ -216,13 +226,17 @@ def _pages(args: argparse.Namespace) -> dict[str, DocPage] | None:
     return load_documents(path)
 
 
-def _repair(article, people: People, *, quiet: bool = False):
+def _repair(article, people: People, record=None, *, quiet: bool = False):
     """Print the record's spelling in place of each mangled name, and a role for a name the
-    record does not hold."""
+    record does not hold. A garbled resolution number or item name takes the record's form."""
     article, changes = repair_article(article, people)
     if changes and not quiet:
         for change in changes:
             print(f"name check: {change}", file=sys.stderr)
+    article, terms = repair_terms(article, record)
+    if terms and not quiet:
+        for change in terms:
+            print(f"term check: {change}", file=sys.stderr)
     return article
 
 
@@ -232,6 +246,8 @@ def _write(args: argparse.Namespace) -> int:
     complete = _complete(args, recap.body, task="roundup" if roundup else "article")
     windows, speakers = (None, None) if roundup else _recorded(args, recap)
     pages = None if roundup else _pages(args)
+    record_pages = _record_pages(args, recap)
+    record = load_record(record_pages)
     people = _people(args, recap, pages)
     try:
         article = write_article(
@@ -243,8 +259,8 @@ def _write(args: argparse.Namespace) -> int:
             speakers=speakers,
             people=people,
         )
-        article = _repair(article, people)
-        report = check_article(recap, article, windows, pages, speakers, people)
+        article = _repair(article, people, record)
+        report = check_article(recap, article, windows, pages, speakers, people, record)
         # Every draft is kept: a rewrite can be shorter and worse, and the first draft may
         # pass once its unsupported paragraphs are dropped.
         candidates = [article]
@@ -262,9 +278,9 @@ def _write(args: argparse.Namespace) -> int:
                 speakers=speakers,
                 people=people,
             )
-            article = _repair(article, people)
+            article = _repair(article, people, record)
             candidates.append(article)
-            report = check_article(recap, article, windows, pages, speakers, people)
+            report = check_article(recap, article, windows, pages, speakers, people, record)
             routine = lead_is_routine(recap, article)
         if routine is not None:
             # The story is valid but buries the news. Ask once more for the lead the record shows.
@@ -284,9 +300,9 @@ def _write(args: argparse.Namespace) -> int:
                 speakers=speakers,
                 people=people,
             )
-            article = _repair(article, people)
+            article = _repair(article, people, record)
             candidates.append(article)
-            report = check_article(recap, article, windows, pages, speakers, people)
+            report = check_article(recap, article, windows, pages, speakers, people, record)
         if report.passed and story_too_short(recap, article):
             # A valid but thin story. Ask once for the length the meeting supports.
             print("the story is too short; writing once more", file=sys.stderr)
@@ -301,8 +317,8 @@ def _write(args: argparse.Namespace) -> int:
                 speakers=speakers,
                 people=people,
             )
-            article = _repair(article, people)
-            report = check_article(recap, article, windows, pages, speakers, people)
+            article = _repair(article, people, record)
+            report = check_article(recap, article, windows, pages, speakers, people, record)
     except (models.ModelCallError, ArticleFormatError) as exc:
         print(f"write failed: {exc}", file=sys.stderr)
         return 1
@@ -311,9 +327,15 @@ def _write(args: argparse.Namespace) -> int:
         # first draft had; the first draft, minus its unsupported paragraphs, may still pass.
         attempts = []
         for candidate in candidates:
-            kept, dropped = drop_unsupported(recap, candidate, windows, pages, speakers, people)
+            kept, dropped = drop_unsupported(
+                recap, candidate, windows, pages, speakers, people, record
+            )
             attempts.append(
-                (kept, dropped, check_article(recap, kept, windows, pages, speakers, people))
+                (
+                    kept,
+                    dropped,
+                    check_article(recap, kept, windows, pages, speakers, people, record),
+                )
             )
         passing = [attempt for attempt in attempts if attempt[2].passed]
         article, dropped, report = (
@@ -339,10 +361,43 @@ def _write(args: argparse.Namespace) -> int:
             except (models.ModelCallError, ArticleFormatError) as exc:
                 print(f"the longer rewrite failed: {exc}", file=sys.stderr)
             else:
-                longer = _repair(longer, people)
-                longer_report = check_article(recap, longer, windows, pages, speakers, people)
+                longer = _repair(longer, people, record)
+                longer_report = check_article(
+                    recap, longer, windows, pages, speakers, people, record
+                )
                 if longer_report.passed and story_words(longer) > story_words(article):
                     article, report = longer, longer_report
+    if report.passed:
+        missing = missing_money(recap, article)
+        if missing:
+            # A dollar figure a claim states is a fact the story owes the reader. Ask once for
+            # a draft that carries it; keep the checked story when the new draft does not.
+            print(f"the story leaves out money facts: {', '.join(missing)}", file=sys.stderr)
+            note = (
+                "The story passed the check but left out money facts the meeting states. "
+                "Write it again and include each of these with the claim that states it, "
+                "in a full paragraph: " + "; ".join(missing) + ". " + LENGTH_NOTE
+            )
+            try:
+                fuller = write_article(
+                    recap,
+                    complete,
+                    feedback=note,
+                    windows=windows,
+                    pages=pages,
+                    roundup=roundup,
+                    speakers=speakers,
+                    people=people,
+                )
+            except (models.ModelCallError, ArticleFormatError) as exc:
+                print(f"the money rewrite failed: {exc}", file=sys.stderr)
+            else:
+                fuller = _repair(fuller, people, record)
+                fuller_report = check_article(
+                    recap, fuller, windows, pages, speakers, people, record
+                )
+                if fuller_report.passed and len(missing_money(recap, fuller)) < len(missing):
+                    article, report = fuller, fuller_report
     article, moved = merge_announcements(article, roundup)
     for line in moved:
         print(f"structure: {line}", file=sys.stderr)
@@ -378,8 +433,15 @@ def _check(args: argparse.Namespace) -> int:
     recap = _with_media(args, load_recap(args.recap))
     windows, speakers = _recorded(args, recap)
     pages = _pages(args)
+    record = load_record(_record_pages(args, recap))
     report = check_article(
-        recap, load_article(args.article), windows, pages, speakers, _people(args, recap, pages)
+        recap,
+        load_article(args.article),
+        windows,
+        pages,
+        speakers,
+        _people(args, recap, pages),
+        record,
     )
     print(report.render())
     return 0 if report.passed else 1
@@ -394,9 +456,10 @@ def _stage(args: argparse.Namespace) -> int:
         return 1
     windows, speakers = _recorded(args, recap)
     pages = _pages(args)
+    record = load_record(_record_pages(args, recap))
     people = _people(args, recap, pages)
     # An older saved story may print a caption's spelling. Staging is the last chance to fix it.
-    article = _repair(article, people)
+    article = _repair(article, people, record)
     article, moved = merge_announcements(article, recap.video_id == ROUNDUP_ID)
     for line in moved:
         print(f"structure: {line}", file=sys.stderr)
@@ -406,7 +469,7 @@ def _stage(args: argparse.Namespace) -> int:
     article, shortened = limit_interviews(article)
     for line in shortened:
         print(f"structure: {line}", file=sys.stderr)
-    report = check_article(recap, article, windows, pages, speakers, people)
+    report = check_article(recap, article, windows, pages, speakers, people, record)
     meeting_id = f"roundup {recap.meeting_date}" if recap.video_id == ROUNDUP_ID else recap.video_id
     try:
         item = stage_item(

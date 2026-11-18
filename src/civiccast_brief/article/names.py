@@ -770,7 +770,18 @@ def _seat_holder(people: People, role: str) -> Person | None:
     return max(holders, key=lambda p: (len(_tokens(p.name)), p.name))
 
 
-def _seat_replacement(tail: str, person: Person) -> str:
+def _other_member(word: str, person: Person, people: People) -> bool:
+    """Whether a word after the seat is another record member's name, not the seat's holder."""
+    wanted = _normal(word)
+    for other in people.persons:
+        if other.name == person.name:
+            continue
+        if wanted and wanted in (_normal(other.first), _normal(other.last)):
+            return True
+    return False
+
+
+def _seat_replacement(tail: str, person: Person, people: People | None = None) -> str:
     """The record's seat and name, keeping the words after it that are not the printed name."""
     record = f"Mayor Pro Tem {person.name}"
     words = [word.strip(",.;:") for word in tail.split() if word.strip(",.;:")]
@@ -783,9 +794,12 @@ def _seat_replacement(tail: str, person: Person) -> str:
         rest = words[2:]
     elif _normal(words[0]) in (first, last):
         rest = words[1:]
+    elif people is not None and _other_member(words[0], person, people):
+        # Another member is printed after the seat ("Mayor Pro Tem, Stephanie Miller"). The
+        # seat takes the record's holder and the other member keeps their name.
+        return " ".join([record + ",", *words])
     else:
-        # A different name is printed after the seat. The holder is the record's, so the
-        # printed name is replaced with the record's.
+        # A garbled spelling of the holder. The holder is the record's.
         rest = words[1:]
     return " ".join([record, *rest])
 
@@ -805,7 +819,7 @@ def seat_fixes(text: str, people: People | None) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for match in _MAYOR_PRO_TEM_RE.finditer(text):
         tail = match.group(1) or ""
-        replacement = _seat_replacement(tail, person)
+        replacement = _seat_replacement(tail, person, people)
         if replacement != match.group(0):
             out.append((match.group(0), replacement))
     return out
@@ -843,7 +857,7 @@ def fill_roll_call_names(text: str, people: People | None) -> tuple[str, list[st
 
         def seat(match: re.Match[str]) -> str:
             tail = match.group(1) or ""
-            replacement = _seat_replacement(tail, person)
+            replacement = _seat_replacement(tail, person, people)
             if replacement != match.group(0):
                 changes.append(f"seat {match.group(0)!r} -> {replacement!r} (record roster)")
             return replacement
