@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
+from functools import cached_property
 from typing import Any
 
 #: Words that never make a phrase an item name on their own.
@@ -245,10 +246,14 @@ class Record:
                 return number
         return None
 
+    @cached_property
+    def normal_text(self) -> str:
+        return _normal(self.text)
+
     def verbatim(self, phrase: str) -> bool:
         """Whether the record prints this phrase (a company, item or place)."""
         needle = _normal(phrase)
-        return bool(needle) and f" {needle} " in f" {_normal(self.text)} "
+        return bool(needle) and f" {needle} " in f" {self.normal_text} "
 
     def recusal_backed(self, label: str) -> bool:
         """Whether a document sentence states a recusal by this seat or person."""
