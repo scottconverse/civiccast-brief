@@ -62,10 +62,10 @@ def test_a_story_with_no_episode_is_on_the_front_page_lists_search_and_boards(
     build_site(_episodes(tmp_path), out, BASE_URL, now=NOW)
     home = _read(out, "index.html")
     # It is the newest meeting, so it leads, with its board label and no Listen pill.
-    lead = home.split('id="lead-title"', 1)[1].split("</article>", 1)[0]
+    lead = home.split('class="lead"', 1)[1].split("</article>", 1)[0]
     assert HEADLINE in lead and f'href="/stories/{STORY_ID}/"' in lead
     assert "Listen" not in lead
-    assert "Planning Commission" in lead
+    assert "Planning Commission" in lead  # the board kicker above the headline
     assert HEADLINE in _read(out, "boards/planning-commission/index.html")
     assert HEADLINE in _read(out, "archive/2026-11/index.html")
     index = json.loads(_read(out, "search-index.json"))
@@ -125,12 +125,15 @@ def test_a_meeting_still_is_served_from_the_site_never_hot_linked(tmp_path: Path
     assert (episodes / "stills" / "Abc_123-xyZ.jpg").is_file()
 
 
-def test_no_still_means_a_plain_colored_block_with_the_board_name(tmp_path: Path) -> None:
+def test_no_still_means_a_topic_illustration_not_a_plain_block(tmp_path: Path) -> None:
     out = tmp_path / "site"
     build_site(_episodes(tmp_path), out, BASE_URL, now=NOW)
     home = _read(out, "index.html")
-    assert re.search(r'<a class="thumb block c\d lead-thumb"', home)
-    assert "<img" not in home.split('class="home-grid"', 1)[1]
+    # The lead meeting has no fetched still: it shows the illustration for its topic.
+    assert '<a class="thumb lead-thumb" href=' in home
+    assert "thumb block" not in home
+    assert re.search(r'<img src="/assets/topics/[a-z-]+\.svg" alt="Illustration of [^"]+"', home)
+    assert (out / "assets/topics/land-use.svg").is_file()
 
 
 def test_front_page_has_the_bozeman_blocks_and_only_the_feeds_that_exist(
