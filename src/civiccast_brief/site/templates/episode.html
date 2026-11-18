@@ -9,7 +9,11 @@
     <p class="kicker"><a href="{{ board_href }}">{{ episode.board }}</a> · {{ meeting_date }}</p>
     <h1 id="episode-title">{{ headline }}</h1>
     {% if dek %}<p class="dek">{{ dek }}</p>{% endif %}
+    {% if episode.board == 'Weekly roundup' %}
+    <p class="byline">Written by CivicCast Brief from the official meeting videos of the meetings in this roundup, {{ meeting_date }}. Each <span class="cite">0:00:00</span> link names the moment in that meeting. Published {{ published_date }}.</p>
+    {% else %}
     <p class="byline">Written by CivicCast Brief from the official meeting video of the {{ episode.meeting_name }}, {{ meeting_date }}{% if article and article.uses_documents %}, and from the meeting documents{% endif %}. Each <span class="cite">0:00:00</span> link opens the video at that moment. Published {{ published_date }}.</p>
+    {% endif %}
 
     {% if article %}
     {% for section in article.sections %}
@@ -37,6 +41,17 @@
     </figure>
     {% endfor %}
     {% endif %}
+    {% endif %}
+
+    {% if week_stories %}
+    <section class="week-stories" aria-labelledby="week-stories-title">
+      <h2 id="week-stories-title">This week's meetings</h2>
+      <ul class="more">
+        {% for s in week_stories %}
+        <li><span>{{ s.meeting_date }}</span> <a href="{{ s.href }}">{{ s.headline }}</a> <span class="small">{{ s.board }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
     {% endif %}
 
     {% if claims %}

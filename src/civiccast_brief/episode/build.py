@@ -13,12 +13,14 @@ from civiccast_brief.article.writer import (
     ArticleFormatError,
     caption_windows,
     check_article,
+    claim_speakers,
     load_article,
     load_documents,
     site_article,
 )
 from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.meeting import transcript as transcript_mod
+from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.review.desk import stage_item
 from civiccast_brief.script.checker import check_script
 from civiccast_brief.script.recap import Recap, load_recap
@@ -151,14 +153,40 @@ def _article(
         )
     try:
         article = load_article(article_dir / "article.json")
+        roster = _roster_of(documents.parent if documents else None)
+        speakers = claim_speakers(recap, segments, roster) if segments and roster else None
         windows = caption_windows(recap, segments) if segments else None
         pages = load_documents(documents) if documents and documents.exists() else None
-        report = check_article(recap, article, windows, pages)
+        report = check_article(recap, article, windows, pages, speakers)
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
         return site_article(recap, article, pages)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
+
+
+def _roster_of(meeting_dir: Path | None):
+    """The roster the run used, from speakers.json, so the story's names check the same way."""
+    if meeting_dir is None:
+        return None
+    path = meeting_dir / "speakers.json"
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    file = (data.get("roster") or {}).get("file")
+    if not file:
+        return None
+    # The path was written by the run that made speakers.json; a relative one is resolved from
+    # that run's work folder, which is an ancestor of the meeting folder.
+    candidates = [Path(file)]
+    candidates += [parent / file for parent in [meeting_dir, *meeting_dir.parents]]
+    found = next((p for p in candidates if p.is_file()), None)
+    if found is None:
+        return None
+    try:
+        return load_roster(found)
+    except (OSError, ValueError):
+        return None
 
 
 def episode_slug(recap: Recap, city_slug: str) -> str:

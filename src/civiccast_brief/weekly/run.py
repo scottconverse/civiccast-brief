@@ -397,6 +397,31 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
             recap = str(folder / "recap.json")
             steps.article(["title", "--recap", recap, "--city", str(settings.city)])
             done.append("title")
+        if "article" not in done:
+            recap = str(folder / "recap.json")
+            out = folder / "article"
+            if not _on_desk(settings, folder, "article"):
+                out.with_suffix(".json").unlink(missing_ok=True)
+                steps.article(
+                    ["write", "--recap", recap, "--out", str(out), "--city", str(settings.city)]
+                )
+                if not out.with_suffix(".json").exists():
+                    raise StepFailed("roundup article write failed (no story was written)")
+                _call(
+                    steps.article,
+                    [
+                        "stage",
+                        "--db",
+                        str(settings.db),
+                        "--recap",
+                        recap,
+                        "--article",
+                        str(out.with_suffix(".json")),
+                    ],
+                    "roundup article stage",
+                )
+            entry["article"] = str(out.with_suffix(".json"))
+            done.append("article")
         if "episode" not in done:
             _stage_episode(steps, settings, folder, Path(entry["script_json"]))
             done.append("episode")
@@ -481,6 +506,9 @@ def _publish_stories(
         if meta.get("kind") != "article" or meta.get("status") != "published":
             continue
         meeting_id = str(meta.get("meeting_id"))
+        if meeting_id.startswith("roundup "):
+            # A roundup has no meeting of its own: its story is rendered on the roundup page.
+            continue
         name = f"{slug(meeting_id)}.json"
         wanted.add(name)
         out = folder / name
