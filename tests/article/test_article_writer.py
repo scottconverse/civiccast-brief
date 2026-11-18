@@ -254,3 +254,183 @@ def test_the_site_format_cites_claim_positions_and_start_times() -> None:
     ]
     with pytest.raises(ArticleFormatError):
         site_article(RECAP, replace(story, votes=(Vote("X", "passed", None, "c09"),)))
+
+
+# --- News judgment, record names, and the weekly roundup ---------------------------------------
+
+NEWS_RECAP = Recap(
+    city="Superior",
+    body="Town Council",
+    meeting_date="October 26, 2026",
+    video_id="abc12345678",
+    claims=(
+        Claim(
+            id="c01",
+            topic="Council resignation",
+            text="A council member said they needed to resign their council seat.",
+            timestamp="0:04:47",
+            quote="I needed to resign my council seat.",
+        ),
+        Claim(
+            id="c02",
+            topic="Consent agenda",
+            text="The council moved to approve the consent agenda items 5A through 5H.",
+            timestamp="0:59:46",
+            quote="motion to approve the consent agenda",
+        ),
+        Claim(
+            id="c03",
+            topic="Budget",
+            text="The council approved a $2 million budget amendment 4-3.",
+            timestamp="1:20:00",
+            quote="the budget amendment passes four to three",
+        ),
+    ),
+)
+
+
+def test_a_resignation_and_a_money_vote_outrank_a_consent_item() -> None:
+    from civiccast_brief.article.writer import news_order, news_value
+
+    assert news_value(NEWS_RECAP.claims[0]) > news_value(NEWS_RECAP.claims[2])
+    assert news_value(NEWS_RECAP.claims[2]) > news_value(NEWS_RECAP.claims[1])
+    assert news_order(NEWS_RECAP)[0] == "c01"
+
+
+def test_a_story_that_leads_on_consent_when_a_resignation_is_cited_is_flagged() -> None:
+    from civiccast_brief.article.writer import lead_is_routine
+
+    routine = Article(
+        headline="Superior council approves consent agenda",
+        sections=(
+            Section(None, (Paragraph("The council approved the consent agenda.", ("c02",)),)),
+        ),
+    )
+    assert lead_is_routine(NEWS_RECAP, routine) == "c01"
+    led = Article(
+        headline="Superior council member resigns seat",
+        sections=(
+            Section(None, (Paragraph("A council member said they would resign.", ("c01",)),)),
+        ),
+    )
+    assert lead_is_routine(NEWS_RECAP, led) is None
+
+
+def test_the_prompt_lists_the_news_order_and_a_roundup_uses_the_week_prompt() -> None:
+    from civiccast_brief.article.writer import build_prompt
+
+    prompt = build_prompt(NEWS_RECAP)
+    assert "NEWS JUDGMENT" in prompt
+    assert "News value, strongest first" in prompt and "c01" in prompt
+    roundup = build_prompt(NEWS_RECAP, roundup=True)
+    assert "one story about the week" in roundup
+    assert "Also this week" in roundup
+
+
+def test_a_speaker_named_in_the_record_reaches_the_writer_and_the_check() -> None:
+    from civiccast_brief.article.writer import build_prompt, claim_speakers
+    from civiccast_brief.meeting.roster import EXAMPLE_ROSTER, load_roster
+    from civiccast_brief.meeting.transcript import Segment
+
+    roster = load_roster(EXAMPLE_ROSTER)
+    segments = [
+        Segment(start=0.0, end=1.0, text="Roll call.", turn_start=False),
+        Segment(start=60.0, end=62.0, text="Council member Popkin", turn_start=False),
+        Segment(start=63.0, end=64.0, text="Here.", turn_start=False),
+    ]
+    recap = Recap(
+        city="Longmont",
+        body="City Council",
+        meeting_date="October 20, 2026",
+        video_id="uHFuCfd5MVQ",
+        claims=(
+            Claim(
+                id="c01",
+                topic="Roll call",
+                text="The roll call recorded a member present.",
+                timestamp="0:01:03",
+                quote="Here.",
+            ),
+        ),
+    )
+    speakers = claim_speakers(recap, segments, roster)
+    assert speakers == {"c01": "Matthew Popkin"}
+    assert '"speaker": "Matthew Popkin"' in build_prompt(recap, speakers=speakers)
+    named = Article(
+        headline="Longmont council meets",
+        sections=(Section(None, (Paragraph("Matthew Popkin answered the roll call.", ("c01",)),)),),
+    )
+    assert check_article(recap, named, speakers=speakers).passed
+    # Without the record's name, the same text adds a name the evidence lacks.
+    assert [i.code for i in check_article(recap, named).issues] == ["name", "name"]
+
+
+def test_an_unnamed_line_keeps_a_neutral_description() -> None:
+    from civiccast_brief.article.writer import claim_speakers
+    from civiccast_brief.meeting.roster import EXAMPLE_ROSTER, load_roster
+    from civiccast_brief.meeting.transcript import Segment
+
+    roster = load_roster(EXAMPLE_ROSTER)
+    segments = [Segment(start=0.0, end=1.0, text="I need to resign.", turn_start=False)]
+    recap = Recap(
+        city="Longmont",
+        body="City Council",
+        meeting_date="October 20, 2026",
+        video_id="uHFuCfd5MVQ",
+        claims=(
+            Claim(
+                id="c01",
+                topic="Resignation",
+                text="A speaker said they would resign.",
+                timestamp="0:00:00",
+                quote="I need to resign.",
+            ),
+        ),
+    )
+    assert claim_speakers(recap, segments, roster) == {}
+
+
+def test_a_passing_story_under_the_length_floor_is_flagged_for_one_rewrite() -> None:
+    from civiccast_brief.article.writer import MIN_STORY_WORDS, story_too_short, story_words
+
+    short = Article(
+        headline="Superior council approves consent agenda",
+        sections=(Section(None, (Paragraph("The council approved it.", ("c02",)),)),),
+    )
+    assert story_words(short) == 4
+    assert not story_too_short(NEWS_RECAP, short)  # only three claims to build from
+    five = replace(
+        NEWS_RECAP,
+        claims=NEWS_RECAP.claims
+        + (
+            Claim(
+                id="c04",
+                topic="Roads",
+                text="The council approved a road plan.",
+                timestamp="1:30:00",
+                quote="road plan approved",
+            ),
+            Claim(
+                id="c05",
+                topic="Parks",
+                text="The council approved a park plan.",
+                timestamp="1:40:00",
+                quote="park plan approved",
+            ),
+        ),
+    )
+    assert story_too_short(five, short)
+    long = Article(
+        headline="Superior council approves consent agenda",
+        sections=(
+            Section(
+                None,
+                tuple(
+                    Paragraph("The council approved the consent agenda. " * 20, ("c02",))
+                    for _ in range(4)
+                ),
+            ),
+        ),
+    )
+    assert story_words(long) >= MIN_STORY_WORDS
+    assert not story_too_short(five, long)

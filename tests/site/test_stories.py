@@ -210,3 +210,23 @@ def test_roundup_show_notes_in_the_feed_have_no_bracketed_meeting_prefix(tmp_pat
     feed = _read(out, "feed.xml")
     assert "[October 6, 2026 meeting]" not in feed
     assert "October 6, 2026 meeting: The annexation passed." in feed
+
+
+def test_a_weekly_roundup_links_each_meeting_story_of_its_days(tmp_path: Path) -> None:
+    episodes = _episodes(tmp_path)  # adds a story for 2026-11-03
+    path = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["board"] = "Weekly roundup"
+    data["meeting_title"] = "Weekly roundup"
+    data["headline"] = "Example council member resigns"
+    data["recap"]["claims"][0]["topic"] = "November 3, 2026: Resignation"
+    data["recap"]["claims"][0]["text"] = "[November 3, 2026 meeting] A member resigned."
+    path.write_text(json.dumps(data), "utf-8")
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+
+    page = _read(out, "episodes/2026-10-20-example-council/index.html")
+    assert "This week's meetings" in page
+    assert f"/stories/{STORY_ID}/" in page
+    assert HEADLINE in page
+    assert "This week's meetings" not in _read(out, f"stories/{STORY_ID}/index.html")

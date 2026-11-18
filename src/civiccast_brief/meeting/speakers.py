@@ -62,12 +62,57 @@ class Turn:
         return " ".join(self.texts)
 
 
+#: A transcript that was machine-transcribed from the audio (whisper) has no ``>>`` marks: it is
+#: a list of caption phrases. A new speaker turn is inferred at a pause of this many seconds ...
+TURN_GAP_S = 0.75
+#: ... or at a shorter pause after a finished sentence.
+SENTENCE_GAP_S = 0.25
+_ACK_LINE_RE = re.compile(r"^(?:present|here|yes|aye|yep|yeah|no|nay)[.!]?$", re.IGNORECASE)
+_TITLE_LINE_RE = re.compile(
+    r"^(?:mayor|council\s*member|councilmember|supervisor|commissioner|trustee|"
+    r"chair(?:man|woman|person)?|vice\s+\w+)\b",
+    re.IGNORECASE,
+)
+
+
+def _starts_a_turn(previous: Segment, segment: Segment) -> bool:
+    """Whether a caption phrase with no ``>>`` mark begins a new speaker turn.
+
+    Conservative on purpose: a pause, a finished sentence followed by a pause, a line that is a
+    roll-call name or a short answer, and the line after either. When the guess is wrong the
+    worst result is a turn that stays unnamed; a name is still only given by the roll call or a
+    chair recognition.
+    """
+    gap = segment.start - previous.end
+    if gap >= TURN_GAP_S:
+        return True
+    if gap >= SENTENCE_GAP_S and previous.text.rstrip().endswith((".", "?", "!")):
+        return True
+    text = segment.text.strip()
+    if _TITLE_LINE_RE.match(text) or _ACK_LINE_RE.match(text):
+        return True
+    return (
+        _ACK_LINE_RE.match(previous.text.strip()) is not None
+        or parse_call(previous.text) is not None
+    )
+
+
 def split_turns(segments: list[Segment]) -> list[Turn]:
-    """Group caption lines into speaker turns. A ``turn_start`` line opens a new turn. Lines before
-    the first mark (or a transcript with no marks at all) form turn 0 with no speaker."""
+    """Group caption lines into speaker turns.
+
+    A ``turn_start`` line opens a new turn. A transcript with no marks at all (a whisper
+    transcript of the audio) gets its turns from pauses and from the roll call's shape
+    (:func:`_starts_a_turn`), so the roll call and chair recognitions can still name speakers.
+    """
+    marked = any(segment.turn_start for segment in segments)
     turns: list[Turn] = []
     for position, segment in enumerate(segments):
-        if segment.turn_start or not turns:
+        starts = (
+            segment.turn_start
+            if marked
+            else (position == 0 or _starts_a_turn(segments[position - 1], segment))
+        )
+        if starts or not turns:
             turns.append(
                 Turn(
                     index=len(turns),
@@ -146,7 +191,12 @@ def _squash(surname: str) -> str:
 
 
 def match_member(call: Call, roster: Roster) -> Member | None:
-    """The one roster member the call names, or None. Exact spelling only, no fuzzy matching."""
+    """The one roster member the call names, or None.
+
+    The roll call is matched by the exact spelling only. A captioner's near miss ("Christ" for
+    Crist) is not that member's name; a chair recognition reads a spoken name by sound instead
+    (:func:`name_recognition`), and that is where a garbled roll call is named.
+    """
     candidates = [m for m in roster.members if m.last.lower() == call.last]
     if call.first is not None:
         candidates = [m for m in candidates if m.first.lower() == call.first]
@@ -436,13 +486,14 @@ def label_recognitions(
     from civiccast_brief.record.records import speakers as rs
     from civiccast_brief.record.repo.rows import Segment as RecordSegment
 
+    starts = {turn.first for turn in turns}
     rows = [
         RecordSegment(
             id=position,
             transcript_id=0,
             start_ms=round(s.start * 1000),
             end_ms=round(s.end * 1000),
-            text=(f"{rs.CHANGE_MARKER} " if s.turn_start and position else "") + s.text,
+            text=(f"{rs.CHANGE_MARKER} " if position in starts and position else "") + s.text,
             speaker_label=None,
         )
         for position, s in enumerate(segments)

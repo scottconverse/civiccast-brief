@@ -212,3 +212,19 @@ def test_other_bodies_titles_parse_and_match_in_capitals():
     assert S.match_member(S.parse_call("Vice President Mueller"), board).name == "Ray Mueller"
     assert S.parse_call("Supervisor Gauthier is walking in") is None
     assert S.match_member(S.parse_call("SUPERVISOR GOTHIER"), board) is None
+
+
+def test_a_transcript_without_turn_marks_is_split_at_pauses_and_at_the_roll_call():
+    """A whisper transcript has no ``>>`` marks. The roll call still names its answer turn."""
+    segments = [
+        seg(0, "Roll call."),
+        seg(2, "Council member Popkin"),  # a name line opens its own turn
+        seg(3, "Here."),  # a short answer opens its own turn
+        seg(30, "Public comment begins."),
+        seg(31, "Thank you."),
+    ]
+    turns = S.split_turns(segments)
+    assert [(t.first, t.last) for t in turns][:3] == [(0, 0), (1, 1), (2, 2)]
+    S.label_roll_call(turns, ROSTER)
+    assert turns[2].speaker == "Matthew Popkin"
+    assert turns[2].basis == "roll_call"

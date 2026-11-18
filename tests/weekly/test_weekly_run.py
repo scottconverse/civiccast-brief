@@ -303,11 +303,13 @@ def test_two_meetings_make_a_roundup_with_their_recaps_in_date_order(tmp_path):
         "2026-11-03-city-council-owzpzjzjwne",
         "2026-11-05-planning-and-zoning-commission-pzpzpzpzpz1",
     ]
-    tail = fake.names()[-4:]
+    tail = fake.names()[-6:]
     assert tail == [
         ("script", "roundup"),
         ("script", "write"),
         ("article", "title"),
+        ("article", "write"),
+        ("article", "stage"),
         ("episode", "stage"),
     ]
     assert _opt(fake.calls[-1][1], "--meeting") == str(settings.work / "2026-11-10-roundup")
@@ -851,3 +853,67 @@ def test_the_real_site_build_succeeds_with_the_city_settings_the_run_put_there(
 
     assert report.failed == 0, report.lines
     assert (site.out / "index.html").is_file()
+
+
+def test_the_roundup_gets_a_written_article_and_its_episode_is_built_with_it(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+    )
+    settings = _settings(tmp_path, site=site, rosters=(COUNCIL, PZ))
+    fake = Fake()
+    run_week(settings, [PZ_MEETING, COUNCIL_MEETING], LAST, fake.steps())
+
+    roundup_folder = settings.work / "2026-11-10-roundup"
+    written = [
+        argv
+        for step, argv in fake.calls
+        if step == "article"
+        and argv[0] == "write"
+        and _opt(argv, "--out").startswith(str(roundup_folder))
+    ]
+    assert written and _opt(written[0], "--recap") == str(roundup_folder / "recap.json")
+    staged = [
+        argv
+        for step, argv in fake.calls
+        if step == "article"
+        and argv[0] == "stage"
+        and _opt(argv, "--db") == str(settings.db)
+        and str(roundup_folder) in _opt(argv, "--article")
+    ]
+    assert staged
+
+    roundup_id = "roundup November 3, 2026 and November 5, 2026"
+    fake.exported = {
+        "0001-article": {
+            "kind": "article",
+            "status": "published",
+            "meeting_id": roundup_id,
+        },
+        "0002-episode": {"kind": "episode", "status": "published", "meeting_id": roundup_id},
+    }
+    report = run_week(
+        settings,
+        [PZ_MEETING, COUNCIL_MEETING],
+        LAST,
+        fake.steps(),
+        published="2026-11-10T09:00:00-07:00",
+    )
+    assert report.failed == 0
+    assemble = next(
+        argv
+        for step, argv in fake.calls
+        if step == "episode"
+        and argv[0] == "assemble"
+        and _opt(argv, "--item") == str(settings.work / "exported" / "0002-episode")
+    )
+    assert _opt(assemble, "--article") == str(settings.work / "exported" / "0001-article")
+    # The roundup has no stand-alone story file: its article renders on the roundup page.
+    assert not any(
+        step == "episode" and argv[0] == "story" and roundup_id in _opt(argv, "--article")
+        for step, argv in fake.calls
+    )

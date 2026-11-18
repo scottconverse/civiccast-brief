@@ -43,6 +43,9 @@ class Recap:
     video_id: str
     claims: tuple[Claim, ...]
     video_place: str = DEFAULT_VIDEO_PLACE
+    #: The meeting's own media address for a meeting that is not on YouTube (PR #99's source
+    #: data). Its presence means the video is not on YouTube, so no youtube.com link is made.
+    media_url: str | None = None
 
     def claim(self, claim_id: str) -> Claim | None:
         for claim in self.claims:
@@ -62,6 +65,7 @@ def recap_to_dict(recap: Recap) -> dict[str, Any]:
         "meeting_date": recap.meeting_date,
         "video_id": recap.video_id,
         "video_place": recap.video_place,
+        **({"media_url": recap.media_url} if recap.media_url else {}),
         "claims": [
             {
                 "id": c.id,
@@ -94,6 +98,7 @@ def recap_from_dict(data: dict[str, Any]) -> Recap:
             video_id=str(data["video_id"]),
             claims=claims,
             video_place=str(data.get("video_place") or DEFAULT_VIDEO_PLACE),
+            media_url=str(data["media_url"]) if data.get("media_url") else None,
         )
     except (KeyError, TypeError) as exc:
         raise RecapFormatError(f"recap is missing a field: {exc}") from exc

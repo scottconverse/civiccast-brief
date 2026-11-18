@@ -35,6 +35,8 @@ SITEMAP_PATH = "/sitemap.xml"
 ROBOTS_PATH = "/robots.txt"
 FAVICON_SVG = "/assets/favicon.svg"
 FAVICON_PNG = "/assets/favicon.png"
+#: The board a weekly roundup is published under.
+WEEKLY_ROUNDUP_BOARD = "Weekly roundup"
 
 #: Cloudflare Web Analytics site token for civiccastbrief.org (a public value; it is in every page).
 ANALYTICS_TOKEN = "584d3422251846a3a68db1030f40f942"
@@ -261,7 +263,49 @@ def _story_view(urls: Urls, story: Story) -> dict[str, Any]:
         "chapters_url": None,
         "vtt_url": None,
         "transcript_href": None,
+        "week_stories": None,
     }
+
+
+#: A roundup claim's topic starts with its meeting date: "September 28, 2026: Consent agenda".
+_WEEK_TOPIC_DATE = re.compile(r"^(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4}):")
+
+
+def _week_dates(episode: Episode) -> set[date]:
+    """The meeting days a roundup covers, read from its claims' topics."""
+    days: set[date] = set()
+    for claim in episode.claims:
+        match = _WEEK_TOPIC_DATE.match(claim.topic)
+        if match is None:
+            continue
+        try:
+            days.add(datetime.strptime(match.group("date"), "%B %d, %Y").date())
+        except ValueError:
+            continue
+    return days
+
+
+def _week_stories(urls: Urls, episode: Episode, items: list[Item]) -> list[dict[str, str]] | None:
+    """The meeting stories a weekly roundup links to: every story or episode of that town whose
+    meeting day the roundup covers. None for any other episode."""
+    if episode.board != WEEKLY_ROUNDUP_BOARD:
+        return None
+    days = _week_dates(episode)
+    if not days:
+        return None
+    related = [
+        {
+            "headline": item.display_headline,
+            "href": urls.href(item_path(urls, item)),
+            "board": item.board,
+            "meeting_date": date_long(item.meeting_date),
+        }
+        for item in sorted(items, key=lambda i: (i.meeting_date, i.board))
+        if item.id != episode.id
+        and item.board != WEEKLY_ROUNDUP_BOARD
+        and item.meeting_date in days
+    ]
+    return related or None
 
 
 def _episode_view(city: City, urls: Urls, episode: Episode) -> dict[str, Any]:
@@ -521,6 +565,7 @@ def build_pages(
             seo.script_block(seo.episode_podcast_episode(city, urls, episode)),
         ]
         context.update(_episode_view(city, urls, episode))
+        context["week_stories"] = _week_stories(urls, episode, items)
         context["more"] = [card for card in boards[episode.board] if card["id"] != episode.id][
             :MORE_COUNT
         ]

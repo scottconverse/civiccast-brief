@@ -323,6 +323,7 @@ def run(
         video_place=GRANICUS_VIDEO_PLACE
         if granicus_host or cablecast_host
         else DEFAULT_VIDEO_PLACE,
+        media_url=media_url,
     )
     save_recap(recap, out / "recap.json")
     verify_report["agenda_source"] = agenda.source if agenda else None
