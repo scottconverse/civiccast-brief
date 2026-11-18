@@ -162,6 +162,13 @@ _OPENERS = frozenset(
 )
 _MONTHS = frozenset(
     {
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
         "january",
         "february",
         "march",
@@ -261,6 +268,16 @@ class Record:
         if not wanted:
             return False
         return any(wanted in _normal(sentence) for sentence in self.recusals)
+
+    def act_backed(self, label: str, act: re.Pattern[str]) -> bool:
+        """Whether one document sentence names this seat or person and states the act."""
+        wanted = _normal(label)
+        if not wanted:
+            return False
+        return any(
+            wanted in _normal(sentence) and act.search(sentence)
+            for sentence in _SENTENCE_RE.split(self.text.replace("\n", " "))
+        )
 
 
 def normalize_number(printed: str) -> str:
@@ -486,6 +503,12 @@ def _garbled_item(text: str, record: Record) -> list[tuple[int, int, str]]:
         content = [_singular(word.lower()) for word in words[1:] if word.lower() not in _STOP]
         if not content:
             # A bare garbled proper noun ("three Nouvel"): match it to the record's word.
+            # A word inside a longer name ("Rock Creek Homeowners Association") is part of
+            # that name, not a garble of some other record word.
+            before = re.search(r"([A-Za-z'’\-]+) +$", text[: match.start()])
+            after = re.match(r" +([A-Za-z'’\-]+)", text[match.end() :])
+            if (before and before.group(1)[0].isupper()) or (after and after.group(1)[0].isupper()):
+                continue
             near = _near_word(first, record)
             if near is not None:
                 out.append((match.start(), match.start() + len(first), near))

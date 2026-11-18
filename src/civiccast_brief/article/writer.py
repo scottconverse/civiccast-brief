@@ -69,6 +69,12 @@ _ONE_SPEAKER_RE = re.compile(r"\b[Oo]ne (?=(?:speaker|resident|commenter)\b)")
 #: Common words that start a news sentence. Capitalised there, they are not names.
 ARTICLE_OPENERS = frozenset(
     [
+        "asked",
+        "answering",
+        "responding",
+        "speaking",
+        "according",
+        "citing",
         "also",
         "later",
         "earlier",
@@ -121,6 +127,39 @@ WINDOW_AFTER = 60
 _SHORT_MONTHS = frozenset(
     {"jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"}
 )
+
+
+#: A street name the story spells out where the record abbreviates it ("High Plains Dr.").
+_STREET_WORDS = {
+    "drive": "dr",
+    "street": "st",
+    "avenue": "ave",
+    "boulevard": "blvd",
+    "road": "rd",
+    "lane": "ln",
+    "court": "ct",
+    "parkway": "pkwy",
+    "place": "pl",
+    "circle": "cir",
+}
+
+
+def _rounded_from(missing: str, allowed: set[str]) -> bool:
+    """Whether a round figure ("$41.3 million") is a cited amount ($41,321,246) rounded.
+
+    Only amounts of a million or more, rounded to at least the ten-thousands: a story may
+    round a budget, never a vote count or a small dollar figure.
+    """
+    if not missing.isdigit():
+        return False
+    value = int(missing)
+    zeros = len(missing) - len(missing.rstrip("0"))
+    if value < 1_000_000 or zeros < 4:
+        return False
+    step = 10**zeros
+    return any(
+        number.isdigit() and (int(number) + step // 2) // step * step == value for number in allowed
+    )
 
 
 def _names(text: str) -> list[str]:
@@ -366,7 +405,7 @@ NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
     (
         100,
         re.compile(
-            r"\b(resign|resignation|resigned|step(?:s|ped)? down|vacan(?:t|cy)|withdraw|"
+            r"\b(resign|resignation|resigned|step(?:s|ped)? down|"
             r"removed from|expelled|recall)\b",
             re.IGNORECASE,
         ),
@@ -955,9 +994,42 @@ _SAME_SPEAKER_RE = re.compile(
 _SELF_PRONOUN_RE = re.compile(r"\b(himself|herself)\b", re.IGNORECASE)
 _SUBJECT_PRONOUN_RE = re.compile(r"\b(he|she|his|her)\b", re.IGNORECASE)
 _SEAT_RE = re.compile(r"\b(?:the\s+)?(mayor(?:\s+pro\s+tem)?|chair(?:person)?)\b", re.IGNORECASE)
-_NAMED_MEMBER_RE = re.compile(r"\bcouncil\s+member\s+([A-Z][\w'’-]+)")
+_NAMED_MEMBER_RE = re.compile(r"\b(?i:council\s*member)\s+([A-Z][\w'’-]+)")
 _RECUSAL_RE = re.compile(r"\brecus\w*|\bconflict\b", re.IGNORECASE)
+#: Acts a story may tie to a named person or seat only when the meeting's documents say who:
+#: a recusal, a resignation, and leaving office by not running again. The captions are
+#: unlabelled, so "Thanks, Mike" after a farewell speech does not say who resigned.
+PERSONAL_ACTS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("recused", _RECUSAL_RE),
+    ("resigned", re.compile(r"\bresign\w*|\bstep(?:s|ped|ping)?\s+down\b", re.IGNORECASE)),
+    (
+        "is not running again",
+        re.compile(
+            r"\bnot\s+(?:to\s+)?(?:run|running|seek|seeking)\b|\bwon't\s+run\b"
+            r"|\bnot\s+(?:to\s+)?stand\s+for\b|\bretir\w*",
+            re.IGNORECASE,
+        ),
+    ),
+)
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+#: Words that end in a period without ending the sentence: "Nov. 12", "7 p.m. Nov. 3", "Mr. Lacis".
+_ABBREVIATION_END_RE = re.compile(
+    r"(?:\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Mr|Mrs|Ms|Dr|St|No|Co|Inc|Jr|Sr|vs)"
+    r"|\b[ap]\.m|\b[A-Z])\.$"
+)
+
+
+def split_sentences(text: str) -> list[str]:
+    """Sentences, never broken after an abbreviation or before a number or a lowercase word."""
+    out: list[str] = []
+    for piece in _SENTENCE_SPLIT_RE.split(text.strip()):
+        if not piece:
+            continue
+        if out and (_ABBREVIATION_END_RE.search(out[-1]) or re.match(r"[0-9a-z]", piece)):
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
 
 
 def _check_who(
@@ -1004,8 +1076,9 @@ def _check_who(
                     "use the neutral role",
                 )
             )
-    for sentence in _SENTENCE_SPLIT_RE.split(text):
-        if not _RECUSAL_RE.search(sentence):
+    for sentence in split_sentences(text):
+        acts = [(act, pattern) for act, pattern in PERSONAL_ACTS if pattern.search(sentence)]
+        if not acts:
             continue
         if (
             _SEAT_RE.search(sentence)
@@ -1020,22 +1093,29 @@ def _check_who(
                 )
             )
         labels = [match.group(1) for match in _SEAT_RE.finditer(sentence)]
-        labels += [match.group(0) for match in _NAMED_MEMBER_RE.finditer(sentence)]
+        labels += [match.group(1) for match in _NAMED_MEMBER_RE.finditer(sentence)]
         if people is not None:
             for span in spans(sentence):
                 if people.match(span.name, span.role) is not None:
                     labels.append(span.name)
-        for label in labels:
-            if record is None or not record.recusal_backed(label):
-                issues.append(
-                    Issue(
-                        where,
-                        "recusal_name",
-                        f"the record does not say {label!r} recused; "
-                        "write 'a council member' without naming the seat or person",
-                    )
+        unbacked = [
+            (label, act)
+            for label in labels
+            for act, pattern in acts
+            if record is None
+            or not (record.recusal_backed(label) if act == "recused" else False)
+            and not record.act_backed(label, pattern)
+        ]
+        if unbacked:
+            label, act = unbacked[0]
+            issues.append(
+                Issue(
+                    where,
+                    "recusal_name" if act == "recused" else "act_name",
+                    f"the record does not say {label!r} {act}; "
+                    "write 'a council member' without naming the seat or person",
                 )
-                break
+            )
 
 
 def _check_text(
@@ -1073,10 +1153,14 @@ def _check_text(
     for source in sources:
         allowed_numbers |= number_atoms(source)
     for missing in sorted(number_atoms(_ONE_SPEAKER_RE.sub("", text)) - allowed_numbers):
+        if _rounded_from(missing, allowed_numbers):
+            continue
         issues.append(Issue(where, "number", f"number {missing} is not in the cited claims"))
     allowed_words = _claim_words(sources) | HOUSE_WORDS
     for name in _names(text):
         if name.lower() in allowed_words:
+            continue
+        if _STREET_WORDS.get(name.lower()) in allowed_words:
             continue
         # A repaired name is the record's spelling of a name the quote held: it is not in the
         # claim's words, and it does not need to be.
@@ -1089,7 +1173,7 @@ def _check_text(
     if record is not None:
         for code, message in term_issues(text, record):
             issues.append(Issue(where, code, message))
-    if not spoken and not skill_evidence:
+    if not spoken:
         _check_who(
             where,
             text,
@@ -1314,7 +1398,36 @@ def check_article(
                         f"the lead must state the biggest news (claim {news}: {claim.text[:120]})",
                     )
                 )
+    else:
+        issue = skill_lead_issue(recap, article)
+        if issue is not None:
+            issues.append(issue)
     return report
+
+
+def skill_lead_issue(recap: Recap, article: Article) -> Issue | None:
+    """A skill-written story must put the meeting's biggest news in its headline, dek or lead.
+
+    The skill's paragraphs cite its own claims, not the recap's, so the test is on the words:
+    a resignation must be stated as one ("resign"), anything else in the claim's own terms.
+    """
+    news = top_news(recap)
+    if news is None or not article.paragraphs:
+        return None
+    claim = recap.claim(news)
+    top = f"{article.headline} {article.dek} {article.paragraphs[0].text}"
+    if news_value(claim) >= 100:
+        stated = bool(NEWS_WEIGHTS[0][1].search(top))
+    else:
+        stated = headline_names_news(top, claim)
+    if stated:
+        return None
+    return Issue(
+        "lead",
+        "news_lead",
+        "the headline, dek or first paragraph must state the meeting's biggest news "
+        f"(claim {news}: {claim.text[:160]})",
+    )
 
 
 @dataclass
@@ -1323,12 +1436,14 @@ class Dropped:
     votes: list[Vote] = field(default_factory=list)
     quotes: list[Quote] = field(default_factory=list)
     texts: list[str] = field(default_factory=list)  # blanked headings and dek
+    sentences: list[str] = field(default_factory=list)  # cut from the end of a kept paragraph
 
     def lines(self) -> list[str]:
         out = [f"dropped paragraph: {p.text[:100]}" for p in self.paragraphs]
         out += [f"dropped vote: {_vote_text(v)[:100]}" for v in self.votes]
         out += [f"dropped quote: claim {q.claim_id}" for q in self.quotes]
         out += [f"blanked: {t[:100]}" for t in self.texts]
+        out += [f"dropped sentence: {t[:100]}" for t in self.sentences]
         return out
 
 
@@ -1376,10 +1491,28 @@ def drop_unsupported(
     for section in article.sections:
         kept = []
         for paragraph in section.paragraphs:
-            if fails("paragraph", paragraph.text, paragraph.claim_ids, paragraph.page_ids):
-                dropped.paragraphs.append(paragraph)
-            else:
+            if not fails("paragraph", paragraph.text, paragraph.claim_ids, paragraph.page_ids):
                 kept.append(paragraph)
+                continue
+            # Keep the sentences up to the first one that fails: a later sentence that has no
+            # evidence must not take the sourced sentences before it down with it. Sentences
+            # after a failing one are dropped too, since they may lean on it.
+            sentences = split_sentences(paragraph.text)
+            good: list[str] = []
+            for sentence in sentences:
+                if fails("paragraph", sentence, paragraph.claim_ids, paragraph.page_ids):
+                    break
+                good.append(sentence)
+            whole = " ".join(good)
+            if (
+                good
+                and len(good) < len(sentences)
+                and not fails("paragraph", whole, paragraph.claim_ids, paragraph.page_ids)
+            ):
+                dropped.sentences.extend(sentences[len(good) :])
+                kept.append(replace(paragraph, text=whole))
+            else:
+                dropped.paragraphs.append(paragraph)
         if not kept:
             continue
         heading = section.heading
@@ -1485,7 +1618,7 @@ def condense_announcements(article: Article, roundup: bool = False) -> tuple[Art
         paragraphs: list[Paragraph] = []
         for paragraph in section.paragraphs:
             kept: list[str] = []
-            for sentence in _SENTENCE_RE.split(paragraph.text.strip()):
+            for sentence in split_sentences(paragraph.text):
                 if not sentence:
                     continue
                 if _GARBLED_SENTENCE_RE.search(sentence):
@@ -1790,6 +1923,18 @@ def render_markdown(
             ]
     out.append(f"*{note_for(article)}*")
     return "\n".join(out) + "\n"
+
+
+def cited_recap(recap: Recap, article: Article) -> Recap:
+    """The recap cut to the claims the story cites: its paragraphs, its votes and its quotes.
+
+    The page lists the evidence a story stands on. Recap claims the story never used (a caption
+    garble, "the same speaker said ...") are not evidence for it and are not published.
+    """
+    wanted = set(article.cited)
+    wanted |= {vote.claim_id for vote in article.votes}
+    wanted |= {quote.claim_id for quote in article.quotes}
+    return replace(recap, claims=tuple(c for c in recap.claims if c.id in wanted))
 
 
 def save_article(

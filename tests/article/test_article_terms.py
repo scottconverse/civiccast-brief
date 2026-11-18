@@ -115,3 +115,15 @@ def test_a_bare_garbled_name_takes_the_record_name() -> None:
     new, changes = repair_text("The art purchase covers three Nouvel.", record())
     assert "Nouvel" not in new and "Noblewins" in new
     assert changes
+
+
+def test_a_weekday_or_a_word_inside_a_longer_name_is_not_a_garble() -> None:
+    record = load_record(
+        {"d1p1": Page("The Honors Committee met for six Weeks. Nouvel Catering served lunch.")}
+    )
+    for text in (
+        "The State of Superior event was set for Wednesday, Oct. 21.",
+        "The council extended a tolling agreement with the Rock Creek Homeowners Association.",
+    ):
+        assert repair_text(text, record) == (text, [])
+        assert term_issues(text, record) == []

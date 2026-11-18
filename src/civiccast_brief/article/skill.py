@@ -462,8 +462,13 @@ def _words(text: str) -> set[str]:
     return {w for w in _WORD.findall(text.lower()) if len(w) > 2 and w not in _STOP}
 
 
+_ALSO_LINE = re.compile(r"ALSO AT THE MEETING", re.IGNORECASE)
+
+
 def _paragraphs(body: str) -> list[str]:
-    return [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+    """The body's paragraphs; the ``ALSO AT THE MEETING`` line is a heading, not a paragraph."""
+    blocks = (block.strip() for block in re.split(r"\n\s*\n", body))
+    return [block for block in blocks if block and not _ALSO_LINE.fullmatch(block)]
 
 
 def _split_sections(body: str) -> list[tuple[str | None, list[str]]]:
@@ -475,7 +480,7 @@ def _split_sections(body: str) -> list[tuple[str | None, list[str]]]:
         text = block.strip()
         if not text:
             continue
-        if re.fullmatch(r"ALSO AT THE MEETING", text, re.IGNORECASE):
+        if _ALSO_LINE.fullmatch(text):
             if paragraphs:
                 sections.append((heading, paragraphs))
             heading, paragraphs = "Also at the meeting", []
@@ -552,6 +557,15 @@ def _claim_paragraphs(
             and len(words & _words(claim.text)) / len(words) >= 0.45
         ]
         ids += extra[:4]
+        # The skill writes each Claim line as a sentence of the story, so a paragraph that
+        # holds a claim's words holds that claim: it cites it and the pages its Source names.
+        for number, claim in enumerate(claims):
+            claim_words = _words(claim.text)
+            if claim.id in ids or not claim_words:
+                continue
+            if len(words & claim_words) / len(claim_words) >= 0.9:
+                ids.append(claim.id)
+                page_ids.setdefault(index, []).extend(_source_pages(entries[number].sources, pages))
         if not ids and claims:
             # Every paragraph a reader sees must rest on a claim. A paragraph the
             # assignment left out takes the claim it shares the most words with.
@@ -580,10 +594,12 @@ def _source_pages(sources: Sequence[str], pages: dict[str, Any] | None) -> tuple
         return ()
     found: list[str] = []
     for source in sources:
-        kind_match = _KIND_WORD.search(source)
-        if kind_match is None:
+        kinds = {match.group(1).lower() for match in _KIND_WORD.finditer(source)}
+        if not kinds:
             continue
-        kind = kind_match.group(1).lower()
+        # "Town of Superior agenda packet ... council minutes, page 24": the page numbers
+        # count the packet, the most specific document the line names.
+        kind = next(k for k in ("packet", "minutes", "agenda") if k in kinds)
         wanted = [pid for pid, page in pages.items() if str(page.kind).lower() == kind]
         for match in _PAGES_REF.finditer(source):
             first = int(match.group(1))
@@ -705,6 +721,7 @@ def run_skill(
     today: str,
     model: str,
     feedback: str = "",
+    desk_rules: str = "",
     runner: AgentRunner | None = None,
     timeout_s: int = RUN_TIMEOUT_S,
 ) -> SkillRun:
@@ -734,6 +751,8 @@ def run_skill(
             "last_stamp": last,
         }
     )
+    if desk_rules.strip():
+        prompt += "\n## The desk's rules for this story\n" + desk_rules.strip() + "\n"
     if feedback.strip():
         prompt += (
             "\n## The editor's checking report on your last draft\n"

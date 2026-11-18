@@ -331,3 +331,22 @@ def test_person_issues_catches_a_member_spelling_and_leaves_a_place_alone() -> N
     issues = person_issues("Council Member Craigcraft toured the Community Center.", PEOPLE)
     assert any("Craigcraft" in message for _, message in issues)
     assert not any("Community Center" in message for _, message in issues)
+
+
+def test_a_sentence_start_word_is_not_rewritten_as_a_sound_alike_name() -> None:
+    board = roster_from_dict(
+        {
+            "city": "Superior",
+            "body": "Board of Education",
+            "state": "CO",
+            "members": [
+                {"name": "Temu Otting", "first": "Temu", "last": "Otting", "role": "Director"}
+            ],
+        }
+    )
+    people = load_people([(board, "cities/superior/rosters/board-of-education.json")], {}, "")
+    text = "Sitting also as the urban renewal authority, the council approved the plan."
+    out, changes = repair_text(text, people)
+    assert out == text
+    assert not changes
+    assert people.match("Sitting", "") is not None  # the sound-alike the guard stops

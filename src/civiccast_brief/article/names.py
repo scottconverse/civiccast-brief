@@ -537,6 +537,18 @@ def _at_sentence_start(text: str, start: int) -> bool:
     return bool(_SENTENCE_START.search(text[:start]))
 
 
+def _sentence_word(text: str, span: Span, person: Person) -> bool:
+    """A lone capitalised word at a sentence start that only sounds like a record name.
+
+    Every first word of a sentence is capitalised, so "Sitting also as the authority ..." is
+    not the surname "Otting". Such a word is changed only when it is the person's own name.
+    """
+    tokens = _tokens(span.name)
+    if len(tokens) != 1 or span.role or not _at_sentence_start(text, span.lead_start):
+        return False
+    return tokens[0] not in {*_tokens(person.last), *_tokens(person.first)}
+
+
 def _spelling(span: Span, person: Person) -> str:
     """The record's spelling in the form the story printed: a surname stays a surname, and a
     role in front of the name takes the full record name ("Mayor Pro Tem Jenn Kaaoush")."""
@@ -648,7 +660,7 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
         person = people.match(span.name, span.role)
         if person is None or people.verbatim(span.name):
             continue
-        if _tokens(span.name) == _tokens(person.name):
+        if _tokens(span.name) == _tokens(person.name) or _sentence_word(text, span, person):
             continue
         tokens, last = _tokens(span.name), _tokens(person.last)
         if len(tokens) == 1:
@@ -681,6 +693,8 @@ def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
         person = people.match(span.name, span.role)
         if person is not None:
             if _tokens(span.name) == _tokens(person.name) or people.verbatim(span.name):
+                continue
+            if _sentence_word(text, span, person):
                 continue
             spelling = _spelling(span, person)
             out = out[: span.start] + spelling + out[span.end :]

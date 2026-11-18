@@ -55,7 +55,7 @@ def _item_html(city: City, urls: Urls, episode: Episode) -> str:
         parts.append("<p>Recap:</p>")
     for claim in episode.claims:
         cite = ""
-        if episode.video_url:
+        if episode.video_url and claim.seconds > 0:
             link = timestamp_link(episode.video_url, claim.seconds)
             if link:
                 cite = f' (<a href="{_attr(link)}">video at {clock(claim.seconds)}</a>)'

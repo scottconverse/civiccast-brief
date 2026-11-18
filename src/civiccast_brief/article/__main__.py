@@ -45,6 +45,7 @@ from civiccast_brief.article.writer import (
     article_to_dict,
     caption_windows,
     check_article,
+    cited_recap,
     claim_speakers,
     condense_announcements,
     drop_unsupported,
@@ -57,6 +58,7 @@ from civiccast_brief.article.writer import (
     save_article,
     story_too_short,
     story_words,
+    top_news,
     write_article,
 )
 from civiccast_brief.meeting import transcript as transcript_mod
@@ -493,6 +495,7 @@ def _skill(args: argparse.Namespace) -> int:
     )
     work = args.work or args.out.parent / "skill"
     today = args.today or datetime.now().strftime("%A, %b. %d, %Y")
+    desk_rules = skill_desk_rules(recap)
     attempts = 0
     feedback = ""
     run = None
@@ -524,6 +527,7 @@ def _skill(args: argparse.Namespace) -> int:
                 today=today,
                 model=args.model,
                 feedback=feedback,
+                desk_rules=desk_rules,
             )
         print(
             f"skill run {attempts}: {'ok' if run.ok else run.error} "
@@ -610,6 +614,7 @@ def _skill(args: argparse.Namespace) -> int:
     article, shortened = limit_interviews(article)
     for line in shortened:
         print(f"structure: {line}", file=sys.stderr)
+    evidence_recap = cited_recap(evidence_recap, article)
     story_recap_path = args.recap.with_name("story-recap.json")
     save_recap(evidence_recap, story_recap_path)
     print(f"wrote {story_recap_path}", file=sys.stderr)
@@ -623,6 +628,27 @@ def _skill(args: argparse.Namespace) -> int:
     print(f"wrote {json_path} and {md_path}")
     print(report.render())
     return 0 if report.passed and article.paragraphs else 1
+
+
+def skill_desk_rules(recap: Any) -> str:
+    """The desk's own rules for a skill-written story, added to the skill's prompt."""
+    rules = [
+        (
+            "- Never name the person or seat who resigned, recused or is not running again "
+            "unless the meeting's documents (packet, minutes) name them for that act. The "
+            "captions do not say who is speaking; write 'a council member'."
+        ),
+        "- Never write 'the same speaker'. Say who spoke only when the record names them.",
+    ]
+    news = top_news(recap)
+    if news is not None:
+        claim = recap.claim(news)
+        rules.insert(
+            0,
+            "- The biggest news of this meeting must be stated in the headline and the first "
+            f"paragraph: {claim.text}",
+        )
+    return "\n".join(rules)
 
 
 def data_meta(args: argparse.Namespace, key: str, fallback: str) -> str:
