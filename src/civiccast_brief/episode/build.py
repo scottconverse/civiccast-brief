@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.article.names import People, fixes, load_people
 from civiccast_brief.article.title import check_title, load_title, render_issues
 from civiccast_brief.article.writer import (
     ArticleFormatError,
@@ -16,6 +18,7 @@ from civiccast_brief.article.writer import (
     claim_speakers,
     load_article,
     load_documents,
+    merge_announcements,
     site_article,
 )
 from civiccast_brief.audio.ffmpeg import probe_duration
@@ -62,7 +65,13 @@ def _meeting(meeting_dir: Path) -> tuple[Recap, dict[str, Any]]:
     transcript_path = meeting_dir / "transcript.json"
     if not transcript_path.exists():
         raise EpisodeError(f"missing {transcript_path}")
-    return recap, json.loads(transcript_path.read_text(encoding="utf-8"))
+    data = json.loads(transcript_path.read_text(encoding="utf-8"))
+    # A meeting outside YouTube (CivicClerk, eScribe, Vimeo) has its own media address. Saving it
+    # on the recap makes every cite a real time link instead of a youtube.com address that 404s.
+    media = _media_url(data)
+    if media:
+        recap = replace(recap, media_url=media)
+    return recap, data
 
 
 def _meeting_id(recap: Recap, data: dict[str, Any]) -> str:
@@ -153,19 +162,22 @@ def _article(
         )
     try:
         article = load_article(article_dir / "article.json")
-        roster = _roster_of(documents.parent if documents else None)
+        article, _ = merge_announcements(article)
+        found_roster = _roster_of(documents.parent if documents else None)
+        roster = found_roster[0] if found_roster else None
         speakers = claim_speakers(recap, segments, roster) if segments and roster else None
         windows = caption_windows(recap, segments) if segments else None
         pages = load_documents(documents) if documents and documents.exists() else None
-        report = check_article(recap, article, windows, pages, speakers)
+        people = _people_of(documents.parent if documents else None, documents)
+        report = check_article(recap, article, windows, pages, speakers, people)
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
-        return site_article(recap, article, pages)
+        return site_article(recap, article, pages, people)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
 
-def _roster_of(meeting_dir: Path | None):
+def _roster_of(meeting_dir: Path | None) -> tuple[Any, str] | None:
     """The roster the run used, from speakers.json, so the story's names check the same way."""
     if meeting_dir is None:
         return None
@@ -184,9 +196,55 @@ def _roster_of(meeting_dir: Path | None):
     if found is None:
         return None
     try:
-        return load_roster(found)
+        return load_roster(found), str(found)
     except (OSError, ValueError):
         return None
+
+
+def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool = False) -> People:
+    """The people the run's rosters and this meeting's documents name.
+
+    A roundup covers several meetings, so its records are every meeting's documents beside it.
+    """
+    found = _roster_of(meeting_dir)
+    roster, roster_path = found if found else (None, "")
+    rosters = [(roster, roster_path)] if roster else []
+    # The writer also saw the city's other body rosters (rosters/*.json).
+    for other in sorted((Path(roster_path).parent / "rosters").glob("*.json")):
+        try:
+            rosters.append((load_roster(other), str(other)))
+        except (OSError, ValueError):
+            continue
+    pages = load_documents(documents) if documents and documents.exists() else None
+    if roundup and meeting_dir is not None:
+        merged = dict(pages or {})
+        for sibling in sorted(meeting_dir.parent.glob("*/documents.json")):
+            try:
+                merged.update(load_documents(sibling))
+            except (OSError, ValueError):
+                continue
+        pages = merged or None
+    return load_people(rosters, pages, str(documents) if documents else "")
+
+
+def _name_fixes(recap: Recap, people: People) -> list[dict[str, str]]:
+    """The speech-to-text -> record name pairs for the recap the site prints beside a story.
+
+    The raw transcript is left as the speech program wrote it: it is the record of what was
+    heard, and guessing at every capitalised phrase in free text would rewrite it wrongly.
+    """
+    pairs: list[tuple[str, str]] = []
+    for claim in recap.claims:
+        pairs += fixes(claim.text, people)
+        pairs += fixes(claim.quote, people)
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for wrong, right in pairs:
+        if wrong == right or wrong in seen:
+            continue
+        seen.add(wrong)
+        out.append({"from": wrong, "to": right})
+    return out
 
 
 def episode_slug(recap: Recap, city_slug: str) -> str:
@@ -246,6 +304,7 @@ def assemble_story(
         "video_url": _video_url(data),
         "media_url": _media_url(data),
         "article": article,
+        "name_fixes": _name_fixes(recap, _people_of(meeting_dir, meeting_dir / "documents.json")),
     }
 
 
@@ -324,6 +383,10 @@ def assemble(
         "vtt_url": f"{base}/{slug}.vtt",
         "video_url": None if roundup else _video_url(data),
         "media_url": None if roundup else _media_url(data),
+        "name_fixes": _name_fixes(
+            recap,
+            _people_of(meeting_dir, meeting_dir / "documents.json", roundup),
+        ),
         "transcript": None
         if roundup
         else [
@@ -343,10 +406,27 @@ def assemble(
     return episode
 
 
-def _video_url(data: dict[str, Any]) -> str:
-    """The meeting video: the capture's own link, or YouTube for transcripts made before it."""
+#: A real YouTube video id is 11 characters; "civicclerk-superiorco-42" is not one.
+_YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _video_url(data: dict[str, Any]) -> str | None:
+    """The meeting video: the capture's own link, else its media address.
+
+    A CivicClerk, eScribe or Vimeo meeting has no YouTube address; making one from its id
+    (``youtube.com/watch?v=civicclerk-superiorco-43``) is a dead link. Without a real video the
+    site gets None, and cites fall back to the meeting's documents.
+    """
     source = data.get("source") or {}
-    return str(source.get("video_url") or f"https://www.youtube.com/watch?v={data['video_id']}")
+    if source.get("video_url"):
+        return str(source["video_url"])
+    media = _media_url(data)
+    if media:
+        return media
+    video_id = str(data.get("video_id") or "")
+    if source.get("platform") == "youtube" or _YOUTUBE_ID.match(video_id):
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return None
 
 
 def _media_url(data: dict[str, Any]) -> str | None:

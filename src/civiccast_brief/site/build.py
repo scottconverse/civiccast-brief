@@ -151,17 +151,32 @@ def build_site(
         write_file(out_dir, still_paths[key], data)
         files += 1
 
+    # The recap and transcript carry the same speech-to-text names as the story. The site
+    # prints the records' spellings in every place it prints a name.
+    fixes = [
+        fix for item in (*site.episodes, *site.stories) for fix in getattr(item, "name_fixes", ())
+    ]
+
+    def fixed(text: str) -> str:
+        for wrong, right in fixes:
+            text = text.replace(wrong, right)
+        return text
+
     env = make_environment(urls)
     for spec in pages:
         context = {**spec.context, "scripts": list(spec.scripts)}
-        html = render(env, spec.template, context)
+        html = fixed(render(env, spec.template, context))
         write_file(out_dir, _page_file(spec.path), html)
         files += 1
 
     write_file(out_dir, SITEMAP_PATH, seo.sitemap_xml(urls, sitemap_paths))
     write_file(out_dir, ROBOTS_PATH, seo.robots_txt(urls))
-    write_file(out_dir, SEARCH_INDEX_PATH, seo.search_index_json(urls, site.episodes, site.stories))
-    write_file(out_dir, "feed.xml", build_feed(site.city, urls, site.episodes, stamp))
+    write_file(
+        out_dir,
+        SEARCH_INDEX_PATH,
+        fixed(seo.search_index_json(urls, site.episodes, site.stories)),
+    )
+    write_file(out_dir, "feed.xml", fixed(build_feed(site.city, urls, site.episodes, stamp)))
     write_file(out_dir, HEADERS_PATH, HEADERS_FILE)
     files += 5
     if site.merged_stories:

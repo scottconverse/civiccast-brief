@@ -200,6 +200,8 @@ class Episode:
     article: Article | None = None
     #: The meeting's own media (CivicClerk, eScribe, Vimeo MP4 or HLS), when not on YouTube.
     media_url: str | None = None
+    #: Speech-to-text name -> the record's spelling, for the recap and transcript the site prints.
+    name_fixes: tuple[tuple[str, str], ...] = ()
 
     @property
     def meeting_name(self) -> str:
@@ -243,6 +245,7 @@ class Story:
     media_url: str | None = None
     sample: bool = False
     tags: tuple[str, ...] = ()
+    name_fixes: tuple[tuple[str, str], ...] = ()
 
     @property
     def headline(self) -> str:
@@ -510,6 +513,7 @@ def _load_story(path: Path, problems: list[str]) -> Story | None:
         check.fail("article", "is required in a story file")
         return None
     article = _article(check, data, len(claims))
+    name_fixes = _name_fixes(check, data)
     if len(problems) > before or article is None:
         return None
     assert meeting_date is not None and published is not None
@@ -526,6 +530,7 @@ def _load_story(path: Path, problems: list[str]) -> Story | None:
         video_url=video_url,
         media_url=media_url,
         sample=sample,
+        name_fixes=name_fixes,
     )
 
 
@@ -688,6 +693,7 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
     media_url = check.url(data, "media_url", required=False)
     transcript = _transcript(check, data)
     article = _article(check, data, len(claims))
+    name_fixes = _name_fixes(check, data)
 
     if len(problems) > before:
         return None
@@ -715,7 +721,29 @@ def _load_episode(path: Path, problems: list[str]) -> Episode | None:
         media_url=media_url,
         transcript=transcript,
         article=article,
+        name_fixes=name_fixes,
     )
+
+
+def _name_fixes(check: _Checker, data: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """The speech-to-text -> record name pairs, applied to the recap and transcript the site
+    prints. Each entry is {"from": "Cowish", "to": "Jenn Kaaoush"}."""
+    raw = data.get("name_fixes", [])
+    if not isinstance(raw, list):
+        check.fail("name_fixes", "must be a list")
+        return ()
+    out = []
+    for n, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            check.fail(f"name_fixes {n}", "must be an object")
+            continue
+        wrong = item.get("from")
+        right = item.get("to")
+        if not isinstance(wrong, str) or not isinstance(right, str) or not wrong or not right:
+            check.fail(f"name_fixes {n}", 'needs non-empty "from" and "to" strings')
+            continue
+        out.append((wrong, right))
+    return tuple(out)
 
 
 def _tags(check: _Checker, data: dict[str, Any]) -> tuple[str, ...]:

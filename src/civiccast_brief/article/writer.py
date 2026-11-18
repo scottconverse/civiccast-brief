@@ -34,6 +34,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.article.names import People, fixes, name_issues
 from civiccast_brief.script.checker import _claim_words, _proper_nouns, header_text
 from civiccast_brief.script.numbers import number_atoms
 from civiccast_brief.script.recap import Recap, seconds_of
@@ -276,7 +277,7 @@ def claim_speakers(recap: Recap, segments: list[Any], roster: Any) -> dict[str, 
 
 PROMPT = """You write a news story about one public meeting for a local news site.
 
-FACTS: use only the claims listed at the end. Every fact, number, name, vote, date and outcome must come from a claim. Add no causes, reasons, background or outside context. Do not invent who a speaker is: when a claim says "a speaker" or "an unidentified speaker", write "one speaker" or "a speaker", never "an unidentified speaker". A claim may carry "speaker": the meeting record's own name for the person who said it; use that name instead of "a speaker". A claim may carry "captions": the words said in the meeting around that claim's moment, from automatic captions. Use them for the detail a reader needs (what the item is, the ordinance or resolution number, the address, the project, the board, what was said) and to say who spoke when the captions name them, so that no paragraph leaves the reader asking which item it means. Every fact itself must still be stated by a claim. Captions can be garbled; leave out a name or number that looks garbled. Never add a name the claims and captions do not give: a council member or staff member is named only when the claim or its captions name that person, and a member of the public only when they give their name on the record.
+FACTS: use only the claims listed at the end. Every fact, number, name, vote, date and outcome must come from a claim. Add no causes, reasons, background or outside context. Do not invent who a speaker is: when a claim says "a speaker" or "an unidentified speaker", write "one speaker" or "a speaker", never "an unidentified speaker", unless the record supports a role: someone who says they are resigning a council seat is "a council member", and a town employee presenting an item is "town staff". A claim may carry "speaker": the meeting record's own name for the person who said it; use that name instead of "a speaker". A claim may carry "captions": the words said in the meeting around that claim's moment, from automatic captions. Use them for the detail a reader needs (what the item is, the ordinance or resolution number, the address, the project, the board, what was said) and to say who spoke when the captions name them, so that no paragraph leaves the reader asking which item it means. Every fact itself must still be stated by a claim. Captions can be garbled; leave out a name or number that looks garbled. Never add a name the claims and captions do not give: a council member or staff member is named only when the claim or its captions name that person, and a member of the public only when they give their name on the record.
 
 NEWS JUDGMENT (this decides the order, not the agenda's):
 1. Lead with the most newsworthy thing in the meeting: a resignation, removal or vacancy; a vote on money (a budget, contract, fee, tax, purchase, grant), land (annexation, zoning, development) or a law (ordinance, resolution); a divided or contested vote; a decision that changes what residents must do; public outcry or a crowd at public comment.
@@ -285,6 +286,7 @@ NEWS JUDGMENT (this decides the order, not the agenda's):
 4. Give context a reader needs from the meeting itself: what the item does, who spoke for and against it, and the numbers. Do not pad and do not repeat a fact to reach a length.
 5. A vote claim whose captions name the members in a roll call ("Neal Shah: Yes.") is written out: name each member and how they voted, and the tally. The captions are the record of the vote.
 6. Do not start sentence after sentence with "A speaker said". When the record gives no name, use the role the captions show (a resident during public comment, a business owner, town staff, the applicant, a council member) or fold the statement into its item ("The council heard that...", "Under the contract, ..."). "A speaker" belongs in a section at most once, and never twice in one paragraph.
+7. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also on the agenda". Never give them a section or a heading of their own.
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -297,14 +299,14 @@ OUTPUT: one JSON object and nothing else, no code fence:
 - votes: every vote a claim states, one entry each, with the claim that states it. tally only when the claim gives the count. When the claims or captions say how individual members voted, give the tally and say in the body who voted how.
 - quotes: two to four claims whose quote is worth printing. The quote's words are taken from the claim, so give only its id and the speaker as the claim or its captions name them, else "A speaker".
 
-STYLE: plain news writing in the past tense, inverted pyramid: the most important facts first, the least important last. Use digits for numbers (6-1, $200,000, Ordinance 2026-69). Every paragraph is two to four full sentences; a one-sentence paragraph is too thin to publish. Write 8 to 14 paragraphs and roughly 550 to 850 words when the meeting has that much news, fewer only when it does not. Never repeat a fact. Spell boards, streets and items as the claims or captions do.
+STYLE: plain news writing in the past tense, inverted pyramid: the most important facts first, the least important last. Use digits for numbers (6-1, $200,000, Ordinance 2026-69). Every paragraph is two to four full sentences; a one-sentence paragraph is too thin to publish. Write 8 to 14 paragraphs and roughly 600 to 900 words when the meeting has that much news, fewer only when it does not. Never repeat a fact. Spell boards, streets and items as the claims or captions do.
 """
 
 ROUNDUP_PROMPT = """You write the week's news story for a local news site, covering several public meetings of one town.
 
-FACTS: use only the claims listed at the end. Every fact, number, name, vote and date must come from a claim, and every claim's topic says which meeting it came from ("September 28, 2026: ..."). Add no causes, reasons, background or outside context. Do not invent who a speaker is: name a council or board member only when the claim or its captions name that person; otherwise write "one speaker" or "a speaker". Never write "an unidentified speaker".
+FACTS: use only the claims listed at the end. Every fact, number, name, vote and date must come from a claim, and every claim's topic says which meeting it came from ("September 28, 2026: ..."). Add no causes, reasons, background or outside context. Do not invent who a speaker is: name a council or board member only when the claim or its captions name that person; otherwise use the role the record supports (someone resigning a council seat is "a council member", a presenter is "town staff", a public commenter is "a resident") or "a speaker". Never write "an unidentified speaker".
 
-NEWS JUDGMENT: this is one story about the week, not a list of meetings. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section.
+NEWS JUDGMENT: this is one story about the week, not a list of meetings. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also this week", never a section of their own. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section.
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -317,7 +319,7 @@ OUTPUT: one JSON object and nothing else, no code fence:
 - votes: every vote a claim states, with the claim that states it; tally only when the claim gives the count.
 - quotes: two to four claims whose quote is worth printing, with the speaker as the claim or its captions name them, else "A speaker".
 
-STYLE: plain news writing in the past tense, inverted pyramid. Use digits for numbers. Two to four sentences per paragraph; 8 to 14 paragraphs and roughly 550 to 850 words when the week has that much news. Never repeat a fact.
+STYLE: plain news writing in the past tense, inverted pyramid. Use digits for numbers. Two to four sentences per paragraph; 8 to 14 paragraphs and roughly 600 to 900 words when the week has that much news. Never repeat a fact.
 """
 
 #: What makes a claim the lead, high to low. A resignation outranks any vote; a vote on money,
@@ -456,6 +458,7 @@ def build_prompt(
     editor: tuple[str, str] | None = None,
     roundup: bool = False,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> str:
     # No topics: the recap model writes them and nothing verifies them, so a name taken from a
     # topic would be a name the evidence does not back. The captions said around each claim are
@@ -482,6 +485,17 @@ def build_prompt(
         "News value, strongest first (the lead should rest on the first of these that the story "
         "cites): " + ", ".join(order) + ".",
     ]
+    if people is not None:
+        parts.append(
+            "PERSON NAMES (the records' spellings): when a claim or its captions name a person, "
+            "print the record's spelling from this list, never the captions' spelling. A person "
+            "not on this list is not named: use the role instead (a council member, town staff, "
+            "a resident).\n"
+            + "\n".join(
+                f"- {person.name} — {person.role} ({person.source})"
+                for person in people.persons[:60]
+            )
+        )
     if editor is not None:
         parts.append(EDITOR_PROMPT.format(note=editor[0].strip(), draft=editor[1].strip()))
     if feedback.strip():
@@ -614,13 +628,21 @@ def write_article(
     editor: tuple[str, str] | None = None,
     roundup: bool = False,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> Article:
     """``editor`` is (the editor's note, the draft it is about), for a redraft from the desk."""
     shown = pick_pages(recap, pages, windows) if pages else None
     return parse_article(
         complete(
             build_prompt(
-                recap, feedback, windows, shown, editor, roundup=roundup, speakers=speakers
+                recap,
+                feedback,
+                windows,
+                shown,
+                editor,
+                roundup=roundup,
+                speakers=speakers,
+                people=people,
             )
         )
     )
@@ -667,6 +689,7 @@ def _check_text(
     page_ids: tuple[str, ...] = (),
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> None:
     known = {c.id: c for c in recap.claims}
     for claim_id in claim_ids:
@@ -692,6 +715,8 @@ def _check_text(
     for name in _names(text):
         if name.lower() not in allowed_words:
             issues.append(Issue(where, "name", f"name {name!r} is not in the cited claims"))
+    for code, message in name_issues(text, people):
+        issues.append(Issue(where, code, message))
 
 
 def _vote_text(vote: Vote) -> str:
@@ -705,12 +730,57 @@ def _check_vote(
     issues: list[Issue],
     windows,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> None:
     if not vote.motion or not vote.result:
         issues.append(Issue(where, "format", "a vote needs a motion and a result"))
+    if _vote_has_no_subject(vote):
+        issues.append(
+            Issue(
+                where,
+                "no_subject",
+                "a vote must say what was voted on; drop the line when the record gives no subject",
+            )
+        )
     _check_text(
-        where, _vote_text(vote), (vote.claim_id,), recap, issues, windows, speakers=speakers
+        where,
+        _vote_text(vote),
+        (vote.claim_id,),
+        recap,
+        issues,
+        windows,
+        speakers=speakers,
+        people=people,
     )
+
+
+#: Words a vote line may use without naming what was voted on.
+_RESULT_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "motion",
+        "received",
+        "second",
+        "and",
+        "passed",
+        "passes",
+        "carried",
+        "failed",
+        "unanimously",
+        "unanimous",
+        "was",
+        "approved",
+    }
+)
+
+
+def _vote_has_no_subject(vote: Vote) -> bool:
+    words = re.findall(r"[a-z]+", vote.motion.lower())
+    if not words:
+        return True
+    return all(word in _RESULT_WORDS for word in words)
 
 
 def _check_quote(
@@ -720,6 +790,7 @@ def _check_quote(
     issues: list[Issue],
     windows,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> None:
     claim = recap.claim(quote.claim_id)
     if claim is None:
@@ -727,7 +798,16 @@ def _check_quote(
         return
     if not claim.quote.strip():
         issues.append(Issue(where, "no_quote", f"claim {claim.id} has no quote"))
-    _check_text(where, quote.speaker, (quote.claim_id,), recap, issues, windows, speakers=speakers)
+    _check_text(
+        where,
+        quote.speaker,
+        (quote.claim_id,),
+        recap,
+        issues,
+        windows,
+        speakers=speakers,
+        people=people,
+    )
 
 
 def check_article(
@@ -736,6 +816,7 @@ def check_article(
     windows: dict[str, str] | None = None,
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> ArticleReport:
     report = ArticleReport(article=article)
     issues = report.issues
@@ -755,6 +836,7 @@ def check_article(
                 paragraph.page_ids,
                 pages,
                 speakers,
+                people,
             )
             section_ids.update(dict.fromkeys(paragraph.claim_ids))
             section_pages.update(dict.fromkeys(paragraph.page_ids))
@@ -769,17 +851,29 @@ def check_article(
                 tuple(section_pages),
                 pages,
                 speakers,
+                people,
             )
     cited, cited_pages = article.cited, article.cited_pages
     _check_text(
-        "headline", article.headline, cited, recap, issues, windows, cited_pages, pages, speakers
+        "headline",
+        article.headline,
+        cited,
+        recap,
+        issues,
+        windows,
+        cited_pages,
+        pages,
+        speakers,
+        people,
     )
     if article.dek:
-        _check_text("dek", article.dek, cited, recap, issues, windows, cited_pages, pages, speakers)
+        _check_text(
+            "dek", article.dek, cited, recap, issues, windows, cited_pages, pages, speakers, people
+        )
     for v_no, vote in enumerate(article.votes, 1):
-        _check_vote(f"vote {v_no}", vote, recap, issues, windows, speakers)
+        _check_vote(f"vote {v_no}", vote, recap, issues, windows, speakers, people)
     for q_no, quote in enumerate(article.quotes, 1):
-        _check_quote(f"quote {q_no}", quote, recap, issues, windows, speakers)
+        _check_quote(f"quote {q_no}", quote, recap, issues, windows, speakers, people)
     return report
 
 
@@ -804,13 +898,14 @@ def drop_unsupported(
     windows: dict[str, str] | None = None,
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
+    people: People | None = None,
 ) -> tuple[Article, Dropped]:
     """Remove the parts that fail the check. The headline is kept as it is."""
     dropped = Dropped()
 
     def fails(where: str, text: str, ids: tuple[str, ...], page_ids: tuple[str, ...]) -> bool:
         issues: list[Issue] = []
-        _check_text(where, text, ids, recap, issues, windows, page_ids, pages, speakers)
+        _check_text(where, text, ids, recap, issues, windows, page_ids, pages, speakers, people)
         return bool(issues)
 
     sections = []
@@ -837,17 +932,53 @@ def drop_unsupported(
     votes, quotes = [], []
     for vote in out.votes:
         issues: list[Issue] = []
-        _check_vote("vote", vote, recap, issues, windows, speakers)
+        _check_vote("vote", vote, recap, issues, windows, speakers, people)
         (dropped.votes if issues else votes).append(vote)
     for quote in out.quotes:
         issues = []
-        _check_quote("quote", quote, recap, issues, windows, speakers)
+        _check_quote("quote", quote, recap, issues, windows, speakers, people)
         (dropped.quotes if issues else quotes).append(quote)
     return replace(out, votes=tuple(votes), quotes=tuple(quotes)), dropped
 
 
 #: A story with fewer words than this is too thin for a meeting that had this much news.
-MIN_STORY_WORDS = 350
+MIN_STORY_WORDS = 450
+
+#: A heading about an announcement, event or reminder gets no section of its own.
+_ANNOUNCEMENT_RE = re.compile(
+    r"\b(announcement|reminder|cemetery|tombstone|tour|holiday|celebration|recognition|"
+    r"volunteer|event|ballot|deadline)\b",
+    re.IGNORECASE,
+)
+_ALSO_HEADINGS = frozenset({"also on the agenda", "also this week"})
+
+
+def merge_announcements(article: Article, roundup: bool = False) -> tuple[Article, list[str]]:
+    """Move announcement sections into the one "Also..." section that ends the story.
+
+    Tours, event dates, holiday programs and reminders are not a section of their own. The
+    paragraphs keep their claims and order; the writer only loses the headings.
+    """
+    kept: list[Section] = []
+    moved: list[Paragraph] = []
+    also_at: int | None = None
+    for section in article.sections:
+        heading = (section.heading or "").strip().lower()
+        if section.heading and heading not in _ALSO_HEADINGS and _ANNOUNCEMENT_RE.search(heading):
+            moved.extend(section.paragraphs)
+            continue
+        if heading in _ALSO_HEADINGS:
+            also_at = len(kept)
+        kept.append(section)
+    if not moved:
+        return article, []
+    changes = [f"moved {len(moved)} announcement paragraph(s) into the Also section"]
+    if also_at is None:
+        kept.append(Section("Also this week" if roundup else "Also on the agenda", tuple(moved)))
+    else:
+        target = kept[also_at]
+        kept[also_at] = replace(target, paragraphs=target.paragraphs + tuple(moved))
+    return replace(article, sections=tuple(kept)), changes
 
 
 def story_words(article: Article) -> int:
@@ -861,10 +992,21 @@ def story_too_short(recap: Recap, article: Article) -> bool:
 
 
 def video_link(recap: Recap, timestamp: str) -> str:
-    """The moment in the meeting video; a weekly roundup has no one video, so no link."""
+    """The moment in the meeting video; a weekly roundup has no one video, so no link.
+
+    A meeting recorded outside YouTube (CivicClerk, eScribe, Vimeo) has an id that is not a
+    YouTube id. Its ``media_url`` is the real media, and the browser plays it at ``#t=``
+    seconds. Without one there is no working time link, so no link is made: a
+    ``youtube.com/watch?v=civicclerk-...`` address is always dead.
+    """
     if recap.video_id == "roundup":
         return ""
-    return f"https://www.youtube.com/watch?v={recap.video_id}&t={seconds_of(timestamp)}s"
+    seconds = seconds_of(timestamp)
+    if recap.media_url:
+        return f"{recap.media_url}#t={seconds}"
+    if re.match(r"^civicclerk-|^[a-z]+-[a-z]+-\d+$", recap.video_id):
+        return ""
+    return f"https://www.youtube.com/watch?v={recap.video_id}&t={seconds}s"
 
 
 def citations(recap: Recap, paragraph: Paragraph) -> list[dict[str, str]]:
@@ -900,8 +1042,29 @@ def note_for(article: Article) -> str:
     return NOTE_DOCUMENTS if article.cited_pages else NOTE
 
 
+def quote_words(recap: Recap, quote: Quote, people: People | None = None) -> str:
+    """The claim's verbatim words, with a mangled name set to the record's spelling.
+
+    A quote is the record's own words, but a name in it came through the same speech-to-text as
+    the rest. It is repaired like every other printed name; the words are otherwise unchanged.
+    """
+    claim = recap.claim(quote.claim_id)
+    if claim is None:
+        return ""
+    text = claim.quote
+    # Only a name that matches the record is changed. A place the record does not print here
+    # ("Rock Creek village") stays as the speaker said it; a role in place of it would rewrite
+    # the quote into something nobody said.
+    for wrong, right in fixes(text, people):
+        text = text.replace(wrong, right)
+    return text
+
+
 def site_article(
-    recap: Recap, article: Article, pages: dict[str, DocPage] | None = None
+    recap: Recap,
+    article: Article,
+    pages: dict[str, DocPage] | None = None,
+    people: People | None = None,
 ) -> dict[str, Any]:
     """The story in the site's episode format: cites are claim positions and start times.
 
@@ -954,7 +1117,11 @@ def site_article(
             for v in article.votes
         ],
         "quotes": [
-            {"text": claim_of(q.claim_id).quote, "speaker": q.speaker, "start_s": start(q.claim_id)}
+            {
+                "text": quote_words(recap, q, people),
+                "speaker": q.speaker,
+                "start_s": start(q.claim_id),
+            }
             for q in article.quotes
         ],
         "topics": [],
@@ -981,7 +1148,12 @@ def published_dict(
     }
 
 
-def render_markdown(recap: Recap, article: Article, pages: dict[str, DocPage] | None = None) -> str:
+def render_markdown(
+    recap: Recap,
+    article: Article,
+    pages: dict[str, DocPage] | None = None,
+    people: People | None = None,
+) -> str:
     out = [f"# {article.headline}", ""]
     if article.dek:
         out += [f"**{article.dek}**", ""]
@@ -1006,20 +1178,32 @@ def render_markdown(recap: Recap, article: Article, pages: dict[str, DocPage] | 
         out += ["## Votes", ""]
         for vote in article.votes:
             claim = recap.claim(vote.claim_id)
-            link = f" ([{claim.timestamp}]({video_link(recap, claim.timestamp)}))" if claim else ""
+            link = ""
+            if claim is not None:
+                url = video_link(recap, claim.timestamp)
+                link = f" ([{claim.timestamp}]({url}))" if url else f" ({claim.timestamp})"
             tally = f" {vote.tally}" if vote.tally else ""
-            out.append(f"- {vote.motion}: {vote.result}{tally}{link}")
+            motion = vote.motion.rstrip(" .:;,")
+            result = vote.result.rstrip(" .:;,")
+            out.append(f"- {motion}: {result}{tally}{link}")
         out.append("")
     for quote in article.quotes:
         claim = recap.claim(quote.claim_id)
         if claim is not None:
-            out += [f'> "{claim.quote}" ({quote.speaker}, {claim.timestamp})', ""]
+            out += [
+                f'> "{quote_words(recap, quote, people)}" ({quote.speaker}, {claim.timestamp})',
+                "",
+            ]
     out.append(f"*{note_for(article)}*")
     return "\n".join(out) + "\n"
 
 
 def save_article(
-    recap: Recap, article: Article, out: Path, pages: dict[str, DocPage] | None = None
+    recap: Recap,
+    article: Article,
+    out: Path,
+    pages: dict[str, DocPage] | None = None,
+    people: People | None = None,
 ) -> tuple[Path, Path]:
     """Write ``article.json`` (with citations) and ``article.md`` next to it."""
     out = Path(out)
@@ -1030,7 +1214,7 @@ def save_article(
         json.dumps(published_dict(recap, article, pages), indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    md_path.write_text(render_markdown(recap, article, pages), encoding="utf-8")
+    md_path.write_text(render_markdown(recap, article, pages, people), encoding="utf-8")
     return json_path, md_path
 
 
