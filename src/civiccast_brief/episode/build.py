@@ -141,12 +141,24 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
     return f"{body}, {recap.meeting_date}"
 
 
+def _story_recap(meeting_dir: Path, recap: Recap) -> tuple[Recap, bool]:
+    """The recap the story's own CLAIMS AND SOURCES adds, when a skill run wrote one."""
+    path = meeting_dir / "story-recap.json"
+    if path.is_file():
+        try:
+            return load_recap(path), True
+        except (OSError, ValueError):
+            pass
+    return recap, False
+
+
 def _article(
     article_dir: Path,
     recap: Recap,
     data: dict[str, Any],
     segments: list[Any],
     documents: Path | None = None,
+    evidence: Recap | None = None,
 ) -> dict[str, Any]:
     """The published story for the episode, in the site's format, checked once more.
 
@@ -169,10 +181,15 @@ def _article(
         windows = caption_windows(recap, segments) if segments else None
         pages = load_documents(documents) if documents and documents.exists() else None
         people = _people_of(documents.parent if documents else None, documents)
-        report = check_article(recap, article, windows, pages, speakers, people)
+        if evidence is None:
+            evidence = recap
+        skill_evidence = evidence is not recap
+        report = check_article(
+            evidence, article, windows, pages, speakers, people, skill_evidence=skill_evidence
+        )
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
-        return site_article(recap, article, pages, people)
+        return site_article(evidence, article, pages, people)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
@@ -285,8 +302,9 @@ def assemble_story(
     recap, data = _meeting(meeting_dir)
     if recap.video_id == ROUNDUP_ID:
         raise EpisodeError("a roundup has no stand-alone story")
+    evidence, _ = _story_recap(meeting_dir, recap)
     segments = transcript_mod.from_json(data)
-    article = _article(article_dir, recap, data, segments, meeting_dir / "documents.json")
+    article = _article(article_dir, recap, data, segments, meeting_dir / "documents.json", evidence)
     meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
     published_at = str(meta.get("published_at") or "")
     return {
@@ -307,7 +325,7 @@ def assemble_story(
                     "timestamp": c.timestamp,
                     "quote": c.quote,
                 }
-                for c in recap.claims
+                for c in evidence.claims
             ]
         },
         "video_url": _video_url(data),
@@ -347,6 +365,7 @@ def assemble(
     if meta.get("status") not in ("published", "approved") or not published_at:
         raise EpisodeError(f"{item_dir} is not a published export")
     recap, data = _meeting(meeting_dir)
+    evidence, _ = _story_recap(meeting_dir, recap)
     script = load_script(script_json)
     _same("recap", (item_dir / "recap.txt").read_text(encoding="utf-8"), recap_text(recap))
     _same("script", (item_dir / "script.txt").read_text(encoding="utf-8"), render_txt(script))
@@ -379,7 +398,7 @@ def assemble(
                     "timestamp": c.timestamp,
                     "quote": c.quote,
                 }
-                for c in recap.claims
+                for c in evidence.claims
             ]
         },
         "script": render_txt([line for line in script if not line.is_chapter]),
@@ -415,7 +434,7 @@ def assemble(
     }
     if article_dir is not None:
         episode["article"] = _article(
-            article_dir, recap, data, segments, meeting_dir / "documents.json"
+            article_dir, recap, data, segments, meeting_dir / "documents.json", evidence
         )
     return episode
 

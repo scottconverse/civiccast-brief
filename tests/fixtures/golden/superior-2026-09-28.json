@@ -1,0 +1,80 @@
+{
+  "meeting": {
+    "id": "superior-2026-09-28",
+    "title": "Town Council Meeting",
+    "city": "Superior",
+    "date": "2026-09-28",
+    "recording": {"url": "https://cpmedia.azureedge.net/superiorco/631ca6ac3a.mp4"},
+    "roster_source": {"url": "cities/superior/rosters/town-council.json"}
+  },
+  "roster": [
+    {"name": "Mark Lacis", "role": "Mayor", "honorific": "Mayor", "caption_name_aliases": ["Lacis", "Mary Alicus"], "source": "minutes"},
+    {"name": "Jenn Kaaoush", "role": "Mayor Pro Tem", "honorific": "Mayor Pro Tem", "caption_name_aliases": ["Kaaoush", "Nair proton cowish"], "source": "minutes"},
+    {"name": "Heather Cracraft", "role": "Council Member", "honorific": "Council Member", "caption_name_aliases": ["Cracraft", "Craigcraft"], "source": "minutes"},
+    {"name": "Mike Foster", "role": "Council Member", "honorific": "Council Member", "caption_name_aliases": ["Foster"], "source": "minutes"},
+    {"name": "Stephanie Miller", "role": "Council Member", "honorific": "Council Member", "caption_name_aliases": ["Miller"], "source": "minutes"},
+    {"name": "Neal Shah", "role": "Council Member", "honorific": "Council Member", "caption_name_aliases": ["Shah", "Shaw"], "source": "minutes"}
+  ],
+  "facts": [
+    {
+      "kind": "motion",
+      "required": true,
+      "fact_source": "minutes",
+      "summary": "Second reading of an ordinance adopting by reference the 2024 International Fire Code",
+      "must_mention": ["International Fire Code"],
+      "evidence": [
+        {
+          "source": "minutes",
+          "quote": "Motion: Councill Member Mike Foster moved to Approve Ordinance 80 Adopting by Reference the 2024 Edition of the International Fire Code, seconded by Mayor Pro Tem Jenn Kaaoush.",
+          "page": 3,
+          "note": "Town Council Meeting Minutes, September 28, 2026, Public Hearing a."
+        }
+      ]
+    },
+    {
+      "kind": "mover",
+      "required": true,
+      "fact_source": "minutes",
+      "name_source": "roster",
+      "person": "Mike Foster",
+      "summary": "Mike Foster moved the fire code ordinance",
+      "evidence": [
+        {
+          "source": "minutes",
+          "quote": "Council Member Mike Foster moved to Approve Ordinance 80",
+          "page": 3
+        }
+      ]
+    },
+    {
+      "kind": "seconder",
+      "required": true,
+      "fact_source": "minutes",
+      "name_source": "roster",
+      "person": "Jenn Kaaoush",
+      "summary": "Jenn Kaaoush seconded the fire code ordinance",
+      "evidence": [
+        {
+          "source": "minutes",
+          "quote": "seconded by Mayor Pro Tem Jenn Kaaoush",
+          "page": 3
+        }
+      ]
+    },
+    {
+      "kind": "result",
+      "required": true,
+      "fact_source": "minutes",
+      "tally": "6-0",
+      "result": "carried",
+      "summary": "The fire code ordinance carried 6-0",
+      "evidence": [
+        {
+          "source": "minutes",
+          "quote": "Vote: . 6 - 0, Absent - 0",
+          "page": 3
+        }
+      ]
+    }
+  ]
+}

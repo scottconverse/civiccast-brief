@@ -34,7 +34,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.names import People, fixes, name_issues, seat_fixes, spans
+from civiccast_brief.article.names import (
+    People,
+    fixes,
+    name_issues,
+    person_issues,
+    seat_fixes,
+    spans,
+)
 from civiccast_brief.article.terms import Record, term_issues
 from civiccast_brief.script.checker import _claim_words, _proper_nouns, header_text
 from civiccast_brief.script.numbers import number_atoms
@@ -1044,6 +1051,7 @@ def _check_text(
     people: People | None = None,
     record: Record | None = None,
     spoken: bool = False,
+    skill_evidence: bool = False,
 ) -> None:
     known = {c.id: c for c in recap.claims}
     for claim_id in claim_ids:
@@ -1075,12 +1083,13 @@ def _check_text(
         if people is not None and people.match(name) is not None:
             continue
         issues.append(Issue(where, "name", f"name {name!r} is not in the cited claims"))
-    for code, message in name_issues(text, people):
+    person_check = person_issues if skill_evidence else name_issues
+    for code, message in person_check(text, people):
         issues.append(Issue(where, code, message))
     if record is not None:
         for code, message in term_issues(text, record):
             issues.append(Issue(where, code, message))
-    if not spoken:
+    if not spoken and not skill_evidence:
         _check_who(
             where,
             text,
@@ -1210,6 +1219,8 @@ def check_article(
     speakers: dict[str, str] | None = None,
     people: People | None = None,
     record: Record | None = None,
+    *,
+    skill_evidence: bool = False,
 ) -> ArticleReport:
     report = ArticleReport(article=article)
     issues = report.issues
@@ -1231,10 +1242,11 @@ def check_article(
                 speakers,
                 people,
                 record,
+                skill_evidence=skill_evidence,
             )
             section_ids.update(dict.fromkeys(paragraph.claim_ids))
             section_pages.update(dict.fromkeys(paragraph.page_ids))
-        if section.heading:
+        if section.heading and not skill_evidence:
             _check_text(
                 f"section {s_no} heading",
                 section.heading,
@@ -1247,6 +1259,7 @@ def check_article(
                 speakers,
                 people,
                 record,
+                skill_evidence=skill_evidence,
             )
     cited, cited_pages = article.cited, article.cited_pages
     _check_text(
@@ -1261,6 +1274,7 @@ def check_article(
         speakers,
         people,
         record,
+        skill_evidence=skill_evidence,
     )
     if article.dek:
         _check_text(
@@ -1275,26 +1289,31 @@ def check_article(
             speakers,
             people,
             record,
+            skill_evidence=skill_evidence,
         )
     for v_no, vote in enumerate(article.votes, 1):
         _check_vote(f"vote {v_no}", vote, recap, issues, windows, speakers, people, record)
     for q_no, quote in enumerate(article.quotes, 1):
         _check_quote(f"quote {q_no}", quote, recap, issues, windows, speakers, people, record)
-    issues.extend(headline_issues(recap, article.headline, recap.video_id == "roundup"))
-    news = top_news(recap)
-    if news is not None and article.paragraphs:
-        lead = article.paragraphs[0]
-        claim = recap.claim(news)
-        # The lead must both cite and state the news: a paragraph that thanks the mayor may
-        # list the resignation's claim and still bury it.
-        if news not in lead.claim_ids or not headline_names_news(lead.text, claim):
-            issues.append(
-                Issue(
-                    "lead",
-                    "news_lead",
-                    f"the lead must state the biggest news (claim {news}: {claim.text[:120]})",
+    if not skill_evidence:
+        # A meeting story written by the report-local-news skill carries its own claims and
+        # news judgment; its evidence check is the claim-by-claim block, not this desk's
+        # news order.
+        issues.extend(headline_issues(recap, article.headline, recap.video_id == "roundup"))
+        news = top_news(recap)
+        if news is not None and article.paragraphs:
+            lead = article.paragraphs[0]
+            claim = recap.claim(news)
+            # The lead must both cite and state the news: a paragraph that thanks the mayor
+            # may list the resignation's claim and still bury it.
+            if news not in lead.claim_ids or not headline_names_news(lead.text, claim):
+                issues.append(
+                    Issue(
+                        "lead",
+                        "news_lead",
+                        f"the lead must state the biggest news (claim {news}: {claim.text[:120]})",
+                    )
                 )
-            )
     return report
 
 
@@ -1329,6 +1348,8 @@ def drop_unsupported(
     speakers: dict[str, str] | None = None,
     people: People | None = None,
     record: Record | None = None,
+    *,
+    skill_evidence: bool = False,
 ) -> tuple[Article, Dropped]:
     """Remove the parts that fail the check. The headline is kept as it is."""
     dropped = Dropped()
@@ -1347,6 +1368,7 @@ def drop_unsupported(
             speakers,
             people,
             record,
+            skill_evidence=skill_evidence,
         )
         return bool(issues)
 

@@ -323,3 +323,11 @@ def test_the_captions_other_mayor_pro_tem_spellings_are_named() -> None:
     out, _ = fill_roll_call_names("Merry proton cowish. Nair, proton, cowish.", PEOPLE)
     assert "cowish" not in out.lower()
     assert out.count("Mayor Pro Tem Jenn Kaaoush") == 2
+
+
+def test_person_issues_catches_a_member_spelling_and_leaves_a_place_alone() -> None:
+    from civiccast_brief.article.names import person_issues
+
+    issues = person_issues("Council Member Craigcraft toured the Community Center.", PEOPLE)
+    assert any("Craigcraft" in message for _, message in issues)
+    assert not any("Community Center" in message for _, message in issues)

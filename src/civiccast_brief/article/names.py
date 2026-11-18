@@ -591,6 +591,47 @@ def name_issues(text: str, people: People | None) -> list[tuple[str, str]]:
     return out
 
 
+def person_issues(text: str, people: People | None) -> list[tuple[str, str]]:
+    """(code, message) for each *member or staff* name the record does not print as written.
+
+    The skill's story carries its own claim-by-claim record, and most capitalised runs in a
+    meeting story are places, boards, companies and events ("Community Center", "Superior
+    Elementary"). This gate is therefore limited to the people the meeting's roster and
+    documents name: a span is judged only when its surname is that person's surname (exactly
+    or by the phonetic skeleton), so a caption spelling ("Craigcraft") is caught and an
+    organisation ("Northwest Mayors Coalition") is left to the story's own check.
+    """
+    if people is None or not people.persons:
+        return []
+    out: list[tuple[str, str]] = []
+    for span in spans(text):
+        tokens = _tokens(span.name)
+        if not tokens:
+            continue
+        surname = tokens[-1].casefold()
+        person = people.match(span.name, span.role)
+        if person is None:
+            continue
+        known = {_skeleton(part.casefold()) for part in person.last.split()} | {
+            _normal(person.last)
+        }
+        if _skeleton(surname) not in known and _normal(surname) != _normal(person.last):
+            continue
+        if people.verbatim(span.name):
+            continue
+        if _tokens(span.name) != _tokens(person.name):
+            out.append(
+                (
+                    "name_spelling",
+                    (
+                        f"name {span.name!r} must be printed as the record prints it: "
+                        f"{person.name!r} ({person.source})"
+                    ),
+                )
+            )
+    return out
+
+
 def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
     """The (printed, record) name pairs a text needs, for a display-time replacement.
 
