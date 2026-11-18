@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.names import People, fixes, load_people
+from civiccast_brief.article.names import People, fixes, load_people, seat_fixes
 from civiccast_brief.article.title import check_title, load_title, render_issues
 from civiccast_brief.article.writer import (
     ArticleFormatError,
@@ -141,12 +141,24 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
     return f"{body}, {recap.meeting_date}"
 
 
+def _story_recap(meeting_dir: Path, recap: Recap) -> tuple[Recap, bool]:
+    """The recap the story's own CLAIMS AND SOURCES adds, when a skill run wrote one."""
+    path = meeting_dir / "story-recap.json"
+    if path.is_file():
+        try:
+            return load_recap(path), True
+        except (OSError, ValueError):
+            pass
+    return recap, False
+
+
 def _article(
     article_dir: Path,
     recap: Recap,
     data: dict[str, Any],
     segments: list[Any],
     documents: Path | None = None,
+    evidence: Recap | None = None,
 ) -> dict[str, Any]:
     """The published story for the episode, in the site's format, checked once more.
 
@@ -169,10 +181,15 @@ def _article(
         windows = caption_windows(recap, segments) if segments else None
         pages = load_documents(documents) if documents and documents.exists() else None
         people = _people_of(documents.parent if documents else None, documents)
-        report = check_article(recap, article, windows, pages, speakers, people)
+        if evidence is None:
+            evidence = recap
+        skill_evidence = evidence is not recap
+        report = check_article(
+            evidence, article, windows, pages, speakers, people, skill_evidence=skill_evidence
+        )
         if not report.passed:
             raise EpisodeError(f"{article_dir} fails the check:\n{report.render()}")
-        return site_article(recap, article, pages, people)
+        return site_article(evidence, article, pages, people)
     except ArticleFormatError as exc:
         raise EpisodeError(f"{article_dir}: {exc}") from exc
 
@@ -227,16 +244,25 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
     return load_people(rosters, pages, str(documents) if documents else "")
 
 
-def _name_fixes(recap: Recap, people: People) -> list[dict[str, str]]:
-    """The speech-to-text -> record name pairs for the recap the site prints beside a story.
+def _name_fixes(
+    recap: Recap, people: People, transcript_texts: list[str] | tuple[str, ...] = ()
+) -> list[dict[str, str]]:
+    """The speech-to-text -> record name pairs for the recap and transcript the site prints.
 
-    The raw transcript is left as the speech program wrote it: it is the record of what was
-    heard, and guessing at every capitalised phrase in free text would rewrite it wrongly.
+    A name the site prints in the recap, a quote or a transcript page is set to the record's
+    spelling. The correction is the names.py rule: a surname that matches the record (by sound
+    or spelling, and by the printed seat or title) is certain; a phrase the record does not hold
+    is left as the transcript has it, because guessing at every capitalised phrase in free text
+    would rewrite the record wrongly.
     """
     pairs: list[tuple[str, str]] = []
     for claim in recap.claims:
-        pairs += fixes(claim.text, people)
-        pairs += fixes(claim.quote, people)
+        for text in (claim.text, claim.quote):
+            pairs += seat_fixes(text, people)
+            pairs += fixes(text, people)
+    for text in transcript_texts:
+        pairs += seat_fixes(text, people)
+        pairs += fixes(text, people)
     out: list[dict[str, str]] = []
     seen: set[str] = set()
     for wrong, right in pairs:
@@ -276,8 +302,9 @@ def assemble_story(
     recap, data = _meeting(meeting_dir)
     if recap.video_id == ROUNDUP_ID:
         raise EpisodeError("a roundup has no stand-alone story")
+    evidence, _ = _story_recap(meeting_dir, recap)
     segments = transcript_mod.from_json(data)
-    article = _article(article_dir, recap, data, segments, meeting_dir / "documents.json")
+    article = _article(article_dir, recap, data, segments, meeting_dir / "documents.json", evidence)
     meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
     published_at = str(meta.get("published_at") or "")
     return {
@@ -298,13 +325,17 @@ def assemble_story(
                     "timestamp": c.timestamp,
                     "quote": c.quote,
                 }
-                for c in recap.claims
+                for c in evidence.claims
             ]
         },
         "video_url": _video_url(data),
         "media_url": _media_url(data),
         "article": article,
-        "name_fixes": _name_fixes(recap, _people_of(meeting_dir, meeting_dir / "documents.json")),
+        "name_fixes": _name_fixes(
+            recap,
+            _people_of(meeting_dir, meeting_dir / "documents.json"),
+            [s.text for s in segments],
+        ),
     }
 
 
@@ -334,6 +365,7 @@ def assemble(
     if meta.get("status") not in ("published", "approved") or not published_at:
         raise EpisodeError(f"{item_dir} is not a published export")
     recap, data = _meeting(meeting_dir)
+    evidence, _ = _story_recap(meeting_dir, recap)
     script = load_script(script_json)
     _same("recap", (item_dir / "recap.txt").read_text(encoding="utf-8"), recap_text(recap))
     _same("script", (item_dir / "script.txt").read_text(encoding="utf-8"), render_txt(script))
@@ -366,7 +398,7 @@ def assemble(
                     "timestamp": c.timestamp,
                     "quote": c.quote,
                 }
-                for c in recap.claims
+                for c in evidence.claims
             ]
         },
         "script": render_txt([line for line in script if not line.is_chapter]),
@@ -386,6 +418,7 @@ def assemble(
         "name_fixes": _name_fixes(
             recap,
             _people_of(meeting_dir, meeting_dir / "documents.json", roundup),
+            [] if roundup else [s.text for s in segments],
         ),
         "transcript": None
         if roundup
@@ -401,7 +434,7 @@ def assemble(
     }
     if article_dir is not None:
         episode["article"] = _article(
-            article_dir, recap, data, segments, meeting_dir / "documents.json"
+            article_dir, recap, data, segments, meeting_dir / "documents.json", evidence
         )
     return episode
 

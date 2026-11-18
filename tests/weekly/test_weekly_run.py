@@ -94,10 +94,15 @@ class Fake:
 
     def article(self, argv):
         self.calls.append(("article", list(argv)))
-        if argv[0] == "write":
+        if argv[0] in ("write", "skill", "from-stories"):
             out = Path(_opt(argv, "--out"))
             if not self._failing("article"):
                 out.with_suffix(".json").write_text("{}", encoding="utf-8")
+                if argv[0] != "write":
+                    # The skill writes the evidence its story rests on beside the meeting.
+                    Path(_opt(argv, "--recap")).with_name("story-recap.json").write_text(
+                        "{}", encoding="utf-8"
+                    )
                 return 0
             return 1
         return 0
@@ -163,7 +168,7 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
         ("meeting", "run"),
         ("script", "write"),
         ("episode", "stage"),
-        ("article", "write"),
+        ("article", "skill"),
         ("article", "stage"),
     ]
     run_argv = fake.calls[0][1]
@@ -266,11 +271,11 @@ def test_a_failed_story_does_not_redo_the_steps_before_it(tmp_path):
     fake = Fake(fail={"article": 1})
     report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
     assert report.failed == 1
-    assert "failed: article write failed (no story was written)" in report.lines[0]
+    assert "failed: article skill failed (no story was written)" in report.lines[0]
 
     rerun = Fake()
     run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
-    assert rerun.names() == [("article", "write"), ("article", "stage")]
+    assert rerun.names() == [("article", "skill"), ("article", "stage")]
 
 
 def test_meetings_that_cannot_run_are_listed_and_run_nothing(tmp_path):
@@ -308,7 +313,7 @@ def test_two_meetings_make_a_roundup_with_their_recaps_in_date_order(tmp_path):
         ("script", "roundup"),
         ("script", "write"),
         ("article", "title"),
-        ("article", "write"),
+        ("article", "from-stories"),
         ("article", "stage"),
         ("episode", "stage"),
     ]
@@ -419,8 +424,11 @@ def test_the_meetings_documents_are_written_passed_to_the_story_and_reported(tmp
     # Fetched once; the rerun after the failed story does not ask the portal again.
     assert asked == [1]
     articles = [argv for step, argv in fake.calls if step == "article"]
-    assert [a[0] for a in articles] == ["write", "write", "stage"]
+    assert [a[0] for a in articles] == ["skill", "skill", "stage"]
     assert all(_opt(a, "--documents") == str(written) for a in articles)
+    # The stage check needs the roster, as the write check does: without it a seat is named
+    # from the packet's surname alone and the printed name is repaired twice.
+    assert all(_opt(a, "--city") == str(settings.city) for a in articles)
     assert report.lines[:3] == [
         "2026-11-03 City Council Regular Session: done",
         "2026-11-03 City Council Regular Session: packet: 38 pages",
@@ -873,7 +881,7 @@ def test_the_roundup_gets_a_written_article_and_its_episode_is_built_with_it(tmp
         argv
         for step, argv in fake.calls
         if step == "article"
-        and argv[0] == "write"
+        and argv[0] == "from-stories"
         and _opt(argv, "--out").startswith(str(roundup_folder))
     ]
     assert written and _opt(written[0], "--recap") == str(roundup_folder / "recap.json")

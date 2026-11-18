@@ -1,0 +1,10 @@
+{
+  "name": "report-local-news",
+  "version": "3.1",
+  "source": "townreporter-web/report-local-news",
+  "ported": "2026-11-18",
+  "files": {
+    "SKILL.md": "5e1bf92117f29ad292c69dbc434c4a84fce18e9da0e30859a17fed7a64867c3d",
+    "scripts/audit.py": "1bf0d7a39e204fb60cabf97bcd2313c51a7e8e4b2a3294e16abae7c03a2ddbac"
+  }
+}

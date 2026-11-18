@@ -34,7 +34,15 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.names import People, fixes, name_issues
+from civiccast_brief.article.names import (
+    People,
+    fixes,
+    name_issues,
+    person_issues,
+    seat_fixes,
+    spans,
+)
+from civiccast_brief.article.terms import Record, term_issues
 from civiccast_brief.script.checker import _claim_words, _proper_nouns, header_text
 from civiccast_brief.script.numbers import number_atoms
 from civiccast_brief.script.recap import Recap, seconds_of
@@ -61,6 +69,12 @@ _ONE_SPEAKER_RE = re.compile(r"\b[Oo]ne (?=(?:speaker|resident|commenter)\b)")
 #: Common words that start a news sentence. Capitalised there, they are not names.
 ARTICLE_OPENERS = frozenset(
     [
+        "asked",
+        "answering",
+        "responding",
+        "speaking",
+        "according",
+        "citing",
         "also",
         "later",
         "earlier",
@@ -109,6 +123,45 @@ WINDOW_BEFORE = 20
 WINDOW_AFTER = 60
 
 
+#: A month written short is not a person: "met Oct. 26" is a date.
+_SHORT_MONTHS = frozenset(
+    {"jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"}
+)
+
+
+#: A street name the story spells out where the record abbreviates it ("High Plains Dr.").
+_STREET_WORDS = {
+    "drive": "dr",
+    "street": "st",
+    "avenue": "ave",
+    "boulevard": "blvd",
+    "road": "rd",
+    "lane": "ln",
+    "court": "ct",
+    "parkway": "pkwy",
+    "place": "pl",
+    "circle": "cir",
+}
+
+
+def _rounded_from(missing: str, allowed: set[str]) -> bool:
+    """Whether a round figure ("$41.3 million") is a cited amount ($41,321,246) rounded.
+
+    Only amounts of a million or more, rounded to at least the ten-thousands: a story may
+    round a budget, never a vote count or a small dollar figure.
+    """
+    if not missing.isdigit():
+        return False
+    value = int(missing)
+    zeros = len(missing) - len(missing.rstrip("0"))
+    if value < 1_000_000 or zeros < 4:
+        return False
+    step = 10**zeros
+    return any(
+        number.isdigit() and (int(number) + step // 2) // step * step == value for number in allowed
+    )
+
+
 def _names(text: str) -> list[str]:
     """Capitalised names in a text, after lowering a common word that starts a sentence."""
 
@@ -116,7 +169,11 @@ def _names(text: str) -> list[str]:
         word = match.group(2)
         return match.group(1) + (word.lower() if word.lower() in ARTICLE_OPENERS else word)
 
-    return _proper_nouns(_SENTENCE_START_RE.sub(lower, text))
+    return [
+        name
+        for name in _proper_nouns(_SENTENCE_START_RE.sub(lower, text))
+        if name.lower() not in _SHORT_MONTHS
+    ]
 
 
 class ArticleFormatError(ValueError):
@@ -283,10 +340,11 @@ NEWS JUDGMENT (this decides the order, not the agenda's):
 1. Lead with the most newsworthy thing in the meeting: a resignation, removal or vacancy; a vote on money (a budget, contract, fee, tax, purchase, grant), land (annexation, zoning, development) or a law (ordinance, resolution); a divided or contested vote; a decision that changes what residents must do; public outcry or a crowd at public comment.
 2. A routine consent agenda, the approval of minutes, a proclamation, an appointment or a meeting date is not the lead. Put those at the end in one short section headed "Also on the agenda".
 3. Within the lead, say what happened, who did it (the body and, when the record names them, the members), the vote if there was one, who voted how, the amount or date if there was one, and what happens next when a claim says it.
-4. Give context a reader needs from the meeting itself: what the item does, who spoke for and against it, and the numbers. Do not pad and do not repeat a fact to reach a length.
+4. Give context a reader needs from the meeting itself: what the item does, who spoke for and against it, and the numbers. Use every claim that adds news: each vote, figure, date, outcome, presenter point and point of public comment. Do not pad and do not repeat a fact to reach a length.
 5. A vote claim whose captions name the members in a roll call ("Neal Shah: Yes.") is written out: name each member and how they voted, and the tally. The captions are the record of the vote.
 6. Do not start sentence after sentence with "A speaker said". When the record gives no name, use the role the captions show (a resident during public comment, a business owner, town staff, the applicant, a council member) or fold the statement into its item ("The council heard that...", "Under the contract, ..."). "A speaker" belongs in a section at most once, and never twice in one paragraph.
-7. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also on the agenda". Never give them a section or a heading of their own.
+7. Announcements, event dates, tours, recognitions and reminders are not news: put the meeting's announcements in ONE sentence in one short paragraph under "Also on the agenda", never more. Never give them a section or a heading of their own. Never repeat an announcement, and never pass on words the captions garbled.
+8. Space, most important first: the news (a resignation, a money, land or law vote) > other votes and amounts > staff presentations with numbers > the substance of public comment > board or committee applicant interviews > announcements. A board or committee applicant interview gets at most one short paragraph saying who applied for which board and what the council did; do not report the applicant's opinions on other subjects (e-bikes, DEI, trails).
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -300,13 +358,15 @@ OUTPUT: one JSON object and nothing else, no code fence:
 - quotes: two to four claims whose quote is worth printing. The quote's words are taken from the claim, so give only its id and the speaker as the claim or its captions name them, else "A speaker".
 
 STYLE: plain news writing in the past tense, inverted pyramid: the most important facts first, the least important last. Use digits for numbers (6-1, $200,000, Ordinance 2026-69). Every paragraph is two to four full sentences; a one-sentence paragraph is too thin to publish. Write 8 to 14 paragraphs and roughly 600 to 900 words when the meeting has that much news, fewer only when it does not. Never repeat a fact. Spell boards, streets and items as the claims or captions do.
+
+WHO DID WHAT: never write "the same speaker", "that speaker" or "they also" to join two claims unless the claims carry the same "speaker" name; otherwise say who spoke for each claim. A recusal or conflict names a person or a seat ("the mayor", "Council Member Foster") only when the meeting documents say who recused; otherwise write "a council member recused" without a name. Do not give an official a gendered pronoun ("he", "she", "himself", "herself") unless the claim or its captions give it. Print a resolution or ordinance number and an item or company name exactly as the meeting documents print them; if the captions garble it, describe the item generically instead of copying the garble.
 """
 
 ROUNDUP_PROMPT = """You write the week's news story for a local news site, covering several public meetings of one town.
 
 FACTS: use only the claims listed at the end. Every fact, number, name, vote and date must come from a claim, and every claim's topic says which meeting it came from ("September 28, 2026: ..."). Add no causes, reasons, background or outside context. Do not invent who a speaker is: name a council or board member only when the claim or its captions name that person; otherwise use the role the record supports (someone resigning a council seat is "a council member", a presenter is "town staff", a public commenter is "a resident") or "a speaker". Never write "an unidentified speaker".
 
-NEWS JUDGMENT: this is one story about the week, not a list of meetings. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Announcements, event dates, tours, recognitions and reminders are not news: put them together in ONE short paragraph under "Also this week", never a section of their own. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section.
+NEWS JUDGMENT: this is one story about the week, not a list of meetings. Each claim's "meeting" field says which meeting it came from. Lead with the biggest news across all the meetings: a resignation, removal or vacancy; a vote on money, land or a law; a divided or contested vote; a decision that changes what residents must do; public outcry. Then the next most important news, then the routine items at the end in a short section headed "Also this week". Name the meeting (its date and body) each group of facts comes from, so a reader knows which meeting a fact belongs to. Do not pad and do not repeat a fact. Use every claim that adds news. Announcements, event dates, tours, recognitions and reminders are not news: the roundup's "Also this week" holds the week's real agenda items, not announcements. Put a real item once, and never pass on words the captions garbled. Do not start sentence after sentence with "A speaker said": use the role the captions show (a resident, a business owner, town staff, a council member), fold the statement into its item, and use "a speaker" at most once in a section. A board or committee applicant interview gets at most one short paragraph (who applied for which board, and the outcome), never its opinions on other subjects.
 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"headline": "...", "dek": "...",
@@ -320,27 +380,36 @@ OUTPUT: one JSON object and nothing else, no code fence:
 - quotes: two to four claims whose quote is worth printing, with the speaker as the claim or its captions name them, else "A speaker".
 
 STYLE: plain news writing in the past tense, inverted pyramid. Use digits for numbers. Two to four sentences per paragraph; 8 to 14 paragraphs and roughly 600 to 900 words when the week has that much news. Never repeat a fact.
+
+WHO DID WHAT: never write "the same speaker", "that speaker" or "they also" to join two claims unless the claims carry the same "speaker" name. A recusal or conflict names a person or a seat only when the meeting documents say who recused; otherwise write "a council member recused". Do not give an official a gendered pronoun unless the claim or its captions give it. Print a resolution or ordinance number and an item or company name exactly as the meeting documents print them; describe the item generically when the captions garble the name.
 """
 
+#: The act that makes a money, land or law claim the news. A claim that merely mentions a
+#: contract ("The Superior contract started in 2021") is background, not a decision.
+NEWS_ACTION_RE = re.compile(
+    r"\b(approv\w*|adopt\w*|pass\w*|carried|carries|mov(?:e|es|ed|ing)\s+to|vote[sd]?|"
+    r"authoriz\w*|deni\w*|reject\w*|resign\w*|announc\w*|second\w*)\b",
+    re.IGNORECASE,
+)
+_MONEY_LAND_LAW_RE = re.compile(
+    r"\b(budget|contract|fee|tax|levy|bond|purchase|grant|salary|rate|"
+    r"annex\w*|zon(?:e|ing)|rezon\w*|development|subdivision|ordinance|resolution|"
+    r"eminent domain|land|property|lease|agreement)\b|\$\s?\d",
+    re.IGNORECASE,
+)
+
 #: What makes a claim the lead, high to low. A resignation outranks any vote; a vote on money,
-#: land or a law outranks public comment; a routine consent item is last.
-NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str]], ...] = (
+#: land or a law outranks public comment; a routine consent item is last. A money, land or law
+#: claim scores 70 only when it states a decision, never for a passing mention.
+NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
     (
         100,
         re.compile(
-            r"\b(resign|resignation|resigned|step(?:s|ped)? down|vacan(?:t|cy)|withdraw|"
+            r"\b(resign|resignation|resigned|step(?:s|ped)? down|"
             r"removed from|expelled|recall)\b",
             re.IGNORECASE,
         ),
-    ),
-    (
-        70,
-        re.compile(
-            r"\b(budget|contract|fee|tax|levy|bond|purchase|grant|salary|rate|"
-            r"annex|zoning|rezoning|development|subdivision|ordinance|resolution|"
-            r"eminent domain|land|property|lease)\b|\$\s?\d",
-            re.IGNORECASE,
-        ),
+        False,
     ),
     (
         60,
@@ -349,18 +418,22 @@ NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str]], ...] = (
             r"protest|petition|packed|stood up|walked out)\b",
             re.IGNORECASE,
         ),
-    ),
-    (
-        35,
-        re.compile(r"\b(public comment|resident|speaker asked|asked the council)\b", re.IGNORECASE),
+        False,
     ),
     (
         0,
         re.compile(
-            r"\b(consent agenda|minutes|approve the agenda|roll call|proclamation|"
-            r"appointment|meeting schedule|adjourn)\b",
+            r"\b(consent agenda|minutes?|approve the agenda|roll[- ]call|proclamations?|"
+            r"appointments?|meeting schedule|adjourns?)\b",
             re.IGNORECASE,
         ),
+        False,
+    ),
+    (70, _MONEY_LAND_LAW_RE, True),
+    (
+        35,
+        re.compile(r"\b(public comment|resident|speaker asked|asked the council)\b", re.IGNORECASE),
+        False,
     ),
 )
 
@@ -369,9 +442,12 @@ def news_value(claim: Any) -> int:
     """How much of a lead a claim is: a resignation 100, a money/land/law vote 70, a contested
     vote 60, public comment 35, a routine item 0, anything else 10 (the highest match wins)."""
     text = " ".join(str(part or "") for part in (claim.topic, claim.text, claim.quote))
-    for weight, pattern in NEWS_WEIGHTS:
-        if pattern.search(text):
-            return weight
+    for weight, pattern, needs_action in NEWS_WEIGHTS:
+        if not pattern.search(text):
+            continue
+        if needs_action and not NEWS_ACTION_RE.search(text):
+            continue
+        return weight
     return 10
 
 
@@ -406,6 +482,227 @@ def lead_is_routine(recap: Recap, article: Article) -> str | None:
     if news_value(known[best]) >= LEAD_MIN_VALUE and best not in lead.claim_ids:
         return best
     return None
+
+
+def top_news(recap: Recap) -> str | None:
+    """The claim id of the meeting's biggest news: a resignation, else a money/land/law vote,
+    else a contested vote. None when the recap holds nothing that strong."""
+    for claim_id in news_order(recap):
+        claim = recap.claim(claim_id)
+        if claim is not None and news_value(claim) >= LEAD_MIN_VALUE:
+            return claim_id
+    return None
+
+
+#: Words too common in a meeting story to show that a headline names its news.
+_HEADLINE_STOP = frozenset(
+    {
+        "about",
+        "after",
+        "again",
+        "also",
+        "among",
+        "and",
+        "are",
+        "been",
+        "before",
+        "being",
+        "both",
+        "but",
+        "can",
+        "city",
+        "council",
+        "could",
+        "during",
+        "each",
+        "from",
+        "have",
+        "into",
+        "its",
+        "just",
+        "like",
+        "made",
+        "make",
+        "many",
+        "more",
+        "most",
+        "much",
+        "must",
+        "meeting",
+        "members",
+        "member",
+        "new",
+        "next",
+        "only",
+        "other",
+        "over",
+        "said",
+        "same",
+        "second",
+        "since",
+        "some",
+        "such",
+        "superior",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "town",
+        "under",
+        "until",
+        "very",
+        "vote",
+        "voted",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "will",
+        "with",
+        "would",
+        "unidentified",
+        "speaker",
+        "speakers",
+        "resident",
+        "residents",
+        "public",
+        "board",
+    }
+)
+
+
+def _news_terms(text: str) -> set[str]:
+    """The words that show what a claim's news is, cut to a rough stem ("resignation" -> "resig")."""
+    terms: set[str] = set()
+    for word in re.findall(r"[a-z]+", text.lower()):
+        if len(word) < 4 or word in _HEADLINE_STOP:
+            continue
+        terms.add(word[:5])
+    return terms
+
+
+def headline_names_news(headline: str, claim: Any) -> bool:
+    """Whether a headline states the claim's news in the claim's own words (roughly stemmed)."""
+    return bool(_news_terms(headline) & _news_terms(f"{claim.text} {claim.quote}"))
+
+
+#: A headline that starts like a claim label ("[October 12, 2026 meeting] ...") is not a headline.
+_CONTEXT_PREFIX_RE = re.compile(r"^\s*\[[^\]]*\]")
+#: Words a headline cannot end on: a cut at one of these stops mid-phrase.
+_CUT_ENDINGS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "of",
+        "to",
+        "from",
+        "and",
+        "or",
+        "for",
+        "with",
+        "at",
+        "in",
+        "on",
+        "by",
+        "as",
+        "its",
+        "that",
+        "this",
+        "these",
+        "those",
+        "is",
+        "was",
+        "were",
+        "be",
+        "been",
+        "about",
+        "over",
+        "under",
+        "into",
+        "onto",
+        "than",
+    }
+)
+
+
+def headline_form_issues(recap: Recap, headline: str) -> list[Issue]:
+    """Problems that make a headline a copied claim, a cut-off claim, or a meeting label."""
+    out: list[Issue] = []
+    text = headline.strip()
+    if not text:
+        return [Issue("headline", "empty", "a story needs a headline")]
+    if _CONTEXT_PREFIX_RE.match(text):
+        out.append(
+            Issue(
+                "headline",
+                "claim_label",
+                "a headline never starts with a meeting label; write the news as a newspaper would",
+            )
+        )
+    words = re.findall(r"[A-Za-z0-9$%.,'-]+", text)
+    if words and words[-1].lower().strip(",.;:") in _CUT_ENDINGS:
+        out.append(Issue("headline", "truncated", "the headline stops on a connecting word"))
+    bare = _normal_label(text)
+    bare_words = bare.split()
+    for claim in recap.claims:
+        claim_text = _normal_label(claim.text)
+        if not claim_text:
+            continue
+        if bare == claim_text:
+            out.append(
+                Issue(
+                    "headline",
+                    "raw_claim",
+                    f"the headline copies claim {claim.id}; write it as a news headline",
+                )
+            )
+            break
+        claim_words = claim_text.split()
+        if len(bare_words) >= 5 and claim_words[: len(bare_words)] == bare_words:
+            out.append(
+                Issue(
+                    "headline",
+                    "raw_claim",
+                    f"the headline is the opening of claim {claim.id}, cut short; write the news",
+                )
+            )
+            break
+    return out
+
+
+def headline_issues(recap: Recap, headline: str, roundup: bool = False) -> list[Issue]:
+    """Form problems, plus a headline that does not name the meeting's or week's biggest news."""
+    out = headline_form_issues(recap, headline)
+    news = top_news(recap)
+    if news is not None and not headline_names_news(headline.strip(), recap.claim(news)):
+        label = "the week's" if roundup else "the meeting's"
+        out.append(
+            Issue(
+                "headline",
+                "news_headline",
+                f"the headline must name {label} biggest news (claim {news}: "
+                f"{recap.claim(news).text[:120]})",
+            )
+        )
+    return out
+
+
+def _normal_label(text: str) -> str:
+    """A claim's text without its "[<date> meeting] " label and its "A speaker said" opener."""
+    stripped = re.sub(r"^\s*\[[^\]]*\]\s*", "", text)
+    stripped = _SPOKEN_PREFIX_RE.sub("", stripped).rstrip(" .,:;!?")
+    return " ".join(re.findall(r"[a-z0-9$%.]+", stripped.lower()))
 
 
 DOCUMENTS_PROMPT = """DOCUMENTS: the pages listed under "Document pages" are from the meeting's own documents (the agenda packet, the minutes). A paragraph may also rely on them: list the page ids it uses in "pages", for example {"text": "...", "claim_ids": ["c03"], "pages": ["d1p17"]}. Every paragraph still cites at least one claim, and the page must be about the same item as that claim. Use a page for the item's number, title, amounts and names, and for a vote as the minutes record it. Never cite a page for something it does not say.
@@ -465,7 +762,16 @@ def build_prompt(
     # verbatim meeting words, so they are shown and the check accepts them.
     claims: list[dict[str, str]] = []
     for c in recap.claims:
-        entry = {"id": c.id, "text": c.text}
+        text = c.text
+        entry: dict[str, str] = {"id": c.id, "text": text}
+        if roundup:
+            # The roundup's claims carry "[October 12, 2026 meeting] " so a reader of the claim
+            # list knows which meeting each came from. The model must never copy that label into
+            # the story or the headline; the date goes in a field of its own.
+            label = re.match(r"^\s*\[([^\]]*?)\s+meeting\]\s*", text)
+            if label:
+                entry["text"] = text[label.end() :]
+                entry["meeting"] = label.group(1)
         if windows and windows.get(c.id):
             entry["captions"] = windows[c.id]
         if speakers and speakers.get(c.id):
@@ -679,6 +985,139 @@ class ArticleReport:
         return "\n".join(out) + "\n"
 
 
+#: Ways a text joins a claim to a speaker the record has not joined it to.
+_SAME_SPEAKER_RE = re.compile(
+    r"\b(?:the|that)\s+same\s+(?:speaker|commenter|resident|person)\b"
+    r"|\b(?:they|he|she)\s+also\b",
+    re.IGNORECASE,
+)
+_SELF_PRONOUN_RE = re.compile(r"\b(himself|herself)\b", re.IGNORECASE)
+_SUBJECT_PRONOUN_RE = re.compile(r"\b(he|she|his|her)\b", re.IGNORECASE)
+_SEAT_RE = re.compile(r"\b(?:the\s+)?(mayor(?:\s+pro\s+tem)?|chair(?:person)?)\b", re.IGNORECASE)
+_NAMED_MEMBER_RE = re.compile(r"\b(?i:council\s*member)\s+([A-Z][\w'’-]+)")
+_RECUSAL_RE = re.compile(r"\brecus\w*|\bconflict\b", re.IGNORECASE)
+#: Acts a story may tie to a named person or seat only when the meeting's documents say who:
+#: a recusal, a resignation, and leaving office by not running again. The captions are
+#: unlabelled, so "Thanks, Mike" after a farewell speech does not say who resigned.
+PERSONAL_ACTS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("recused", _RECUSAL_RE),
+    ("resigned", re.compile(r"\bresign\w*|\bstep(?:s|ped|ping)?\s+down\b", re.IGNORECASE)),
+    (
+        "is not running again",
+        re.compile(
+            r"\bnot\s+(?:to\s+)?(?:run|running|seek|seeking)\b|\bwon't\s+run\b"
+            r"|\bnot\s+(?:to\s+)?stand\s+for\b|\bretir\w*",
+            re.IGNORECASE,
+        ),
+    ),
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+#: Words that end in a period without ending the sentence: "Nov. 12", "7 p.m. Nov. 3", "Mr. Lacis".
+_ABBREVIATION_END_RE = re.compile(
+    r"(?:\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Mr|Mrs|Ms|Dr|St|No|Co|Inc|Jr|Sr|vs)"
+    r"|\b[ap]\.m|\b[A-Z])\.$"
+)
+
+
+def split_sentences(text: str) -> list[str]:
+    """Sentences, never broken after an abbreviation or before a number or a lowercase word."""
+    out: list[str] = []
+    for piece in _SENTENCE_SPLIT_RE.split(text.strip()):
+        if not piece:
+            continue
+        if out and (_ABBREVIATION_END_RE.search(out[-1]) or re.match(r"[0-9a-z]", piece)):
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
+
+
+def _check_who(
+    where: str,
+    text: str,
+    claim_ids: tuple[str, ...],
+    issues: list[Issue],
+    *,
+    speakers: dict[str, str] | None,
+    sources: list[str],
+    record: Record | None,
+    people: People | None,
+) -> None:
+    """Reject a speaker link, a pronoun or a recusal the meeting record does not back.
+
+    "The same speaker also backed ..." joins two claims to one person. It passes only when the
+    record names the same speaker for every claim it cites. A gendered pronoun for an official
+    is printed only when the transcript or the documents give it. A recusal names the seat or
+    the person only when the documents' own minutes or packet name them; the captions' "mayor I
+    need to recuse myself" does not, and "Mike's still recused" does not either.
+    """
+    if _SAME_SPEAKER_RE.search(text):
+        named = [speakers.get(claim_id, "") for claim_id in claim_ids] if speakers else []
+        named = [name for name in named if name]
+        if len(named) != len(claim_ids) or len(set(named)) != 1:
+            issues.append(
+                Issue(
+                    where,
+                    "same_speaker",
+                    "the text joins claims to one speaker, but the claims are not all the "
+                    "record's same named speaker; say who spoke for each claim instead",
+                )
+            )
+    joined = " \n ".join(sources)
+    if record is not None:
+        joined = f"{joined}\n{record.text}"
+    for match in _SELF_PRONOUN_RE.finditer(text):
+        if match.group(0).lower() not in joined.lower():
+            issues.append(
+                Issue(
+                    where,
+                    "pronoun",
+                    f"the record does not give {match.group(0)!r} for this official; "
+                    "use the neutral role",
+                )
+            )
+    for sentence in split_sentences(text):
+        acts = [(act, pattern) for act, pattern in PERSONAL_ACTS if pattern.search(sentence)]
+        if not acts:
+            continue
+        if (
+            _SEAT_RE.search(sentence)
+            and _SUBJECT_PRONOUN_RE.search(sentence)
+            and not _SUBJECT_PRONOUN_RE.search(joined)
+        ):
+            issues.append(
+                Issue(
+                    where,
+                    "pronoun",
+                    "the record does not give the official's pronoun; use the neutral role",
+                )
+            )
+        labels = [match.group(1) for match in _SEAT_RE.finditer(sentence)]
+        labels += [match.group(1) for match in _NAMED_MEMBER_RE.finditer(sentence)]
+        if people is not None:
+            for span in spans(sentence):
+                if people.match(span.name, span.role) is not None:
+                    labels.append(span.name)
+        unbacked = [
+            (label, act)
+            for label in labels
+            for act, pattern in acts
+            if record is None
+            or not (record.recusal_backed(label) if act == "recused" else False)
+            and not record.act_backed(label, pattern)
+        ]
+        if unbacked:
+            label, act = unbacked[0]
+            issues.append(
+                Issue(
+                    where,
+                    "recusal_name" if act == "recused" else "act_name",
+                    f"the record does not say {label!r} {act}; "
+                    "write 'a council member' without naming the seat or person",
+                )
+            )
+
+
 def _check_text(
     where: str,
     text: str,
@@ -690,6 +1129,9 @@ def _check_text(
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
     people: People | None = None,
+    record: Record | None = None,
+    spoken: bool = False,
+    skill_evidence: bool = False,
 ) -> None:
     known = {c.id: c for c in recap.claims}
     for claim_id in claim_ids:
@@ -702,21 +1144,46 @@ def _check_text(
     if not cited:
         issues.append(Issue(where, "uncited", "states facts but cites no claim"))
         return
+    quoted = [known[c].quote for c in claim_ids if c in known]
     said = [windows[c] for c in claim_ids if windows and windows.get(c)]
     read = [pages[p].text for p in page_ids if pages and p in pages]
     said_by = [speakers[c] for c in claim_ids if speakers and speakers.get(c)]
-    sources = [*cited, *said, *said_by, *read, header_text(recap)]
+    sources = [*cited, *quoted, *said, *said_by, *read, header_text(recap)]
     allowed_numbers: set[str] = set()
     for source in sources:
         allowed_numbers |= number_atoms(source)
     for missing in sorted(number_atoms(_ONE_SPEAKER_RE.sub("", text)) - allowed_numbers):
+        if _rounded_from(missing, allowed_numbers):
+            continue
         issues.append(Issue(where, "number", f"number {missing} is not in the cited claims"))
     allowed_words = _claim_words(sources) | HOUSE_WORDS
     for name in _names(text):
-        if name.lower() not in allowed_words:
-            issues.append(Issue(where, "name", f"name {name!r} is not in the cited claims"))
-    for code, message in name_issues(text, people):
+        if name.lower() in allowed_words:
+            continue
+        if _STREET_WORDS.get(name.lower()) in allowed_words:
+            continue
+        # A repaired name is the record's spelling of a name the quote held: it is not in the
+        # claim's words, and it does not need to be.
+        if people is not None and people.match(name) is not None:
+            continue
+        issues.append(Issue(where, "name", f"name {name!r} is not in the cited claims"))
+    person_check = person_issues if skill_evidence else name_issues
+    for code, message in person_check(text, people):
         issues.append(Issue(where, code, message))
+    if record is not None:
+        for code, message in term_issues(text, record):
+            issues.append(Issue(where, code, message))
+    if not spoken:
+        _check_who(
+            where,
+            text,
+            claim_ids,
+            issues,
+            speakers=speakers,
+            sources=[*said, *read, *said_by],
+            record=record,
+            people=people,
+        )
 
 
 def _vote_text(vote: Vote) -> str:
@@ -731,6 +1198,7 @@ def _check_vote(
     windows,
     speakers: dict[str, str] | None = None,
     people: People | None = None,
+    record: Record | None = None,
 ) -> None:
     if not vote.motion or not vote.result:
         issues.append(Issue(where, "format", "a vote needs a motion and a result"))
@@ -751,6 +1219,7 @@ def _check_vote(
         windows,
         speakers=speakers,
         people=people,
+        record=record,
     )
 
 
@@ -791,6 +1260,7 @@ def _check_quote(
     windows,
     speakers: dict[str, str] | None = None,
     people: People | None = None,
+    record: Record | None = None,
 ) -> None:
     claim = recap.claim(quote.claim_id)
     if claim is None:
@@ -807,6 +1277,21 @@ def _check_quote(
         windows,
         speakers=speakers,
         people=people,
+        record=record,
+    )
+    # The words the story prints are the claim's quote, with its mangled names repaired. A name
+    # in the printed quote must be the record's too: a quote may not print "Craig Craft".
+    _check_text(
+        f"{where} words",
+        quote_words(recap, quote, people),
+        (quote.claim_id,),
+        recap,
+        issues,
+        windows,
+        speakers=speakers,
+        people=people,
+        record=record,
+        spoken=True,
     )
 
 
@@ -817,6 +1302,9 @@ def check_article(
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
     people: People | None = None,
+    record: Record | None = None,
+    *,
+    skill_evidence: bool = False,
 ) -> ArticleReport:
     report = ArticleReport(article=article)
     issues = report.issues
@@ -837,10 +1325,12 @@ def check_article(
                 pages,
                 speakers,
                 people,
+                record,
+                skill_evidence=skill_evidence,
             )
             section_ids.update(dict.fromkeys(paragraph.claim_ids))
             section_pages.update(dict.fromkeys(paragraph.page_ids))
-        if section.heading:
+        if section.heading and not skill_evidence:
             _check_text(
                 f"section {s_no} heading",
                 section.heading,
@@ -852,6 +1342,8 @@ def check_article(
                 pages,
                 speakers,
                 people,
+                record,
+                skill_evidence=skill_evidence,
             )
     cited, cited_pages = article.cited, article.cited_pages
     _check_text(
@@ -865,16 +1357,77 @@ def check_article(
         pages,
         speakers,
         people,
+        record,
+        skill_evidence=skill_evidence,
     )
     if article.dek:
         _check_text(
-            "dek", article.dek, cited, recap, issues, windows, cited_pages, pages, speakers, people
+            "dek",
+            article.dek,
+            cited,
+            recap,
+            issues,
+            windows,
+            cited_pages,
+            pages,
+            speakers,
+            people,
+            record,
+            skill_evidence=skill_evidence,
         )
     for v_no, vote in enumerate(article.votes, 1):
-        _check_vote(f"vote {v_no}", vote, recap, issues, windows, speakers, people)
+        _check_vote(f"vote {v_no}", vote, recap, issues, windows, speakers, people, record)
     for q_no, quote in enumerate(article.quotes, 1):
-        _check_quote(f"quote {q_no}", quote, recap, issues, windows, speakers, people)
+        _check_quote(f"quote {q_no}", quote, recap, issues, windows, speakers, people, record)
+    if not skill_evidence:
+        # A meeting story written by the report-local-news skill carries its own claims and
+        # news judgment; its evidence check is the claim-by-claim block, not this desk's
+        # news order.
+        issues.extend(headline_issues(recap, article.headline, recap.video_id == "roundup"))
+        news = top_news(recap)
+        if news is not None and article.paragraphs:
+            lead = article.paragraphs[0]
+            claim = recap.claim(news)
+            # The lead must both cite and state the news: a paragraph that thanks the mayor
+            # may list the resignation's claim and still bury it.
+            if news not in lead.claim_ids or not headline_names_news(lead.text, claim):
+                issues.append(
+                    Issue(
+                        "lead",
+                        "news_lead",
+                        f"the lead must state the biggest news (claim {news}: {claim.text[:120]})",
+                    )
+                )
+    else:
+        issue = skill_lead_issue(recap, article)
+        if issue is not None:
+            issues.append(issue)
     return report
+
+
+def skill_lead_issue(recap: Recap, article: Article) -> Issue | None:
+    """A skill-written story must put the meeting's biggest news in its headline, dek or lead.
+
+    The skill's paragraphs cite its own claims, not the recap's, so the test is on the words:
+    a resignation must be stated as one ("resign"), anything else in the claim's own terms.
+    """
+    news = top_news(recap)
+    if news is None or not article.paragraphs:
+        return None
+    claim = recap.claim(news)
+    top = f"{article.headline} {article.dek} {article.paragraphs[0].text}"
+    if news_value(claim) >= 100:
+        stated = bool(NEWS_WEIGHTS[0][1].search(top))
+    else:
+        stated = headline_names_news(top, claim)
+    if stated:
+        return None
+    return Issue(
+        "lead",
+        "news_lead",
+        "the headline, dek or first paragraph must state the meeting's biggest news "
+        f"(claim {news}: {claim.text[:160]})",
+    )
 
 
 @dataclass
@@ -883,13 +1436,23 @@ class Dropped:
     votes: list[Vote] = field(default_factory=list)
     quotes: list[Quote] = field(default_factory=list)
     texts: list[str] = field(default_factory=list)  # blanked headings and dek
+    sentences: list[str] = field(default_factory=list)  # cut from the end of a kept paragraph
 
     def lines(self) -> list[str]:
         out = [f"dropped paragraph: {p.text[:100]}" for p in self.paragraphs]
         out += [f"dropped vote: {_vote_text(v)[:100]}" for v in self.votes]
         out += [f"dropped quote: claim {q.claim_id}" for q in self.quotes]
         out += [f"blanked: {t[:100]}" for t in self.texts]
+        out += [f"dropped sentence: {t[:100]}" for t in self.sentences]
         return out
+
+
+#: Ways a claim says who spoke, which a headline does not need.
+_SPOKEN_PREFIX_RE = re.compile(
+    r"^(?:An?\s+(?:unidentified\s+)?speaker\s+said\s+|A\s+council\s+member\s+said\s+|"
+    r"The\s+council\s+heard\s+that\s+)",
+    re.IGNORECASE,
+)
 
 
 def drop_unsupported(
@@ -899,23 +1462,57 @@ def drop_unsupported(
     pages: dict[str, DocPage] | None = None,
     speakers: dict[str, str] | None = None,
     people: People | None = None,
+    record: Record | None = None,
+    *,
+    skill_evidence: bool = False,
 ) -> tuple[Article, Dropped]:
     """Remove the parts that fail the check. The headline is kept as it is."""
     dropped = Dropped()
 
     def fails(where: str, text: str, ids: tuple[str, ...], page_ids: tuple[str, ...]) -> bool:
         issues: list[Issue] = []
-        _check_text(where, text, ids, recap, issues, windows, page_ids, pages, speakers, people)
+        _check_text(
+            where,
+            text,
+            ids,
+            recap,
+            issues,
+            windows,
+            page_ids,
+            pages,
+            speakers,
+            people,
+            record,
+            skill_evidence=skill_evidence,
+        )
         return bool(issues)
 
     sections = []
     for section in article.sections:
         kept = []
         for paragraph in section.paragraphs:
-            if fails("paragraph", paragraph.text, paragraph.claim_ids, paragraph.page_ids):
-                dropped.paragraphs.append(paragraph)
-            else:
+            if not fails("paragraph", paragraph.text, paragraph.claim_ids, paragraph.page_ids):
                 kept.append(paragraph)
+                continue
+            # Keep the sentences up to the first one that fails: a later sentence that has no
+            # evidence must not take the sourced sentences before it down with it. Sentences
+            # after a failing one are dropped too, since they may lean on it.
+            sentences = split_sentences(paragraph.text)
+            good: list[str] = []
+            for sentence in sentences:
+                if fails("paragraph", sentence, paragraph.claim_ids, paragraph.page_ids):
+                    break
+                good.append(sentence)
+            whole = " ".join(good)
+            if (
+                good
+                and len(good) < len(sentences)
+                and not fails("paragraph", whole, paragraph.claim_ids, paragraph.page_ids)
+            ):
+                dropped.sentences.extend(sentences[len(good) :])
+                kept.append(replace(paragraph, text=whole))
+            else:
+                dropped.paragraphs.append(paragraph)
         if not kept:
             continue
         heading = section.heading
@@ -932,17 +1529,14 @@ def drop_unsupported(
     votes, quotes = [], []
     for vote in out.votes:
         issues: list[Issue] = []
-        _check_vote("vote", vote, recap, issues, windows, speakers, people)
+        _check_vote("vote", vote, recap, issues, windows, speakers, people, record)
         (dropped.votes if issues else votes).append(vote)
     for quote in out.quotes:
         issues = []
-        _check_quote("quote", quote, recap, issues, windows, speakers, people)
+        _check_quote("quote", quote, recap, issues, windows, speakers, people, record)
         (dropped.quotes if issues else quotes).append(quote)
     return replace(out, votes=tuple(votes), quotes=tuple(quotes)), dropped
 
-
-#: A story with fewer words than this is too thin for a meeting that had this much news.
-MIN_STORY_WORDS = 450
 
 #: A heading about an announcement, event or reminder gets no section of its own.
 _ANNOUNCEMENT_RE = re.compile(
@@ -981,14 +1575,147 @@ def merge_announcements(article: Article, roundup: bool = False) -> tuple[Articl
     return replace(article, sections=tuple(kept)), changes
 
 
+#: An automatic-caption phrase that sends readers to a publication that does not exist ("read
+#: the Superior sample for accurate dates"). It is speech-to-text noise, not a fact.
+_GARBLED_SENTENCE_RE = re.compile(
+    r"\b(?:read|reading|see|check|consult)\b[^.]*\bsample\b[^.]*\b(?:accurate|correct)\b"
+    # A name the record does not hold was replaced with a role ("a speaker") in a place where
+    # no person was meant: "the a speaker project", "training with a speaker staff".
+    r"|\b(?:a|an|the)\s+(?:a|an)\s+speaker\b"
+    r"|\ba speaker\s+(?:staff|project|business|company|place|program|series|office|department)\b",
+    re.IGNORECASE,
+)
+#: The events that make a sentence an announcement instead of news. Each can appear once, in one
+#: sentence, in the "Also..." section; a roundup's "Also this week" holds only real items.
+_ANNOUNCEMENT_GROUPS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(cemetery|tombstone|tour)\b", re.IGNORECASE),
+    re.compile(r"\b(celebration|festival|resilient)\b", re.IGNORECASE),
+    re.compile(r"\b(holiday|passport|sign up|sign-up)\b", re.IGNORECASE),
+    re.compile(r"\b(ballots?|postmarks?|elections?)\b", re.IGNORECASE),
+    re.compile(r"\b(volunteer|recognition|proclamation)\b", re.IGNORECASE),
+)
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _announcement_group(sentence: str) -> int | None:
+    for number, pattern in enumerate(_ANNOUNCEMENT_GROUPS):
+        if pattern.search(sentence):
+            return number
+    return None
+
+
+def condense_announcements(article: Article, roundup: bool = False) -> tuple[Article, list[str]]:
+    """Keep announcements to one sentence each in the "Also..." section, and no filler in a roundup.
+
+    A garbled caption phrase is dropped wherever it appears. A duplicate announcement is dropped.
+    The roundup's "Also this week" keeps real agenda items, not tours, celebrations or reminders.
+    """
+    changes: list[str] = []
+    announcement_kept = False
+    sections: list[Section] = []
+    for section in article.sections:
+        also = (section.heading or "").strip().lower() in _ALSO_HEADINGS
+        paragraphs: list[Paragraph] = []
+        for paragraph in section.paragraphs:
+            kept: list[str] = []
+            for sentence in split_sentences(paragraph.text):
+                if not sentence:
+                    continue
+                if _GARBLED_SENTENCE_RE.search(sentence):
+                    changes.append(f"dropped a garbled caption phrase: {sentence[:80]}")
+                    continue
+                group = _announcement_group(sentence) if also else None
+                if group is not None:
+                    if roundup:
+                        changes.append(f"dropped an announcement from the roundup: {sentence[:80]}")
+                        continue
+                    if announcement_kept:
+                        changes.append(f"dropped a second announcement: {sentence[:80]}")
+                        continue
+                    announcement_kept = True
+                kept.append(sentence)
+            if kept:
+                paragraphs.append(replace(paragraph, text=" ".join(kept)))
+        if paragraphs:
+            sections.append(replace(section, paragraphs=tuple(paragraphs)))
+    if not changes:
+        return article, []
+    return replace(article, sections=tuple(sections)), changes
+
+
+#: A section about board or committee applicants. The story reports who applied for what and
+#: the outcome, never the applicant's opinions on other subjects.
+_INTERVIEW_HEADING_RE = re.compile(
+    r"\b(interviews?|applicants?|candidates?|advisory committee|committee member|board member|"
+    r"vacanc(?:y|ies)|appointments?)\b",
+    re.IGNORECASE,
+)
+
+
+def limit_interviews(article: Article) -> tuple[Article, list[str]]:
+    """Keep each applicant-interview section to one short paragraph of two sentences."""
+    changes: list[str] = []
+    sections: list[Section] = []
+    for section in article.sections:
+        heading = (section.heading or "").strip()
+        if (
+            not section.heading
+            or heading.lower() in _ALSO_HEADINGS
+            or not _INTERVIEW_HEADING_RE.search(heading)
+            or not section.paragraphs
+        ):
+            sections.append(section)
+            continue
+        first = section.paragraphs[0]
+        sentences = _SENTENCE_RE.split(first.text.strip())
+        short = first if len(sentences) <= 2 else replace(first, text=" ".join(sentences[:2]))
+        if short.text != first.text or len(section.paragraphs) > 1:
+            changes.append(
+                f"cut an interview section to one short paragraph: {heading} "
+                f"({len(section.paragraphs)} -> 1)"
+            )
+        sections.append(replace(section, paragraphs=(short,)))
+    if not changes:
+        return article, []
+    return replace(article, sections=tuple(sections)), changes
+
+
+#: A sum of money a story leaves out. A dollar figure a claim states is a fact the story owes
+#: the reader; a rewrite is asked once to carry it.
+_MONEY_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
+
+
+def missing_money(recap: Recap, article: Article) -> list[str]:
+    """The dollar amounts a claim states that the story does not print, largest first."""
+    parts = [article.headline, article.dek]
+    parts += [paragraph.text for paragraph in article.paragraphs]
+    parts += [_vote_text(vote) for vote in article.votes]
+    printed = " ".join(parts).replace(" ", "")
+    out: list[tuple[int, str, str]] = []
+    for claim in recap.claims:
+        for amount in _MONEY_RE.findall(f"{claim.text} {claim.quote}"):
+            value = int(re.sub(r"[^\d]", "", amount.split(".")[0]) or 0)
+            if value < 10_000:
+                continue
+            if amount.replace(" ", "") not in printed:
+                out.append((value, amount, claim.id))
+    out.sort(reverse=True)
+    return [f"{amount} (claim {claim_id})" for _, amount, claim_id in out]
+
+
 def story_words(article: Article) -> int:
     return sum(len(p.text.split()) for p in article.paragraphs)
 
 
+#: A story under this many words is thin when the recap holds enough facts to fill it.
+MIN_STORY_WORDS = 600
+#: The claim count that makes the length target fair: fewer facts cannot support 600 words.
+MIN_CLAIMS_FOR_LENGTH = 15
+
+
 def story_too_short(recap: Recap, article: Article) -> bool:
-    """Whether a passing story is too thin: under :data:`MIN_STORY_WORDS` while the recap holds
-    at least five claims to build from."""
-    return len(recap.claims) >= 5 and story_words(article) < MIN_STORY_WORDS
+    """Whether a passing story is too thin for the facts the recap holds."""
+    return len(recap.claims) >= MIN_CLAIMS_FOR_LENGTH and story_words(article) < MIN_STORY_WORDS
 
 
 def video_link(recap: Recap, timestamp: str) -> str:
@@ -1055,7 +1782,7 @@ def quote_words(recap: Recap, quote: Quote, people: People | None = None) -> str
     # Only a name that matches the record is changed. A place the record does not print here
     # ("Rock Creek village") stays as the speaker said it; a role in place of it would rewrite
     # the quote into something nobody said.
-    for wrong, right in fixes(text, people):
+    for wrong, right in [*seat_fixes(text, people), *fixes(text, people)]:
         text = text.replace(wrong, right)
     return text
 
@@ -1196,6 +1923,18 @@ def render_markdown(
             ]
     out.append(f"*{note_for(article)}*")
     return "\n".join(out) + "\n"
+
+
+def cited_recap(recap: Recap, article: Article) -> Recap:
+    """The recap cut to the claims the story cites: its paragraphs, its votes and its quotes.
+
+    The page lists the evidence a story stands on. Recap claims the story never used (a caption
+    garble, "the same speaker said ...") are not evidence for it and are not published.
+    """
+    wanted = set(article.cited)
+    wanted |= {vote.claim_id for vote in article.votes}
+    wanted |= {quote.claim_id for quote in article.quotes}
+    return replace(recap, claims=tuple(c for c in recap.claims if c.id in wanted))
 
 
 def save_article(

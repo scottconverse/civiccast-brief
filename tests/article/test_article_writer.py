@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from civiccast_brief.article.terms import load_record
 from civiccast_brief.article.writer import (
     Article,
     ArticleFormatError,
@@ -17,6 +18,7 @@ from civiccast_brief.article.writer import (
     check_article,
     citations,
     drop_unsupported,
+    missing_money,
     parse_article,
     render_markdown,
     site_article,
@@ -90,6 +92,8 @@ def test_a_paragraph_without_a_claim_or_with_an_unknown_one_fails() -> None:
         ("paragraph 2", "uncited"),
         ("headline", "unknown_claim"),
         ("headline", "uncited"),
+        # The story cites nothing the check can call the meeting's news.
+        ("lead", "news_lead"),
     }
 
 
@@ -101,21 +105,27 @@ def test_the_headline_is_checked_against_the_claims_the_article_cites() -> None:
             headline="Council closes Sunset pool",
         ),
     )
-    assert [(i.where, i.code) for i in report.issues] == [("headline", "name")]
+    assert [(i.where, i.code) for i in report.issues] == [
+        ("headline", "name"),
+        # The headline names no money, land or law vote, the meeting's biggest news.
+        ("headline", "news_headline"),
+    ]
 
 
 def test_one_speaker_is_not_a_count_but_one_ordinance_is() -> None:
+    lead = Paragraph("The council approved the annexation 6-1.", ("c01",))
     passes = Paragraph("One speaker asked to keep the Sunset pool open.", ("c02",))
     fails = Paragraph("One ordinance asked to keep the Sunset pool open.", ("c02",))
-    assert check_article(RECAP, article(passes)).passed
-    assert [i.code for i in check_article(RECAP, article(fails)).issues] == ["number"]
+    assert check_article(RECAP, article(lead, passes)).passed
+    assert [i.code for i in check_article(RECAP, article(lead, fails)).issues] == ["number"]
 
 
 def test_a_common_word_that_opens_a_sentence_is_not_a_name_but_a_name_still_is() -> None:
+    lead = Paragraph("The council approved the annexation 6-1.", ("c01",))
     text = "During public comment, one speaker asked to keep the Sunset pool open."
-    assert check_article(RECAP, article(Paragraph(text, ("c02",)))).passed
+    assert check_article(RECAP, article(lead, Paragraph(text, ("c02",)))).passed
     named = "During public comment, Waters asked to keep the Sunset pool open."
-    issues = check_article(RECAP, article(Paragraph(named, ("c02",)))).issues
+    issues = check_article(RECAP, article(lead, Paragraph(named, ("c02",)))).issues
     assert [i.message for i in issues] == ["name 'Waters' is not in the cited claims"]
 
 
@@ -182,7 +192,7 @@ def test_a_name_or_number_said_near_the_claim_passes_and_one_said_later_fails() 
 
     windows = caption_windows(RECAP, _segments())
     assert "Waters" in windows["c01"] and "2026-99" not in windows["c01"]
-    near = Paragraph("Waters moved Ordinance O-2026-70; it passed 6-1.", ("c01",))
+    near = Paragraph("Waters moved the annexation Ordinance O-2026-70; it passed 6-1.", ("c01",))
     assert check_article(RECAP, article(near), windows).passed
     far = Paragraph("The council approved Ordinance 2026-99 6-1.", ("c01",))
     issues = check_article(RECAP, article(far), windows).issues
@@ -316,6 +326,59 @@ def test_a_story_that_leads_on_consent_when_a_resignation_is_cited_is_flagged() 
     assert lead_is_routine(NEWS_RECAP, led) is None
 
 
+def test_a_story_whose_lead_and_headline_bury_the_resignation_fails() -> None:
+    buried = Article(
+        headline="Superior council moves fundraising advisor agreement",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "The council moved to approve the fundraising advisor agreement.",
+                        ("c03",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    codes = [(issue.where, issue.code) for issue in check_article(NEWS_RECAP, buried).issues]
+    assert ("lead", "news_lead") in codes
+    assert ("headline", "news_headline") in codes
+    led = Article(
+        headline="Superior council member announces resignation over day-job conflicts",
+        sections=(
+            Section(
+                None,
+                (Paragraph("A council member said they needed to resign.", ("c01",)),),
+            ),
+        ),
+    )
+    report = check_article(NEWS_RECAP, led)
+    assert report.passed, report.render()
+
+
+def test_a_passing_mention_of_a_contract_is_not_a_money_vote() -> None:
+    from civiccast_brief.article.writer import news_value
+    from civiccast_brief.script.recap import Claim
+
+    background = Claim(
+        "c09",
+        "Program",
+        "The Superior contract started in 2021.",
+        "0:29:22",
+        "our contract started in 2021",
+    )
+    assert news_value(background) < 60
+    decision = Claim(
+        "c10",
+        "Budget",
+        "The council approved the 2027 budget of $65.5 million.",
+        "1:14:48",
+        "the budget passes",
+    )
+    assert news_value(decision) >= 70
+
+
 def test_the_prompt_lists_the_news_order_and_a_roundup_uses_the_week_prompt() -> None:
     from civiccast_brief.article.writer import build_prompt
 
@@ -399,38 +462,146 @@ def test_a_passing_story_under_the_length_floor_is_flagged_for_one_rewrite() -> 
     )
     assert story_words(short) == 4
     assert not story_too_short(NEWS_RECAP, short)  # only three claims to build from
-    five = replace(
+    enough = replace(
         NEWS_RECAP,
         claims=NEWS_RECAP.claims
-        + (
+        + tuple(
             Claim(
-                id="c04",
+                id=f"c{number:02d}",
                 topic="Roads",
-                text="The council approved a road plan.",
-                timestamp="1:30:00",
-                quote="road plan approved",
-            ),
-            Claim(
-                id="c05",
-                topic="Parks",
-                text="The council approved a park plan.",
-                timestamp="1:40:00",
-                quote="park plan approved",
-            ),
+                text=f"The council approved road plan {number}.",
+                timestamp=f"1:{number:02d}:00",
+                quote=f"road plan {number} approved",
+            )
+            for number in range(4, 4 + 12)
         ),
     )
-    assert story_too_short(five, short)
+    assert story_too_short(enough, short)
     long = Article(
         headline="Superior council approves consent agenda",
         sections=(
             Section(
                 None,
                 tuple(
-                    Paragraph("The council approved the consent agenda. " * 20, ("c02",))
+                    Paragraph("The council approved the consent agenda. " * 40, ("c02",))
                     for _ in range(4)
                 ),
             ),
         ),
     )
     assert story_words(long) >= MIN_STORY_WORDS
-    assert not story_too_short(five, long)
+    assert not story_too_short(enough, long)
+
+
+def test_a_routine_appointment_resolution_is_not_the_meeting_news() -> None:
+    from civiccast_brief.article.writer import news_value
+    from civiccast_brief.script.recap import Claim
+
+    appointment = Claim(
+        "c18",
+        "Appointments",
+        "The Town Council considered Resolution No. R-96 making appointments to the Parks and "
+        "Rec Advisory Committee.",
+        "1:40:00",
+        "move to approve the resolution making the appointments",
+    )
+    assert news_value(appointment) == 0
+
+
+def test_a_short_month_is_not_a_name() -> None:
+    from civiccast_brief.article.writer import _names
+
+    assert _names("The council met Oct. 26 and again Nov. 2.") == []
+
+
+# --- Who did what: the same-speaker link and a recusal the record does not name -------------
+
+
+class _Page:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def _record(text: str = "The council appointed members to the board."):
+    return load_record({"d1p1": _Page(text)})
+
+
+def test_the_same_speaker_link_fails_when_the_claims_have_different_speakers() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The same speaker also asked to keep the Sunset pool open.", ("c01", "c02")),
+    )
+    speakers = {"c01": "Neal Shah", "c02": "Stephanie Miller"}
+    codes = [issue.code for issue in check_article(RECAP, story, speakers=speakers).issues]
+    assert "same_speaker" in codes
+
+
+def test_the_same_speaker_link_passes_when_the_record_names_one_speaker() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The same speaker also asked to keep the Sunset pool open.", ("c01", "c02")),
+    )
+    speakers = {"c01": "Neal Shah", "c02": "Neal Shah"}
+    report = check_article(RECAP, story, speakers=speakers)
+    assert "same_speaker" not in [issue.code for issue in report.issues]
+
+
+def test_a_named_recusal_fails_when_the_documents_do_not_name_the_person() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph(
+            "The council appointed members, with the mayor recusing himself because of a conflict.",
+            ("c01",),
+        ),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=_record()).issues]
+    assert "recusal_name" in codes
+    assert "pronoun" in codes
+
+
+def test_a_neutral_recusal_passes() -> None:
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph(
+            "The council appointed members, with a council member recusing themselves "
+            "because of a conflict.",
+            ("c01",),
+        ),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=_record()).issues]
+    assert "recusal_name" not in codes and "pronoun" not in codes
+
+
+def test_a_recusal_the_documents_name_is_allowed() -> None:
+    record = _record(
+        "The council appointed members. Mayor Mark Lacis recused himself from the appointment vote."
+    )
+    story = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The council appointed members, with the mayor recusing himself.", ("c01",)),
+    )
+    codes = [issue.code for issue in check_article(RECAP, story, record=record).issues]
+    assert "recusal_name" not in codes and "pronoun" not in codes
+
+
+def test_a_dollar_figure_a_claim_states_is_reported_when_the_story_leaves_it_out() -> None:
+    recap = replace(
+        RECAP,
+        claims=(
+            *RECAP.claims,
+            Claim(
+                id="c03",
+                topic="Budget",
+                text="The urban renewal authority property tax movement was $250,000.",
+                timestamp="1:49:59",
+                quote="two hundred fifty thousand",
+            ),
+        ),
+    )
+    short = article(Paragraph("The council approved the annexation 6-1.", ("c01",)))
+    assert missing_money(recap, short) == ["$250,000 (claim c03)"]
+    full = article(
+        Paragraph("The council approved the annexation 6-1.", ("c01",)),
+        Paragraph("The property tax movement was $250,000.", ("c03",)),
+    )
+    assert missing_money(recap, full) == []

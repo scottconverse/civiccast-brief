@@ -305,4 +305,10 @@ def read_all(docs: Sequence[Doc], fetcher: Fetcher) -> tuple[dict[str, Any], lis
             shown = ", ".join(str(n) for n in unread[:10]) + (" ..." if len(unread) > 10 else "")
             line += f"; no text taken from page {shown}"
         lines.append(line)
+    if (
+        documents
+        and not any(doc["kind"] == "minutes" for doc in documents)
+        and any("civicclerk" in doc["url"] for doc in documents)
+    ):
+        lines.append("minutes: not published yet (the clerk's portal lists none for this meeting)")
     return {"format": 1, "documents": documents}, lines

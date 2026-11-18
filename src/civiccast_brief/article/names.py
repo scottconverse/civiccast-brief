@@ -234,6 +234,40 @@ _NOT_NAME_WORDS = _NOT_PERSON | {
     "station",
     "sheriff's",
 }
+#: Words that begin a document label, never a person's name: "Resolution R-87" is a resolution.
+_DOCUMENT_WORDS = frozenset(
+    {
+        "resolution",
+        "ordinance",
+        "item",
+        "section",
+        "page",
+        "exhibit",
+        "attachment",
+        "agenda",
+        "minutes",
+        "budget",
+        "contract",
+        "packet",
+        "application",
+        "proclamation",
+    }
+)
+#: Document words strong enough that any name run holding one is a label, not a person.
+_DOCUMENT_STRONG = frozenset(
+    {
+        "resolution",
+        "ordinance",
+        "exhibit",
+        "attachment",
+        "proclamation",
+        "packet",
+        "agenda",
+        "minutes",
+        "budget",
+        "contract",
+    }
+)
 _RUN_RE = re.compile(r"\b[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*)*")
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z'’\-]*")
 _SENTENCE_START = re.compile(r"(^|[.!?:]\s*)$")
@@ -339,7 +373,13 @@ def _score(wanted: list[str], person: Person) -> float:
             (_ratio(word, token) for token in [*last, *first] if token),
             default=0.0,
         )
-        skeleton = any(_skeleton(word) == _skeleton(token) for token in [*last, *first] if token)
+        # A crude sound key collides on short words ("depth" and "deputy"); only a longer
+        # surname may match on sound alone.
+        skeleton = any(
+            _skeleton(word) == _skeleton(token) and min(len(word), len(token)) >= 6
+            for token in [*last, *first]
+            if token
+        )
         if skeleton and best >= 0.4:
             return 0.80
         if best >= 0.72:
@@ -354,14 +394,23 @@ def _score(wanted: list[str], person: Person) -> float:
     score = 0.30 * first_ratio + 0.45 * last_ratio + 0.25 * full_ratio
     # A surname that sounds the same is the strongest sign of the same person.
     if last_ratio >= 0.55 and any(
-        _skeleton(wanted[-1]) == _skeleton(token) for token in last if token
+        _skeleton(wanted[-1]) == _skeleton(token) and min(len(wanted[-1]), len(token)) >= 6
+        for token in last
+        if token
     ):
         score = max(score, 0.70)
+    # The captions merge a first name into a surname ("Craig Craft" for "Cracraft"). When the
+    # surname is nearly the record's and the printed first name matches no other member, the
+    # surname is the certain match: the record prints the whole name and the repair uses it.
+    if last_ratio >= 0.75 and first_ratio < 0.5:
+        score = max(score, 0.72)
     return score
 
 
 def _role_key(role: str) -> str:
-    return " ".join(_normal(role).replace("-", " ").split())
+    key = " ".join(_normal(role).replace("-", " ").split())
+    # The captions write the seat three ways ("pro tem", "protem", "pro-tem").
+    return key.replace("protem", "pro tem")
 
 
 def _role_phrase(role: str, context: str, at_start: bool) -> str:
@@ -383,12 +432,42 @@ def _role_phrase(role: str, context: str, at_start: bool) -> str:
     return phrase[:1].upper() + phrase[1:] if at_start else phrase
 
 
+#: The last word of a street, park or trail name: "Honey Creek Lane" is a place, not a person.
+_PLACE_WORDS = frozenset(
+    {
+        "lane",
+        "street",
+        "road",
+        "drive",
+        "avenue",
+        "ave",
+        "court",
+        "ct",
+        "place",
+        "pl",
+        "way",
+        "trail",
+        "park",
+        "circle",
+        "boulevard",
+        "blvd",
+        "parkway",
+        "pkwy",
+        "highway",
+        "hwy",
+        "path",
+    }
+)
+
+
 def _is_person_like(name: str, role: str) -> bool:
     tokens = _tokens(name)
     if not tokens:
         return False
     if role:
         return True
+    if tokens[-1] in _PLACE_WORDS:
+        return False
     return len(tokens) >= 2
 
 
@@ -429,6 +508,12 @@ def spans(text: str) -> list[Span]:
             continue
         if all(t.lower() in _NOT_NAME_WORDS for t in tokens):
             continue
+        lowered = {token.lower() for token in tokens}
+        if tokens[0].lower() in _DOCUMENT_WORDS or lowered & _DOCUMENT_STRONG:
+            continue
+        # "Full-depth" is a compound word, not a person: a surname's second half is capitalised.
+        if re.search(r"-[a-z]", " ".join(tokens)):
+            continue
         role = " ".join(role_words)
         name = " ".join(tokens)
         # Offsets: the run's match is contiguous, so the name starts after the words stripped.
@@ -450,6 +535,18 @@ def spans(text: str) -> list[Span]:
 
 def _at_sentence_start(text: str, start: int) -> bool:
     return bool(_SENTENCE_START.search(text[:start]))
+
+
+def _sentence_word(text: str, span: Span, person: Person) -> bool:
+    """A lone capitalised word at a sentence start that only sounds like a record name.
+
+    Every first word of a sentence is capitalised, so "Sitting also as the authority ..." is
+    not the surname "Otting". Such a word is changed only when it is the person's own name.
+    """
+    tokens = _tokens(span.name)
+    if len(tokens) != 1 or span.role or not _at_sentence_start(text, span.lead_start):
+        return False
+    return tokens[0] not in {*_tokens(person.last), *_tokens(person.first)}
 
 
 def _spelling(span: Span, person: Person) -> str:
@@ -506,6 +603,47 @@ def name_issues(text: str, people: People | None) -> list[tuple[str, str]]:
     return out
 
 
+def person_issues(text: str, people: People | None) -> list[tuple[str, str]]:
+    """(code, message) for each *member or staff* name the record does not print as written.
+
+    The skill's story carries its own claim-by-claim record, and most capitalised runs in a
+    meeting story are places, boards, companies and events ("Community Center", "Superior
+    Elementary"). This gate is therefore limited to the people the meeting's roster and
+    documents name: a span is judged only when its surname is that person's surname (exactly
+    or by the phonetic skeleton), so a caption spelling ("Craigcraft") is caught and an
+    organisation ("Northwest Mayors Coalition") is left to the story's own check.
+    """
+    if people is None or not people.persons:
+        return []
+    out: list[tuple[str, str]] = []
+    for span in spans(text):
+        tokens = _tokens(span.name)
+        if not tokens:
+            continue
+        surname = tokens[-1].casefold()
+        person = people.match(span.name, span.role)
+        if person is None:
+            continue
+        known = {_skeleton(part.casefold()) for part in person.last.split()} | {
+            _normal(person.last)
+        }
+        if _skeleton(surname) not in known and _normal(surname) != _normal(person.last):
+            continue
+        if people.verbatim(span.name):
+            continue
+        if _tokens(span.name) != _tokens(person.name):
+            out.append(
+                (
+                    "name_spelling",
+                    (
+                        f"name {span.name!r} must be printed as the record prints it: "
+                        f"{person.name!r} ({person.source})"
+                    ),
+                )
+            )
+    return out
+
+
 def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
     """The (printed, record) name pairs a text needs, for a display-time replacement.
 
@@ -522,7 +660,7 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
         person = people.match(span.name, span.role)
         if person is None or people.verbatim(span.name):
             continue
-        if _tokens(span.name) == _tokens(person.name):
+        if _tokens(span.name) == _tokens(person.name) or _sentence_word(text, span, person):
             continue
         tokens, last = _tokens(span.name), _tokens(person.last)
         if len(tokens) == 1:
@@ -556,6 +694,8 @@ def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
         if person is not None:
             if _tokens(span.name) == _tokens(person.name) or people.verbatim(span.name):
                 continue
+            if _sentence_word(text, span, person):
+                continue
             spelling = _spelling(span, person)
             out = out[: span.start] + spelling + out[span.end :]
             changes.append(f"name {span.name!r} -> {spelling!r} ({person.source})")
@@ -577,7 +717,9 @@ def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]
 
     def fix(text: str) -> str:
         new, lines = repair_text(text, people)
+        new, seat_lines = fill_roll_call_names(new, people)
         changes.extend(lines)
+        changes.extend(seat_lines)
         return new
 
     sections = tuple(
@@ -611,6 +753,186 @@ def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]
         ),
         changes,
     )
+
+
+#: A roll call names the seat and not the person ("Mayor Pro Tem: Yes", "and Mayor Pro Tem
+#: voted yes"). The roster prints the holder, so the voter is named from the record.
+_SEAT_ONLY = {
+    "mayor": re.compile(r"(?<!Pro[- ])\bMayor\b(?!\s+Pro[- ]?[Tt]em)(?!\s+[A-Z])"),
+}
+#: Words that mark a passage as a roll call or a vote.
+_VOTE_CONTEXT_RE = re.compile(r"\b(voted?|votes?|roll[- ]call|aye|yes|nay|no)\b", re.IGNORECASE)
+#: The mayor pro tem seat, in the three spellings the captions use, with the token after it.
+#: The seat as the captions write it: "Mayor Pro Tem", "mayor protem", "Merry proton",
+#: "proton, cowish". The optional leading word is the captions' misheard "Mayor".
+_MAYOR_PRO_TEM_RE = re.compile(
+    r"\b(?:(?:Mayor|Merry)\s+)?Pro[- ]?(?:[Tt]em|[Tt]on)\b"
+    r"((?:\s*[,\s]\s*[A-Za-z][A-Za-z'’\-]*){0,2})",
+    re.IGNORECASE,
+)
+#: A word after "Mayor Pro Tem" that is a verb or connector, not a person's name.
+_NOT_A_NAME_AFTER_SEAT = frozenset(
+    {
+        "voted",
+        "votes",
+        "voting",
+        "seconded",
+        "second",
+        "seconds",
+        "moved",
+        "moves",
+        "spoke",
+        "speaks",
+        "said",
+        "says",
+        "noted",
+        "reported",
+        "asked",
+        "asks",
+        "called",
+        "calls",
+        "will",
+        "would",
+        "was",
+        "is",
+        "also",
+        "and",
+        "then",
+        "had",
+        "has",
+        "agreed",
+        "announced",
+        "announces",
+        "presented",
+        "presents",
+        "read",
+        "reads",
+        "broke",
+        "breaks",
+    }
+)
+
+
+def _seat_holder(people: People, role: str) -> Person | None:
+    """The record person who holds a seat, preferring a printed first and last name.
+
+    The packet sometimes prints only a surname ("Mayor Pro-tem Kaaoush") beside the roster's
+    full name ("Jenn Kaaoush"). The full name is the one to print.
+    """
+    holders = [p for p in people.persons if _role_key(p.role) == _role_key(role)]
+    if not holders:
+        return None
+    return max(holders, key=lambda p: (len(_tokens(p.name)), p.name))
+
+
+def _other_member(word: str, person: Person, people: People) -> bool:
+    """Whether a word after the seat is another record member's name, not the seat's holder."""
+    wanted = _normal(word)
+    for other in people.persons:
+        if other.name == person.name:
+            continue
+        if wanted and wanted in (_normal(other.first), _normal(other.last)):
+            return True
+    return False
+
+
+def _seat_replacement(tail: str, person: Person, people: People | None = None) -> str:
+    """The record's seat and name, keeping the words after it that are not the printed name."""
+    record = f"Mayor Pro Tem {person.name}"
+    words = [word.strip(",.;:") for word in tail.split() if word.strip(",.;:")]
+    if not words:
+        return record
+    if words[0].lower() in _NOT_A_NAME_AFTER_SEAT:
+        return f"{record} {' '.join(words)}"
+    first, last = _normal(person.first), _normal(person.last)
+    if _normal(words[0]) == first and len(words) > 1 and _normal(words[1]) == last:
+        rest = words[2:]
+    elif _normal(words[0]) in (first, last):
+        rest = words[1:]
+    elif people is not None and _other_member(words[0], person, people):
+        # Another member is printed after the seat ("Mayor Pro Tem, Stephanie Miller"). The
+        # seat takes the record's holder and the other member keeps their name.
+        return " ".join([record + ",", *words])
+    else:
+        # A garbled spelling of the holder. The holder is the record's.
+        rest = words[1:]
+    return " ".join([record, *rest])
+
+
+def seat_fixes(text: str, people: People | None) -> list[tuple[str, str]]:
+    """(printed, record) pairs that name the mayor pro tem from the roster.
+
+    The seat is held by one member the record prints, so the record's name goes wherever the
+    record says "mayor pro tem": a seat-only voter ("Mayor Pro Tem voted yes"), a caption
+    spelling ("mayor protem cowish"), or a bare mention ("the mayor pro tem seconded").
+    """
+    if people is None or not people.persons:
+        return []
+    person = _seat_holder(people, "Mayor Pro Tem")
+    if person is None:
+        return []
+    out: list[tuple[str, str]] = []
+    for match in _MAYOR_PRO_TEM_RE.finditer(text):
+        tail = match.group(1) or ""
+        replacement = _seat_replacement(tail, person, people)
+        if replacement != match.group(0):
+            out.append((match.group(0), replacement))
+    return out
+
+
+def apply_fixes(text: str, pairs: list[tuple[str, str]] | tuple[tuple[str, str], ...]) -> str:
+    """Replace each printed name with its record spelling, longest form first.
+
+    A pair whose record spelling starts with the printed form ("Mayor Pro Tem" ->
+    "Mayor Pro Tem Jenn Kaaoush") is not applied where that name is already printed, so one
+    replacement cannot repeat the name.
+    """
+    for wrong, right in sorted(pairs, key=lambda pair: -len(pair[0])):
+        remainder = right[len(wrong) :] if right.startswith(wrong) else ""
+        pattern = re.escape(wrong)
+        if remainder:
+            pattern += f"(?!{re.escape(remainder)})"
+        text = re.sub(pattern, lambda _match, right=right: right, text)
+    return text
+
+
+def fill_roll_call_names(text: str, people: People | None) -> tuple[str, list[str]]:
+    """Name the mayor pro tem, and a seat-only mayor at a vote, from the record's roster.
+
+    The mayor pro tem is one record member, so the seat is named wherever it appears. A bare
+    "Mayor" is named only in a vote passage: in ordinary prose it may be a presiding officer
+    the record does not name.
+    """
+    if people is None or not people.persons:
+        return text, []
+    changes: list[str] = []
+    person = _seat_holder(people, "Mayor Pro Tem")
+    out = text
+    if person is not None:
+
+        def seat(match: re.Match[str]) -> str:
+            tail = match.group(1) or ""
+            replacement = _seat_replacement(tail, person, people)
+            if replacement != match.group(0):
+                changes.append(f"seat {match.group(0)!r} -> {replacement!r} (record roster)")
+            return replacement
+
+        out = _MAYOR_PRO_TEM_RE.sub(seat, out)
+    if not _VOTE_CONTEXT_RE.search(text):
+        return out, changes
+    for seat_name, pattern in _SEAT_ONLY.items():
+        mayor = next(
+            (p for p in people.persons if _role_key(p.role) == _role_key(seat_name)),
+            None,
+        )
+        if mayor is None:
+            continue
+        match = pattern.search(out)
+        if match is None:
+            continue
+        out = out[: match.start()] + mayor.name + out[match.end() :]
+        changes.append(f"roll call {match.group(0)!r} -> {mayor.name!r} ({mayor.source})")
+    return out, changes
 
 
 #: A presented-by line: "Presented By: Matt Magley, Town Manager, Leslie Clark, ...".

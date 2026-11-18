@@ -69,7 +69,7 @@
           <p class="t">{% if claim.meeting %}<span class="meeting-tag">{{ claim.meeting }}</span> {% endif %}{{ claim.text }}
             {% if claim.link %}
             <a class="cite" href="{{ claim.link }}" target="_blank" rel="noopener">Video at {{ claim.timestamp }}<span class="visually-hidden"> (opens the meeting video in a new tab)</span></a>
-            {% else %}
+            {% elif claim.timestamp %}
             <span class="cite">At {{ claim.timestamp }}</span>
             {% endif %}
           </p>

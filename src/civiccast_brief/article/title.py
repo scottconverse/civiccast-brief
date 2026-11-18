@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.writer import Issue, _check_text
+from civiccast_brief.article.writer import Issue, _check_text, headline_issues
 from civiccast_brief.script.recap import Recap
 
 MAX_WORDS = 14
@@ -30,7 +30,7 @@ FACTS: use only the claims listed at the end. Every number, name and outcome in 
 OUTPUT: one JSON object and nothing else, no code fence:
 {"title": "...", "claim_ids": ["m1-c03", "m2-c01"]}
 - claim_ids lists every claim the title relies on, at least one.
-- The title names the week's one or two most important decisions, in 12 words or fewer, in plain news style (present tense, no question, no colon, no quotes). Spell boards, streets and items as the claims do. Do not put the dates in the title.
+- The title names the week's biggest news (a resignation outranks any vote) and, when there is room, the next decision, in 12 words or fewer, in plain news style (present tense, no question, no colon, no quotes). Spell boards, streets and items as the claims do. Do not put the dates in the title. Never copy a claim's own words as the title, never start it with a "[... meeting]" label, and never cut it off mid-phrase.
 """
 
 
@@ -87,6 +87,12 @@ def check_title(recap: Recap, title: Title) -> list[Issue]:
     words = len(title.text.split())
     if words > MAX_WORDS:
         issues.append(Issue("title", "length", f"{words} words; the limit is {MAX_WORDS}"))
+    # A title is a headline: never a copied claim, a cut-off claim, a meeting label, and it
+    # must name the week's biggest news.
+    issues.extend(
+        replace(issue, where="title")
+        for issue in headline_issues(recap, title.text, roundup=recap.video_id == "roundup")
+    )
     _check_text("title", title.text, title.claim_ids, recap, issues)
     return issues
 

@@ -267,8 +267,9 @@ def lead_seconds(item: object) -> float | None:
     if article is not None:
         for section in article.sections:
             for paragraph in section.paragraphs:
-                if paragraph.cites:
-                    return float(paragraph.cites[0].seconds)
+                for cite in paragraph.cites:
+                    if cite.seconds > 0:
+                        return float(cite.seconds)
         citations = [*article.votes, *article.quotes]
         if citations:
             return float(citations[0].seconds)

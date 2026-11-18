@@ -165,6 +165,10 @@ def vote_badge(result: str, tally: str | None) -> dict[str, str]:
 
 
 def _cite(video: str | None, seconds: float) -> dict[str, Any]:
+    """A video cite. A fact at 0:00:00 came from the documents, not the video: it gets no
+    time and no link, so the page never sends a reader to the start of the meeting for it."""
+    if seconds <= 0:
+        return {"timestamp": None, "link": None}
     return {"timestamp": timecode(seconds), "link": timestamp_link(video, seconds)}
 
 
@@ -179,7 +183,11 @@ def _article_view(article: Article, video: str | None) -> dict[str, Any]:
                 "paragraphs": [
                     {
                         "text": paragraph.text,
-                        "cites": [_cite(video, cite.seconds) for cite in paragraph.cites],
+                        "cites": [
+                            _cite(video, cite.seconds)
+                            for cite in paragraph.cites
+                            if cite.seconds > 0
+                        ],
                         "pages": [
                             {
                                 "label": f"{page.kind} p. {page.page}",

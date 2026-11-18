@@ -87,11 +87,28 @@ def clerk_file_url(tenant: str, file_id: int) -> str:
     return f"{clerk_api(tenant)}/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
 
 
+_FILE_DAY: Final = re.compile(r"\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b")
+
+
+def _named_day(name: str, fallback: date) -> date:
+    """The day a file's name prints ("10.12.2026 Minutes"), else the event's day."""
+    match = _FILE_DAY.search(name)
+    if not match:
+        return fallback
+    month, day, year = (int(part) for part in match.groups())
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return fallback
+
+
 def clerk_docs(tenant: str, fetcher: Fetcher, today: date) -> list[Doc]:
-    """Agenda and packet files of meetings on or before ``today``, newest meeting first.
+    """Agenda, packet and minutes files of meetings on or before ``today``, newest first.
 
     The API writes the town's local time with a Z ("2026-11-10T19:30:00Z" for a 7:30 PM
-    meeting), so the day is read as written.
+    meeting), so the day is read as written. A minutes file is published under a later
+    meeting's event, and its name prints the meeting it belongs to ("10.12.2026 Minutes"
+    under the Oct. 26 event), so a minutes file takes the day its name prints.
     """
     rows: list[Any] = []
     url: Any = clerk_events_url(tenant, today)
@@ -114,12 +131,24 @@ def clerk_docs(tenant: str, fetcher: Fetcher, today: date) -> list[Doc]:
             continue
         body = squash(str(row.get("categoryName") or ""))
         files = [f for f in row.get("publishedFiles") or [] if isinstance(f, dict)]
-        for wanted, what in (("agenda", "agenda"), ("agenda packet", "packet")):
+        for wanted, what in (
+            ("agenda", "agenda"),
+            ("agenda packet", "packet"),
+            ("minutes", "minutes"),
+        ):
             for file in files:
-                if str(file.get("type") or "").casefold() == wanted and file.get("fileId"):
-                    url = clerk_file_url(tenant, int(file["fileId"]))
-                    found.append(Doc(body, day, f"{title} ({body})", url, what))
-    return found
+                if str(file.get("type") or "").casefold() != wanted or not file.get("fileId"):
+                    continue
+                named = str(file.get("name") or "")
+                held = _named_day(named, day) if what == "minutes" else day
+                url = clerk_file_url(tenant, int(file["fileId"]))
+                found.append(Doc(body, held, f"{title} ({body})", url, what))
+    # One file of each kind per body and meeting: the same minutes can be published under
+    # two events (its own and the meeting that approved them).
+    unique: dict[tuple[str, date, str], Doc] = {}
+    for doc in found:
+        unique.setdefault((doc.body, doc.day, doc.what), doc)
+    return list(unique.values())
 
 
 # ----- eScribe ----------------------------------------------------------------------------------

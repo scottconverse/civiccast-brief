@@ -10,10 +10,11 @@ For each meeting :mod:`find` turned up, in date order:
 4. the episode goes on the editor desk, published at once when its checks passed;
 5. ``documents.json`` from the portal: the meeting's packet and its minutes (published, or the
    draft in a later packet); a document that is not there is a line in the report;
-6. ``article write`` and ``article stage``, with ``documents.json`` when there is one.
+6. ``article skill`` (Scott's report-local-news skill run as an agent in its own folder) and
+   ``article stage``, with ``documents.json`` when there is one.
 
 With two or more meetings done in the window, a roundup follows: ``script roundup``, a script,
-a written title, and its episode on the desk.
+a written title, and its story built from the new meeting stories (``article from-stories``).
 
 Then, when the site settings are given: ``review export``; for each published episode not built
 yet, ``audio``, ``episode assemble`` (with the published story of the same meeting), the media
@@ -226,9 +227,11 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
     if article.exists() and _on_desk(settings, folder, "article"):
         return str(article)
     article.unlink(missing_ok=True)
-    steps.article(["write", "--recap", recap, "--out", str(out), *city, *docs])
+    # The story is written the TownReporter way: Scott's report-local-news skill, run
+    # as an agent in its own folder, with the record supplied and no web search.
+    steps.article(["skill", "--recap", recap, "--out", str(out), *city, *docs])
     if not article.exists():
-        raise StepFailed("article write failed (no story was written)")
+        raise StepFailed("article skill failed (no story was written)")
     _call(
         steps.article,
         [
@@ -239,6 +242,7 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
             recap,
             "--article",
             str(article),
+            *city,
             *docs,
         ],
         "article stage",
@@ -402,8 +406,16 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
             out = folder / "article"
             if not _on_desk(settings, folder, "article"):
                 out.with_suffix(".json").unlink(missing_ok=True)
+                stories = [str(m["article"]) for m in meetings if m.get("article")]
                 steps.article(
-                    ["write", "--recap", recap, "--out", str(out), "--city", str(settings.city)]
+                    [
+                        "from-stories",
+                        "--recap",
+                        recap,
+                        "--out",
+                        str(out),
+                        *[part for story in stories for part in ("--story", story)],
+                    ]
                 )
                 if not out.with_suffix(".json").exists():
                     raise StepFailed("roundup article write failed (no story was written)")
@@ -417,6 +429,8 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
                         recap,
                         "--article",
                         str(out.with_suffix(".json")),
+                        "--city",
+                        str(settings.city),
                     ],
                     "roundup article stage",
                 )
@@ -445,8 +459,11 @@ def _run_folders(state: State) -> dict[str, dict[str, Any]]:
     """Meeting id -> the run entry, for every finished meeting and roundup."""
     by_id: dict[str, dict[str, Any]] = {}
     for entry in [*state.data["meetings"].values(), *state.data["roundups"].values()]:
-        recap_path = Path(entry.get("folder", "")) / "recap.json"
-        if entry.get("status") != "done" or not recap_path.is_file():
+        folder = entry.get("folder") or ""
+        if not folder or entry.get("status") != "done":
+            continue
+        recap_path = Path(folder) / "recap.json"
+        if not recap_path.is_file():
             continue
         recap = json.loads(recap_path.read_text(encoding="utf-8"))
         transcript = recap_path.with_name("transcript.json")

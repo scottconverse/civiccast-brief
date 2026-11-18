@@ -38,6 +38,8 @@ packages = ["src/civiccast_brief"]
 
 [tool.ruff]
 line-length = 100
+# Vendored TownReporter skill (pinned copy): kept byte-for-byte, not restyled.
+extend-exclude = ["report-local-news"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

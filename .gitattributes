@@ -1,2 +1,3 @@
-# Recorded public records: kept byte for byte, never line-ending converted.
-tests/record/evidence/** -text
+# The vendored report-local-news skill is pinned by SHA-256 of its files; keep the
+# bytes the pin records, independent of the machine's line-ending setting.
+report-local-news/** text eol=lf

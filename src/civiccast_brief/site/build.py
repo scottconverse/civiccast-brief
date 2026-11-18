@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from civiccast_brief.article.names import apply_fixes
 from civiccast_brief.site import graphics, images, seo, stills
 from civiccast_brief.site.feed import artwork_path, build_feed
 from civiccast_brief.site.model import InputError, SiteInput, load_site_input
@@ -158,9 +159,7 @@ def build_site(
     ]
 
     def fixed(text: str) -> str:
-        for wrong, right in fixes:
-            text = text.replace(wrong, right)
-        return text
+        return apply_fixes(text, fixes)
 
     env = make_environment(urls)
     for spec in pages:

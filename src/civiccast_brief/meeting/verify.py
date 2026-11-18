@@ -21,6 +21,7 @@ import bisect
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any
 
 from civiccast_brief.meeting.agenda import GENERIC_WORDS
@@ -29,6 +30,12 @@ from civiccast_brief.meeting.transcript import Segment, hms, normalize_quote, se
 from civiccast_brief.script.recap import Claim
 
 WINDOW_S = 60.0
+#: Speech-to-text noise that states no fact ("read the Superior sample for accurate dates").
+#: A claim built on such a phrase is dropped, never printed.
+_NONSENSE_RE = re.compile(
+    r"\b(?:read|reading|see|check|consult)\b[^.]*\bsample\b[^.]*\b(?:accurate|correct)\b",
+    re.IGNORECASE,
+)
 #: Role words a claim may use only when the quote says them, or when the speaker key gives the
 #: title (the roll call gives "council member" for an unmatched name).
 ROLE_PHRASES = (
@@ -47,6 +54,11 @@ ROLE_PHRASES = (
     "presenter",
 )
 COUNCIL_TITLES = frozenset({"council member", "councilmember"})
+#: A quote that says the speaker holds a council seat. The captions do not label the speaker,
+#: but "my council seat" in the quote is the record of who is speaking.
+_COUNCIL_SEAT_RE = re.compile(
+    r"\b(council seat|councilmember|council member|town council)\b", re.IGNORECASE
+)
 _TITLED_NAME_RE = re.compile(
     r"\b(?:Mayor|Council\s+[Mm]ember|Councilmember)\s+"
     r"((?:[A-Z][A-Za-z'\-]+)(?:\s+[A-Z][A-Za-z'\-]+)?)"
@@ -126,6 +138,21 @@ def numbers_in(text: str) -> set[str]:
     return found
 
 
+def _surname_in(name: str, words: set[str]) -> bool:
+    """Whether a quote names this surname, allowing the captions' mangled spelling.
+
+    The record says "Cracraft" and the captions say "Craigcraft"; a person the record names
+    is the person the quote says when the surnames nearly match.
+    """
+    wanted = name.lower()
+    if wanted in words:
+        return True
+    return any(
+        abs(len(word) - len(wanted)) <= 3 and SequenceMatcher(None, word, wanted).ratio() >= 0.78
+        for word in words
+    )
+
+
 def _term(word: str) -> str:
     """The word as the term check looks it up: lower case, without a possessive ("Longmont's")
     or a hyphen left at its end ("COVID-" from "COVID-19")."""
@@ -181,6 +208,9 @@ def verify(
         if not text or not quote or not re.match(r"^\d{1,2}:\d{2}:\d{2}$", cited):
             drop(position, text, "missing text, quote or timestamp")
             continue
+        if _NONSENSE_RE.search(text) or _NONSENSE_RE.search(quote):
+            drop(position, text, "the quote is garbled speech-to-text that states no fact")
+            continue
         occurrences = index.occurrences(quote)
         if not occurrences:
             drop(position, text, "quote is not verbatim in the transcript")
@@ -203,7 +233,7 @@ def verify(
             if not mentioned:
                 continue
             spoken_by = speaker_at(nearest.first) if speaker_at else None
-            if member.last.lower() not in quote_words and spoken_by != member.name:
+            if not _surname_in(member.last, quote_words) and spoken_by != member.name:
                 unbacked.append(member.name)
         if unbacked:
             drop(
@@ -226,10 +256,9 @@ def verify(
                 continue
             if phrase in quote_lower:
                 continue
-            if (
-                phrase in COUNCIL_TITLES
-                and title_at
-                and title_at(nearest.first) == "council member"
+            if phrase in COUNCIL_TITLES and (
+                (title_at and title_at(nearest.first) == "council member")
+                or _COUNCIL_SEAT_RE.search(quote)
             ):
                 continue
             unbacked_roles.append(phrase)

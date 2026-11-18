@@ -88,7 +88,28 @@ def test_prompt_carries_agenda_roster_speaker_key_and_lines():
     assert "Susie Hidalgo-Fahring (Mayor)" in prompt
     assert "0:00:05  >> Council member Popkin" in prompt
     assert "Part 1 of 1" in prompt
-    assert "At most 12 items" in prompt
+    assert f"Up to {R.MAX_ITEMS_PER_WINDOW} items" in prompt
+
+
+def test_a_long_transcript_is_not_capped_to_a_dozen_claims():
+    """A two-hour meeting has far more than twelve checkable facts; the cap must not stop them."""
+    assert R.MAX_ITEMS_PER_WINDOW >= 40
+    segments = [seg(float(n) * 60, f"line {n}") for n in range(120)]
+    windows = R.windows(segments, 1800)
+    assert len(windows) >= 4
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=len(windows),
+        window=windows[0],
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="AGENDA\nBudget",
+    )
+    assert "every agenda item acted on" in prompt
+    assert "each motion and who moved and seconded it" in prompt
 
 
 def test_prompt_without_agenda_says_so():
@@ -106,6 +127,16 @@ def test_prompt_without_agenda_says_so():
         agenda_text="",
     )
     assert "no agenda file was given" in prompt
+
+
+def test_a_window_that_hits_the_output_cap_is_split_in_half():
+    segments = [seg(float(n) * 60, f"line {n}") for n in range(31)]
+    window = R.windows(segments, 1800)[0]
+    halves = R.split_window(window, segments)
+    assert len(halves) == 2
+    assert halves[0].first == window.first and halves[0].last + 1 == halves[1].first
+    assert halves[1].last == window.last
+    assert halves[0].start == window.start and halves[1].end == window.end
 
 
 def test_parse_items_ignores_text_around_the_array():
@@ -143,3 +174,55 @@ def test_draft_window_keeps_items_from_a_good_answer():
     draft = R.draft_window(complete, "prompt", 1)
     assert draft.error is None
     assert draft.items[0]["quote"] == "y"
+
+
+def test_the_prompt_quotes_only_the_words_that_prove_one_fact():
+    # The Oct 26 meeting: the model appended a garbled next line to the resignation quote, and
+    # the whole claim was lost. The prompt names that line and says to stop at the clean one.
+    segments = [
+        seg(
+            287.0, "I needed to resign my council seat due to potential conflicts with my day job."
+        ),
+        seg(292.0, "Tonight's playing last council meeting."),
+    ]
+    window = R.windows(segments, 1800)[0]
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=1,
+        window=window,
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="",
+    )
+    assert (
+        "I needed to resign my council seat due to potential conflicts with my day job." in prompt
+    )
+    assert "never append a following line that states a different fact" in prompt
+    assert "write two items and give each its own quote" in prompt
+
+
+def test_the_prompt_asks_for_a_roll_call_item_per_member_with_the_call_and_answer():
+    segments = [
+        seg(4169.6, "Council Member Miller?"),
+        seg(4170.7, "Yes.", speaker="Stephanie Miller"),
+        seg(4173.9, "Council Member Craigcraft?"),
+        seg(4175.4, "Yes.", speaker="Heather Cracraft"),
+    ]
+    window = R.windows(segments, 1800)[0]
+    prompt = R.build_prompt(
+        title="Town Council Meeting",
+        meeting_date="October 26, 2026",
+        part=1,
+        parts=1,
+        window=window,
+        segments=segments,
+        turns=[],
+        roster=ROSTER,
+        agenda_text="",
+    )
+    assert "one item for each member whose vote the captions state" in prompt
+    assert '"Council Member Miller? Yes."' in prompt
+    assert 'not "budget amendment"' in prompt
