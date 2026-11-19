@@ -422,3 +422,71 @@ def test_a_different_surname_is_not_swapped_for_a_roster_member() -> None:
 def test_real_misspellings_still_take_the_record_spelling() -> None:
     out, _ = repair_text("Rob Kaplin and Jasn Unger spoke.", BOULDER)
     assert out == "Rob Kaplan and Jason Unger spoke."
+
+
+# Longmont, Nov 19 2026: the weekly stories printed "Angela Brill" for "Senate Bill",
+# "Sangay" for "Housing", "Wes Parker" for "Roosevelt Park" and "a speaker" for "Dream Lab",
+# "Colorado Gives Day" and "Thistle Resident-Owned Communities". Bills, programs, events and
+# bodies name no one, and an ordinary word is not a member's name by sound alone.
+def _member(name: str, role: str = "Member") -> dict[str, str]:
+    first, last = name.split(" ", 1)
+    return {"name": name, "first": first, "last": last, "role": role}
+
+
+LONGMONT = load_people(
+    [
+        (
+            roster_from_dict(
+                {
+                    "city": "Longmont",
+                    "body": "City Council",
+                    "state": "CO",
+                    "members": [
+                        _member("Angela Brill"),
+                        _member("Wes Parker"),
+                        _member("Sangay Mingyur"),
+                        _member("Matthew Popkin", "Council Member"),
+                        _member("Doug Barnert", "Commissioner"),
+                        _member("Holly Norton", "Commissioner"),
+                    ],
+                }
+            ),
+            "cities/longmont/roster.json",
+        )
+    ],
+    {},
+    "",
+)
+
+
+def test_bills_programs_events_and_bodies_keep_their_names() -> None:
+    text = (
+        "Senate Bill 24-174 requires the study. Thistle Resident-Owned Communities runs the "
+        "park. The Dream Lab drew families, and Colorado Gives Day is Dec. 8. Museum Protectors "
+        "gave $500. The Regional Transportation District Eco Pass goes to every employee. The "
+        "council heard about the Cities Summit, the National League of Cities and True North."
+    )
+    out, changes = repair_text(text, LONGMONT)
+    assert out == text
+    assert changes == []
+
+
+def test_an_ordinary_word_is_not_a_member_by_sound_alone() -> None:
+    text = "Housing and Human Services met Nov. 12. Humanity of Longmont builds homes."
+    assert repair_text(text, LONGMONT) == (text, [])
+
+
+def test_a_place_after_a_preposition_is_left_alone() -> None:
+    text = "The exhibit came from a city in Japan and a gallery from Nashville."
+    assert repair_text(text, LONGMONT) == (text, [])
+
+
+def test_an_unknown_speaker_still_loses_the_caption_name() -> None:
+    out, changes = repair_text("Bob Quorbex said the rent doubled.", LONGMONT)
+    assert "Quorbex" not in out
+    assert changes and "no record match" in changes[0]
+
+
+def test_a_titled_member_still_takes_the_record_spelling() -> None:
+    out, _ = repair_text("Commissioner Barnet moved approval.", LONGMONT)
+    assert out == "Commissioner Doug Barnert moved approval."
