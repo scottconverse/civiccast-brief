@@ -350,3 +350,75 @@ def test_a_sentence_start_word_is_not_rewritten_as_a_sound_alike_name() -> None:
     assert out == text
     assert not changes
     assert people.match("Sitting", "") is not None  # the sound-alike the guard stops
+
+
+# Boulder, Nov 19 2026: the check printed "the Rob Kaplan land use map", "starting Jason. 1"
+# and "A speaker voted unanimously" for the Planning Board. Places, plans, bodies and dates
+# name no one, so they stay as written.
+BOULDER = load_people(
+    [
+        (
+            roster_from_dict(
+                {
+                    "city": "Boulder",
+                    "body": "City Council",
+                    "state": "CO",
+                    "members": [
+                        {
+                            "name": "Rob Kaplan",
+                            "first": "Rob",
+                            "last": "Kaplan",
+                            "role": "Council Member",
+                        },
+                        {
+                            "name": "Jason Unger",
+                            "first": "Jason",
+                            "last": "Unger",
+                            "role": "Member",
+                        },
+                        {"name": "Joel Smith", "first": "Joel", "last": "Smith", "role": "Member"},
+                        {"name": "Jan Hill", "first": "Jan", "last": "Hill", "role": "Member"},
+                    ],
+                }
+            ),
+            "cities/boulder/roster.json",
+        )
+    ],
+    {},
+    "",
+)
+
+
+def test_places_plans_and_bodies_are_not_people() -> None:
+    text = (
+        "The Planning Board voted unanimously on Sept. 22. The second phase of the Transit "
+        "Village Area Plan changes the Boulder Valley Comprehensive Plan land use map. The "
+        "Federal Emergency Management Agency map takes effect near South Boulder Creek, with "
+        "Residential Rural 2 zoning on Rural Lands and University Hill."
+    )
+    out, changes = repair_text(text, BOULDER)
+    assert out == text
+    assert changes == []
+
+
+def test_month_abbreviation_is_not_a_first_name() -> None:
+    text = "The rule takes effect starting Jan. 1, 2027."
+    assert repair_text(text, BOULDER) == (text, [])
+
+
+def test_a_record_person_named_like_a_place_is_still_checked() -> None:
+    out, changes = repair_text("Later, Jann Hill asked a question.", BOULDER)
+    assert "Jan Hill" in out
+    assert changes
+
+
+def test_a_different_surname_is_not_swapped_for_a_roster_member() -> None:
+    out, changes = repair_text("Bob Smithers spoke during public comment.", BOULDER)
+    assert "Joel Smith" not in out
+    assert "Bob Smithers" not in out
+    assert changes
+
+
+def test_real_misspellings_still_take_the_record_spelling() -> None:
+    out, _ = repair_text("Rob Kaplin and Jasn Unger spoke.", BOULDER)
+    assert out == "Rob Kaplan and Jason Unger spoke."

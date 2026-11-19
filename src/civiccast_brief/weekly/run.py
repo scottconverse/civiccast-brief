@@ -184,6 +184,16 @@ def _script(steps: Steps, settings: Settings, folder: Path) -> tuple[Path, Path]
     return final, final.with_suffix(".json")
 
 
+def _recap_facts(folder: Path) -> int:
+    """How many facts (claims) the meeting's recap holds; 0 when it cannot be read."""
+    try:
+        recap = json.loads((folder / "recap.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    claims = recap.get("claims") if isinstance(recap, dict) else None
+    return len(claims) if isinstance(claims, list) else 0
+
+
 def _on_desk(settings: Settings, folder: Path, kind: str) -> bool:
     """True when the desk already has this item: a run that stopped after staging it and
     before saving its progress. Staging it again would fail with "already exists"."""
@@ -340,6 +350,17 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
         argv += ["--", meeting.video]
         _call(steps.meeting, argv, "meeting run")
         done.append("recap")
+    if "script" not in done and not _recap_facts(folder):
+        # Boulder, Nov 15 2026: the recap failed in every window and the podcast was a
+        # 24-second welcome and sign-off. With no facts there is no podcast yet. The story is
+        # written from the record on its own, so it still runs; the recap runs again next time.
+        if "article" not in done:
+            entry["article"] = _article(steps, settings, folder)
+            done.append("article")
+        done.remove("recap")
+        raise StepFailed(
+            "the recap has no facts from the meeting; no podcast yet, recap retried next run"
+        )
     if "script" not in done:
         txt, js = _script(steps, settings, folder)
         entry.update(script_txt=str(txt), script_json=str(js))

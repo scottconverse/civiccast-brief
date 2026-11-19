@@ -24,8 +24,9 @@ def _positional(argv):
 class Fake:
     """Stand-in mains. ``fail`` maps a step name to how many times it fails first."""
 
-    def __init__(self, fail=None):
+    def __init__(self, fail=None, claims=1):
         self.calls = []
+        self.claims = claims
         self.fail = dict(fail or {})
         self.exported = {}
 
@@ -52,7 +53,13 @@ class Fake:
             return 1
         out = Path(_opt(argv, "--out"))
         video = _positional(argv)
-        recap = {"body": "x", "meeting_date": "November 3, 2026", "video_id": video, "claims": []}
+        claims = [{"id": f"c{n:02d}", "text": "A fact."} for n in range(1, self.claims + 1)]
+        recap = {
+            "body": "x",
+            "meeting_date": "November 3, 2026",
+            "video_id": video,
+            "claims": claims,
+        }
         (out / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
         (out / "transcript.json").write_text(json.dumps({"video_id": video}), encoding="utf-8")
         return 0
@@ -925,3 +932,27 @@ def test_the_roundup_gets_a_written_article_and_its_episode_is_built_with_it(tmp
         step == "episode" and argv[0] == "story" and roundup_id in _opt(argv, "--article")
         for step, argv in fake.calls
     )
+
+
+def test_a_recap_with_no_facts_makes_no_podcast_but_the_story_runs_and_the_recap_retries(
+    tmp_path,
+):
+    # Boulder, Nov 15 2026: the recap failed in every window, and the podcast published was a
+    # 24-second welcome and sign-off.
+    settings = _settings(tmp_path)
+    fake = Fake(claims=0)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    assert report.failed == 1
+    assert "the recap has no facts" in report.lines[0]
+    assert ("script", "write") not in fake.names()
+    assert ("episode", "stage") not in fake.names()
+    assert ("article", "skill") in fake.names()
+
+    rerun = Fake()
+    report = run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
+    assert report.failed == 0
+    names = rerun.names()
+    assert names[0][0] == "meeting"
+    assert ("script", "write") in names
+    assert ("episode", "stage") in names
+    assert ("article", "skill") not in names
