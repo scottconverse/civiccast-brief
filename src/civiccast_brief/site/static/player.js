@@ -1,12 +1,14 @@
 // Episode player: speed steps, resume within the browser tab, and chapter seeks.
 // Behaviour follows the Craft kit's app/src/client/meeting.js (rewritten here, not copied).
-// Resume state lives in sessionStorage for this tab only. Nothing is sent to a server.
+// Resume state lives in sessionStorage for this tab only. The volume a listener picks is kept in
+// localStorage so the next episode starts at it. Nothing is sent to a server.
 (function () {
   "use strict";
 
   var SPEEDS = [1, 1.2, 1.5, 1.8, 2];
   var DEFAULT_SPEED = 1.2;
   var STORE_KEY = "civiccast-brief:player";
+  var VOLUME_KEY = "civiccast-brief:volume";
   var PLAY_PATH = '<path d="M8 5v14l11-7z"/>';
   var PAUSE_PATH = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
 
@@ -23,6 +25,23 @@
       window.sessionStorage.setItem(STORE_KEY, JSON.stringify(state));
     } catch (error) {
       // Storage can be blocked. The player still works without resume.
+    }
+  }
+
+  function readVolume() {
+    try {
+      var value = Number(window.localStorage.getItem(VOLUME_KEY));
+      return window.localStorage.getItem(VOLUME_KEY) !== null && value >= 0 && value <= 1 ? value : 1;
+    } catch (error) {
+      return 1;
+    }
+  }
+
+  function writeVolume(value) {
+    try {
+      window.localStorage.setItem(VOLUME_KEY, String(value));
+    } catch (error) {
+      // Storage can be blocked. The slider still works for this page.
     }
   }
 
@@ -51,6 +70,8 @@
     var nowText = custom.querySelector("[data-now]");
     var totalText = custom.querySelector("[data-total]");
     var message = custom.querySelector("[data-msg]");
+    var muteButton = custom.querySelector("[data-mute]");
+    var volumeSlider = custom.querySelector("[data-volume]");
     var speed = DEFAULT_SPEED;
 
     // Replace the native controls with the custom ones. The native element stays the audio source.
@@ -73,6 +94,38 @@
       audio.playbackRate = speed;
       speedButton.textContent = speed + "x";
       speedButton.setAttribute("aria-label", "Playback speed " + speed + "x. Change speed");
+    }
+
+    var MUTE_PATH = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/>';
+    var SOUND_PATH = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/>';
+    var lastVolume = 1;
+
+    function showVolume() {
+      var silent = audio.muted || audio.volume === 0;
+      var percent = silent ? 0 : Math.round(audio.volume * 100);
+      if (volumeSlider) {
+        volumeSlider.value = String(percent);
+        volumeSlider.setAttribute("aria-valuetext", silent ? "Muted" : "Volume " + percent + "%");
+      }
+      if (muteButton) {
+        var icon = muteButton.querySelector("svg");
+        if (icon) {
+          icon.innerHTML = silent ? MUTE_PATH : SOUND_PATH;
+        }
+        var label = silent ? "Unmute" : "Mute";
+        muteButton.setAttribute("aria-label", label);
+        muteButton.title = label;
+      }
+    }
+
+    function setVolume(value) {
+      audio.volume = Math.min(1, Math.max(0, value));
+      audio.muted = audio.volume === 0;
+      if (audio.volume > 0) {
+        lastVolume = audio.volume;
+      }
+      writeVolume(audio.volume);
+      showVolume();
     }
 
     function save() {
@@ -128,6 +181,23 @@
       }
     });
 
+    if (volumeSlider) {
+      volumeSlider.addEventListener("input", function () {
+        setVolume(Number(volumeSlider.value) / 100);
+      });
+    }
+    if (muteButton) {
+      muteButton.addEventListener("click", function () {
+        if (audio.muted || audio.volume === 0) {
+          setVolume(lastVolume || 1);
+        } else {
+          audio.muted = true;
+          showVolume();
+        }
+      });
+    }
+    audio.addEventListener("volumechange", showVolume);
+
     speedButton.addEventListener("click", function () {
       var index = SPEEDS.indexOf(speed);
       setSpeed(SPEEDS[(index + 1) % SPEEDS.length]);
@@ -170,6 +240,22 @@
       }
     }
     setSpeed(speed);
+    // Some phones (iOS) fix the volume to the device buttons; there the slider would do nothing.
+    var probe = audio.volume;
+    audio.volume = 0.5;
+    var volumeWorks = audio.volume === 0.5;
+    audio.volume = probe;
+    var volumeRow = custom.querySelector(".volume-row");
+    if (!volumeWorks && volumeRow) {
+      volumeRow.hidden = true;
+    }
+    var startVolume = readVolume();
+    audio.volume = startVolume;
+    audio.muted = startVolume === 0;
+    if (startVolume > 0) {
+      lastVolume = startVolume;
+    }
+    showVolume();
     return { seek: seek };
   }
 
