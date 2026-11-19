@@ -255,3 +255,30 @@ def test_a_possessive_invented_name_still_fails():
         "Watch the meeting video on YouTube.",
     )
     assert any(i.code == "name" and "Smith" in i.message for i in report.errors)
+
+
+def test_a_one_the_claim_says_may_be_spoken():
+    phase = Recap(
+        city="Boulder",
+        body="City Council",
+        meeting_date="November 12, 2026",
+        video_id="n8OxJlE_2xx",
+        claims=(
+            Claim(
+                "c1",
+                "Arts",
+                "A speaker said it is built in phase one of the project.",
+                "1:00:00",
+                "arts",
+            ),
+        ),
+    )
+    lines = [
+        ScriptLine("S1", "Welcome to CivicCast Brief, with the Boulder City Council."),
+        ScriptLine("S2", DISCLAIMER),
+        ScriptLine("S1", "It is built in phase one, a speaker said.", ("c1",)),
+        ScriptLine("S2", "Watch the meeting video on YouTube."),
+    ]
+    assert check_script(phase, lines).passed
+    lines[2] = ScriptLine("S1", "It is built in phase two, a speaker said.", ("c1",))
+    assert any(i.code == "number" for i in check_script(phase, lines).errors)

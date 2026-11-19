@@ -381,9 +381,18 @@ _POSSESSIVE_RE = re.compile(r"'s$")
 _CLOCK_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 
 
+_ONE_RE = re.compile(r"\bone\b", re.IGNORECASE)
+
+
 def _clock_atoms(text: str) -> set[str]:
     """A claim's "8:59 p.m." spoken as "eight fifty-nine p.m." reads as 859."""
     return {f"{int(h)}{m}" for h, m in _CLOCK_RE.findall(text)}
+
+
+def _spoken_one(text: str) -> set[str]:
+    """A claim's "phase one of the project" reads as no number (an idiom before "of"), but
+    the line's "phase one, with" reads as 1. The word is in the claim, so 1 is allowed."""
+    return {"1"} if _ONE_RE.search(text) else set()
 
 
 def _normalise(text: str) -> str:
@@ -462,7 +471,7 @@ def _check_line(
     for text in cited_texts:
         allowed_numbers |= number_atoms(text)
     for text in cited_texts:
-        allowed_numbers |= _clock_atoms(text)
+        allowed_numbers |= _clock_atoms(text) | _spoken_one(text)
     for missing in sorted(number_atoms(line.text) - allowed_numbers):
         issues.append(
             Issue(number, "error", "number", f"number {missing} is not in the cited claim(s)")
