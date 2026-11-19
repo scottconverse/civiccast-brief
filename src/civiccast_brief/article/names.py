@@ -246,6 +246,28 @@ _NOT_NAME_WORDS = _NOT_PERSON | {
     "station",
     "sheriff's",
 }
+#: Packet words that are never part of a person's name: articles, signature lines and the
+#: department names a staff line prints after the person ("Joanne Zeas, Human Resources").
+_PACKET_WORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "of",
+        "and",
+        "attest",
+        "calendar",
+        "human",
+        "resources",
+        "administration",
+        "finance",
+        "financial",
+        "safety",
+        "manager's",
+        "clerk's",
+        "attorney's",
+    }
+)
 #: Words that begin a document label, never a person's name: "Resolution R-87" is a resolution.
 _DOCUMENT_WORDS = frozenset(
     {
@@ -808,6 +830,12 @@ def person_issues(text: str, people: People | None) -> list[tuple[str, str]]:
     return out
 
 
+#: How close a printed full name's surname must be to the record's for the site to print the
+#: record's spelling. "Parsim" -> "Marsing" (0.62) and "Buckspan" -> "Buchsbaum" (0.59) are the
+#: same people; "Bolton" -> "Lennon" (0.50) is not.
+_TWO_WORD_SURNAME = 0.55
+
+
 def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
     """The (printed, record) name pairs a text needs, for a display-time replacement.
 
@@ -842,7 +870,7 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
                 )
             ):
                 continue
-        elif max((_ratio(tokens[-1], token) for token in last), default=0.0) < 0.45:
+        elif max((_ratio(tokens[-1], token) for token in last), default=0.0) < _TWO_WORD_SURNAME:
             continue
         out.append((span.name, _spelling(span, person)))
     return out
@@ -1154,8 +1182,15 @@ def _name_or_none(text: str, allow_single: bool = True) -> str | None:
     if not _NAME_ONLY_RE.match(cleaned):
         return None
     words = _WORD_RE.findall(cleaned)
-    if not words or all(
-        word.lower() in _NOT_NAME_WORDS or word.lower() in _ROLE_WORD_SET for word in words
+    # One heading or role word makes the run a heading, not a person: "Council Calendar City",
+    # "Board Member Davis", "Financial Officer", "Human Resources", and "The" before "City
+    # Clerk" are packet text. Every word was required before, so those became people and the
+    # site swapped real phrases for them.
+    if not words or any(
+        word.lower() in _NOT_NAME_WORDS
+        or word.lower() in _ROLE_WORD_SET
+        or word.lower() in _PACKET_WORDS
+        for word in words
     ):
         return None
     # A single capitalised word in a presented-by list is a department ("Parks"), not a person.

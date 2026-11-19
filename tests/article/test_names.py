@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from civiccast_brief.article.names import (
     fill_roll_call_names,
+    fixes,
     load_people,
     repair_article,
     repair_text,
@@ -490,3 +491,55 @@ def test_an_unknown_speaker_still_loses_the_caption_name() -> None:
 def test_a_titled_member_still_takes_the_record_spelling() -> None:
     out, _ = repair_text("Commissioner Barnet moved approval.", LONGMONT)
     assert out == "Commissioner Doug Barnert moved approval."
+
+
+CALENDAR_PACKET = (
+    "Mayor Council Calendar City Summit (Nashville, Tennessee)\n"
+    "ATTEST:\n"
+    "Mayor\n"
+    "The City Clerk\n"
+    "Board Member Wolford moved, seconded by Board Member Davis, to recommend approval.\n"
+    "The Chief Financial Officer shall repay the loans.\n"
+    "Presented By: Joanne Zeas, Human Resources, Miles Churchill, Public Safety\n"
+    "Presented For: Action\n"
+)
+
+
+def test_packet_headings_are_not_people() -> None:
+    pages = {"p1": DocPage("p1", "packet", "https://example.test/packet", 1, CALENDAR_PACKET)}
+    people = load_people([(ROSTER, "roster.json")], pages, "documents.json")
+    names = {person.name for person in people.persons}
+    for heading in (
+        "Council Calendar City",
+        "The",
+        "Board Member Davis",
+        "Financial Officer",
+        "Human Resources",
+        "Public Safety",
+        "ATTEST",
+    ):
+        assert heading not in names
+    assert {"Joanne Zeas", "Miles Churchill"} <= names
+
+
+def test_a_phrase_is_not_swapped_for_a_packet_heading() -> None:
+    pages = {"p1": DocPage("p1", "packet", "https://example.test/packet", 1, CALENDAR_PACKET)}
+    people = load_people([(ROSTER, "roster.json")], pages, "documents.json")
+    assert fixes("[S2] Theo said Social Security pays it.", people) == []
+
+
+def test_a_different_surname_is_not_swapped() -> None:
+    roster = roster_from_dict(
+        {
+            "city": "Longmont",
+            "body": "Board of Appeals",
+            "state": "CO",
+            "members": [
+                {"name": "JOHN LENNON", "first": "JOHN", "last": "LENNON", "role": "Member"},
+                {"name": "Jake Marsing", "first": "Jake", "last": "Marsing", "role": "Member"},
+            ],
+        }
+    )
+    people = load_people([(roster, "rosters/appeals.json")], {}, "")
+    assert fixes("John Bolton spoke.", people) == []
+    assert fixes("Jake Parsim spoke.", people) == [("Jake Parsim", "Jake Marsing")]
