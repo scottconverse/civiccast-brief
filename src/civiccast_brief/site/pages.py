@@ -172,6 +172,39 @@ def _cite(video: str | None, seconds: float) -> dict[str, Any]:
     return {"timestamp": timecode(seconds), "link": timestamp_link(video, seconds)}
 
 
+def _video_cites(video: str | None, seconds: list[float]) -> list[dict[str, Any]]:
+    """One link per moment: two claims at the same second show one timestamp, not two."""
+    cites: list[dict[str, Any]] = []
+    for second in seconds:
+        cite = _cite(video, second)
+        if cite["timestamp"] and cite not in cites:
+            cites.append(cite)
+    return cites
+
+
+def _page_cites(pages: Any) -> list[dict[str, str]]:
+    """One link per run of pages: pages 237 to 263 of the packet read "packet pp. 237-263" and
+    open at page 237, instead of 27 links. A page cited twice is linked once."""
+    runs: list[tuple[str, str, int, int]] = []
+    seen: set[tuple[str, str, int]] = set()
+    for page in pages:
+        key = (page.kind, page.url, page.page)
+        if key in seen:
+            continue
+        seen.add(key)
+        if runs and runs[-1][:2] == key[:2] and runs[-1][3] + 1 == page.page:
+            runs[-1] = (*runs[-1][:3], page.page)
+        else:
+            runs.append((page.kind, page.url, page.page, page.page))
+    return [
+        {
+            "label": f"{kind} p. {first}" if first == last else f"{kind} pp. {first}–{last}",
+            "link": f"{url}#page={first}",
+        }
+        for kind, url, first, last in runs
+    ]
+
+
 def _article_view(article: Article, video: str | None) -> dict[str, Any]:
     return {
         "headline": article.headline,
@@ -183,18 +216,8 @@ def _article_view(article: Article, video: str | None) -> dict[str, Any]:
                 "paragraphs": [
                     {
                         "text": paragraph.text,
-                        "cites": [
-                            _cite(video, cite.seconds)
-                            for cite in paragraph.cites
-                            if cite.seconds > 0
-                        ],
-                        "pages": [
-                            {
-                                "label": f"{page.kind} p. {page.page}",
-                                "link": f"{page.url}#page={page.page}",
-                            }
-                            for page in paragraph.pages
-                        ],
+                        "cites": _video_cites(video, [c.seconds for c in paragraph.cites]),
+                        "pages": _page_cites(paragraph.pages),
                     }
                     for paragraph in section.paragraphs
                 ],

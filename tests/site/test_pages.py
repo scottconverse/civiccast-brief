@@ -335,6 +335,37 @@ def test_a_paragraph_that_cites_document_pages_links_each_page(tmp_path: Path) -
     assert "pages[1].url must be the https address of the document" in problems
 
 
+def test_a_run_of_document_pages_is_one_link_and_a_repeated_moment_one_timestamp(
+    tmp_path: Path,
+) -> None:
+    """A paragraph citing packet pages 237 to 263 shows one "packet pp. 237-263" link, not 27."""
+    episodes = tmp_path / "episodes"
+    shutil.copytree(FIXTURES, episodes)
+    path = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    doc = "https://portal.example.org/packet.pdf"
+    paragraph = data["article"]["sections"][0]["paragraphs"][0]
+    paragraph["pages"] = [
+        *({"kind": "packet", "url": doc, "page": n} for n in range(237, 264)),
+        {"kind": "packet", "url": doc, "page": 286},
+        {"kind": "packet", "url": doc, "page": 286},
+    ]
+    paragraph["cites"] = [paragraph["cites"][0], paragraph["cites"][0]]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    out = tmp_path / "site"
+    build_site(episodes, out, BASE_URL, now=NOW)
+    page = _text(out, COUNCIL)
+    assert (
+        f'<a class="cite" href="{doc}#page=237" target="_blank" rel="noopener">packet pp. 237–263'
+        in page
+    )
+    assert f'href="{doc}#page=286" target="_blank" rel="noopener">packet p. 286' in page
+    assert page.count(f"{doc}#page=") == 2
+    cited = next(p for p in page.split('<p class="t">') if "packet pp." in p).split("</p>")[0]
+    stamps = re.findall(r'rel="noopener">(\d+:\d\d:\d\d)<', cited)
+    assert len(stamps) == 1
+
+
 def test_the_byline_and_transcript_title_do_not_repeat_the_meeting_date(tmp_path: Path) -> None:
     """A YouTube title ends with the date: "City Council Regular Session - 20 October 2026"."""
     episodes = tmp_path / "episodes"
