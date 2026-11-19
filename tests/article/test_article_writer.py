@@ -129,6 +129,14 @@ def test_a_common_word_that_opens_a_sentence_is_not_a_name_but_a_name_still_is()
     assert [i.message for i in issues] == ["name 'Waters' is not in the cited claims"]
 
 
+def test_a_possessive_of_an_allowed_name_passes_but_of_an_unknown_name_fails() -> None:
+    lead = Paragraph("The council approved the annexation 6-1.", ("c01",))
+    city = check_article(RECAP, article(lead, headline="Longmont's council approves annexation"))
+    assert "name" not in {i.code for i in city.issues}, city.render()
+    other = check_article(RECAP, article(lead, headline="Waters's council approves annexation"))
+    assert ("headline", "name") in {(i.where, i.code) for i in other.issues}
+
+
 def test_the_prompt_does_not_show_the_unverified_topics() -> None:
     from civiccast_brief.article.writer import build_prompt
 
