@@ -136,6 +136,12 @@
           </div>
           <button type="button" class="speed" data-speed aria-label="Playback speed 1.2x. Change speed">1.2x</button>
         </div>
+        <div class="volume-row">
+          <button type="button" class="mute" data-mute aria-label="Mute" title="Mute">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+          </button>
+          <input type="range" class="volume" data-volume min="0" max="100" step="5" value="100" aria-label="Volume" aria-valuetext="Volume 100%">
+        </div>
         <p class="player-msg" role="status" aria-live="polite" data-msg></p>
       </div>
       <p class="player-meta">{{ audio.size }} MP3. <a href="{{ audio.url }}">Download</a></p>

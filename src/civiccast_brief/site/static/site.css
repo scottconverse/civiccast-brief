@@ -272,7 +272,10 @@ details > summary { cursor: pointer; font-weight: 600; }
 .fill { height: 100%; width: 0; border-radius: 2px; background: var(--surface); }
 .times { display: flex; justify-content: space-between; font: .72rem var(--mono); opacity: .8; margin-top: 6px; }
 .speed { flex: none; font: 500 .78rem var(--mono); border: 1px solid color-mix(in srgb, var(--surface) 40%, transparent); background: transparent; color: inherit; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
-.play:focus-visible, .speed:focus-visible { outline-color: var(--surface); }
+.play:focus-visible, .speed:focus-visible, .mute:focus-visible, .volume:focus-visible { outline-color: var(--surface); }
+.volume-row { display: flex; align-items: center; gap: 10px; }
+.mute { flex: none; width: 44px; height: 32px; border: 0; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; border-radius: 6px; }
+.volume { flex: 1; min-width: 0; height: 24px; accent-color: var(--surface); cursor: pointer; }
 .player-msg:empty { display: none; }
 .player-msg, .player-meta { font-size: .8rem; opacity: .85; }
 .chap { list-style: none; padding: 0; display: grid; gap: 6px; font-size: .88rem; }
