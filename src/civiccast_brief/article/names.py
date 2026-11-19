@@ -315,7 +315,7 @@ class People:
             return None
         best: tuple[float, Person] | None = None
         for person in self.persons:
-            score = _score(wanted, person)
+            score = _score(wanted, person, has_role=bool(role))
             if score and role and _role_key(role) == _role_key(person.role):
                 score += 0.001  # break a tie between two similar names
             if score and (best is None or score > best[0]):
@@ -388,7 +388,13 @@ def _ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def _score(wanted: list[str], person: Person) -> float:
+def _score(wanted: list[str], person: Person, has_role: bool = False) -> float:
+    """How surely a printed name means this record person (0 = not at all).
+
+    ``has_role`` is true when a title stands in front of the name ("Mayor Pro Tem Cowish"):
+    the title already says a person is meant, so a weaker spelling may match on sound. With
+    no title, an ordinary word ("Housing", "Senate Bill") must not become a member's name.
+    """
     first, last = _tokens(person.first), _tokens(person.last)
     record = _tokens(person.name)
     printed = " ".join(wanted)
@@ -413,7 +419,8 @@ def _score(wanted: list[str], person: Person) -> float:
             for token in [*last, *first]
             if token
         )
-        if skeleton and best >= 0.4:
+        # "Housing" and "Sangay" share a sound key but are not the same word.
+        if skeleton and best >= (0.4 if has_role else 0.6):
             return 0.80
         if best >= 0.72:
             return 0.78
@@ -439,7 +446,11 @@ def _score(wanted: list[str], person: Person) -> float:
     # Smith, and "Transit Village Area Plan" is not Rob Kaplan.
     merged = _ratio("".join(wanted), "".join(last))
     if last_ratio >= 0.75 and first_ratio < 0.5 and merged >= 0.75:
-        score = max(score, 0.72)
+        return max(score, 0.72)
+    # With no title in front, a first word unlike the member's first name is not that member:
+    # "Senate Bill" is not Angela Brill.
+    if not has_role and first and first_ratio < 0.45:
+        return 0.0
     return score
 
 
@@ -548,6 +559,31 @@ _NON_PERSON_TAIL = (
             "neighborhood",
             "subdivision",
             "campus",
+            # Bills, events, programs, bodies and places a council story names (Longmont,
+            # Nov 2026: "Senate Bill", "Dream Lab", "Colorado Gives Day", "Cities Summit").
+            "bill",
+            "bills",
+            "act",
+            "day",
+            "days",
+            "week",
+            "month",
+            "pass",
+            "summit",
+            "conference",
+            "league",
+            "lab",
+            "labs",
+            "communities",
+            "community",
+            "museum",
+            "gallery",
+            "library",
+            "protectors",
+            "north",
+            "south",
+            "east",
+            "west",
         }
     )
 )
@@ -562,6 +598,37 @@ def _is_person_like(name: str, role: str) -> bool:
     if tokens[-1] in _PLACE_WORDS:
         return False
     return len(tokens) >= 2
+
+
+#: A verb only a person does, right after a name: "Jo Smith said", "Jo Smith, a resident, asked".
+_PERSON_VERB_RE = re.compile(
+    r"\s*(?:,[^,.;]{1,80},\s*)?(?:said|says|asked|asks|told|spoke|speaks|added|noted|moved|"
+    r"seconded|explained|argued|urged|presented|reported|answered|replied|responded|agreed|"
+    r"voted|testified|thanked|commented|questioned|recalled|warned|wrote)\b",
+    re.IGNORECASE,
+)
+#: A word just before a name that says a person is meant: "resident Jo Smith", "named Jo Smith".
+_PERSON_LEAD_RE = re.compile(
+    r"\b(?:resident|speaker|named|commenter|applicant)\s*,?\s*$", re.IGNORECASE
+)
+
+
+def _unmatched_person(text: str, span: Span) -> bool:
+    """Whether a name the record does not hold is a person's, so it must lose the name.
+
+    With a title in front ("Council Member X") it is. With none, a run of capitalised words is
+    more often a bill, a program, a body or a place ("Senate Bill", "Dream Lab", "Thistle
+    Resident-Owned Communities"); only a person cue around it (a speech verb after, "resident"
+    before) makes it a person. Otherwise the words stay as written.
+    """
+    if not _is_person_like(span.name, span.role):
+        return False
+    if span.role:
+        return True
+    return bool(
+        _PERSON_VERB_RE.match(text, span.end)
+        or _PERSON_LEAD_RE.search(text[max(0, span.lead_start - 40) : span.lead_start])
+    )
 
 
 @dataclass(frozen=True)
@@ -674,7 +741,7 @@ def name_issues(text: str, people: People | None) -> list[tuple[str, str]]:
             continue
         person = people.match(span.name, span.role)
         if person is None:
-            if _is_person_like(span.name, span.role) and not people.verbatim(span.name):
+            if _unmatched_person(text, span) and not people.verbatim(span.name):
                 out.append(
                     (
                         "name_unknown",
@@ -801,7 +868,7 @@ def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
             out = out[: span.start] + spelling + out[span.end :]
             changes.append(f"name {span.name!r} -> {spelling!r} ({person.source})")
             continue
-        if not _is_person_like(span.name, span.role) or people.verbatim(span.name):
+        if not _unmatched_person(text, span) or people.verbatim(span.name):
             continue
         context = text[max(0, span.start - 60) : span.end + 60]
         role = _role_phrase(span.role, context, _at_sentence_start(text, span.lead_start))

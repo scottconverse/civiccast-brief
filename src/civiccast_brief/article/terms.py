@@ -445,6 +445,12 @@ _COMMON = frozenset(
 )
 
 
+#: Words that put a place or a body after them: "in Japan", "from Nashville", "at Dream Lab".
+_PLACE_PREPOSITIONS = frozenset(
+    {"in", "from", "to", "of", "at", "near", "into", "across", "throughout", "around", "outside"}
+)
+
+
 def _near_word(word: str, record: Record) -> str | None:
     """The one record proper noun an ASR spelling is close to ("Nouvel" -> "Noblewins")."""
     best: tuple[float, str] | None = None
@@ -508,6 +514,10 @@ def _garbled_item(text: str, record: Record) -> list[tuple[int, int, str]]:
             before = re.search(r"([A-Za-z'’\-]+) +$", text[: match.start()])
             after = re.match(r" +([A-Za-z'’\-]+)", text[match.end() :])
             if (before and before.group(1)[0].isupper()) or (after and after.group(1)[0].isupper()):
+                continue
+            # A name after a preposition is a place or a body ("a city in Japan"), not a garble
+            # of some record word that shares its first letters ("Jake").
+            if before and before.group(1).lower() in _PLACE_PREPOSITIONS:
                 continue
             near = _near_word(first, record)
             if near is not None:
