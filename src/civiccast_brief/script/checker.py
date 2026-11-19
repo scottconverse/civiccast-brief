@@ -135,6 +135,20 @@ _COMMON_OPENERS = frozenset(
         "only",
         "or",
         "other",
+        "others",
+        # Plural nouns a summary line opens with (Boulder, Nov 2026: "Ideas included legal
+        # advice"); at a sentence start they are capitalised, not names.
+        "ideas",
+        "options",
+        "suggestions",
+        "concerns",
+        "questions",
+        "members",
+        "speakers",
+        "residents",
+        "several",
+        "many",
+        "few",
         "our",
         "over",
         "please",
@@ -363,6 +377,15 @@ def _label(lines: list[ScriptLine], number: int) -> str:
     return f"{line.speaker}: {text}"
 
 
+_POSSESSIVE_RE = re.compile(r"'s$")
+_CLOCK_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+
+
+def _clock_atoms(text: str) -> set[str]:
+    """A claim's "8:59 p.m." spoken as "eight fifty-nine p.m." reads as 859."""
+    return {f"{int(h)}{m}" for h, m in _CLOCK_RE.findall(text)}
+
+
 def _normalise(text: str) -> str:
     return text.replace("St.", "Saint")
 
@@ -438,13 +461,17 @@ def _check_line(
     allowed_numbers = set()
     for text in cited_texts:
         allowed_numbers |= number_atoms(text)
+    for text in cited_texts:
+        allowed_numbers |= _clock_atoms(text)
     for missing in sorted(number_atoms(line.text) - allowed_numbers):
         issues.append(
             Issue(number, "error", "number", f"number {missing} is not in the cited claim(s)")
         )
     allowed_words = _claim_words(cited_texts) | SHOW_NAMES
     for name in _proper_nouns(line.text):
-        if name.lower() not in allowed_words:
+        word = name.lower()
+        # "Boulder's" is the place "Boulder" the claim or the header names.
+        if word not in allowed_words and _POSSESSIVE_RE.sub("", word) not in allowed_words:
             issues.append(
                 Issue(number, "error", "name", f"name {name!r} is not in the cited claim(s)")
             )
