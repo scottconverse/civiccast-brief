@@ -141,6 +141,18 @@ _NOT_PERSON = {
     "october",
     "november",
     "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+    "dec",
     "monday",
     "tuesday",
     "wednesday",
@@ -310,6 +322,27 @@ class People:
                 best = (score, person)
         return best[1] if best and best[0] >= 0.62 else None
 
+    def not_a_person(self, name: str) -> bool:
+        """Whether a capitalised run is a place, plan, body or date, never a person.
+
+        "Transit Village Area Plan", "Planning Board", "South Boulder Creek" and "Jan." name
+        no one: the story must print them as written, not as a record name or as "a speaker".
+        A run that reads as a record person's own name is still a person: "Jann Hill" is Jan
+        Hill, but "University Hill" is a neighborhood.
+        """
+        tokens = _tokens(name)
+        if not tokens or tokens[-1] not in _NON_PERSON_TAIL:
+            return False
+        for person in self.persons:
+            last, first = _tokens(person.last), _tokens(person.first)
+            if tokens[-1] not in last:
+                continue
+            if len(tokens) == 1:
+                return False
+            if max((_ratio(tokens[0], token) for token in first), default=0.0) >= 0.6:
+                return False
+        return True
+
     def verbatim(self, name: str) -> bool:
         """Whether the record prints this exact sequence (a company, place or document title)."""
         needle = _normal(name)
@@ -402,7 +435,10 @@ def _score(wanted: list[str], person: Person) -> float:
     # The captions merge a first name into a surname ("Craig Craft" for "Cracraft"). When the
     # surname is nearly the record's and the printed first name matches no other member, the
     # surname is the certain match: the record prints the whole name and the repair uses it.
-    if last_ratio >= 0.75 and first_ratio < 0.5:
+    # The run-together words must themselves spell the surname: "Bob Smithers" is not Joel
+    # Smith, and "Transit Village Area Plan" is not Rob Kaplan.
+    merged = _ratio("".join(wanted), "".join(last))
+    if last_ratio >= 0.75 and first_ratio < 0.5 and merged >= 0.75:
         score = max(score, 0.72)
     return score
 
@@ -457,6 +493,63 @@ _PLACE_WORDS = frozenset(
         "hwy",
         "path",
     }
+)
+
+
+#: The last word of a plan, body, agency, district or place: a run that ends in one of these
+#: names no one ("Boulder Valley Comprehensive Plan", "Federal Emergency Management Agency").
+_NON_PERSON_TAIL = (
+    _NOT_NAME_WORDS
+    | _PLACE_WORDS
+    | frozenset(
+        {
+            "plan",
+            "plans",
+            "agency",
+            "authority",
+            "administration",
+            "association",
+            "coalition",
+            "foundation",
+            "university",
+            "college",
+            "institute",
+            "hospital",
+            "airport",
+            "creek",
+            "lake",
+            "river",
+            "reservoir",
+            "canyon",
+            "mesa",
+            "mountain",
+            "valley",
+            "hill",
+            "hills",
+            "village",
+            "area",
+            "areas",
+            "land",
+            "lands",
+            "rural",
+            "corridor",
+            "zone",
+            "zoning",
+            "overlay",
+            "map",
+            "study",
+            "project",
+            "initiative",
+            "policy",
+            "strategy",
+            "framework",
+            "space",
+            "open",
+            "neighborhood",
+            "subdivision",
+            "campus",
+        }
+    )
 )
 
 
@@ -577,6 +670,8 @@ def name_issues(text: str, people: People | None) -> list[tuple[str, str]]:
         return []
     out: list[tuple[str, str]] = []
     for span in spans(text):
+        if not span.role and people.not_a_person(span.name):
+            continue
         person = people.match(span.name, span.role)
         if person is None:
             if _is_person_like(span.name, span.role) and not people.verbatim(span.name):
@@ -617,6 +712,8 @@ def person_issues(text: str, people: People | None) -> list[tuple[str, str]]:
         return []
     out: list[tuple[str, str]] = []
     for span in spans(text):
+        if not span.role and people.not_a_person(span.name):
+            continue
         tokens = _tokens(span.name)
         if not tokens:
             continue
@@ -657,6 +754,8 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
         return []
     out: list[tuple[str, str]] = []
     for span in spans(text):
+        if not span.role and people.not_a_person(span.name):
+            continue
         person = people.match(span.name, span.role)
         if person is None or people.verbatim(span.name):
             continue
@@ -690,6 +789,8 @@ def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
     changes: list[str] = []
     out = text
     for span in reversed(spans(text)):
+        if not span.role and people.not_a_person(span.name):
+            continue
         person = people.match(span.name, span.role)
         if person is not None:
             if _tokens(span.name) == _tokens(person.name) or people.verbatim(span.name):
@@ -1146,6 +1247,8 @@ def audit(people: People, texts: list[str]) -> list[str]:
     lines: list[str] = []
     for text in texts:
         for span in spans(text):
+            if not span.role and people.not_a_person(span.name):
+                continue
             person = people.match(span.name, span.role)
             if person is None:
                 if _is_person_like(span.name, span.role) and not people.verbatim(span.name):

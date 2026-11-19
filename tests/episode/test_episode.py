@@ -519,3 +519,28 @@ def test_a_dated_headline_does_not_name_the_city_twice(tmp_path):
         "Longmont Housing Authority Advisory Board, November 10, 2026"
     )
     assert headline("City Council") == "Longmont City Council, November 10, 2026"
+
+
+def test_a_script_with_no_facts_is_held_not_published(tmp_path, meeting):
+    # Boulder, Nov 15 2026: a recap with no claims gave a 24-second welcome and sign-off that
+    # published by itself.
+    meeting_dir, _ = meeting
+    recap = json.loads((meeting_dir / "recap.json").read_text(encoding="utf-8"))
+    recap["claims"] = []
+    (meeting_dir / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
+    (meeting_dir / "script.json").write_text(
+        json.dumps(
+            [
+                {"speaker": "S1", "text": "Welcome to CivicCast Brief.", "claim_ids": []},
+                {"speaker": "S2", "text": "That's all for this week.", "claim_ids": []},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, meeting_dir / "script.json")
+    with ReviewStore(db) as store:
+        item = store.get_item(item_id)
+    assert item.status == "review"
+    assert item.checks_passed is False
+    assert "states no fact" in item.checks_note

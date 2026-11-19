@@ -89,6 +89,16 @@ def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
     recap, data = _meeting(meeting_dir)
     script = load_script(script_json)
     report = check_script(recap, script)
+    passed, note = report.passed, report.render()
+    # Boulder, Nov 15 2026: a recap with no facts gave a 24-second intro and sign-off, and it
+    # published by itself. An episode that tells nothing about the meeting waits for the editor.
+    facts = sum(1 for line in script if not line.is_chapter and line.claim_ids)
+    if not facts:
+        passed = False
+        note = (
+            f"HELD: the script states no fact from the meeting "
+            f"({len(recap.claims)} claim(s) in the recap).\n{note}"
+        )
     item = stage_item(
         db,
         kind="episode",
@@ -96,8 +106,8 @@ def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
         title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),
         meeting_date=recap.meeting_date,
         body=recap.body,
-        checks_passed=report.passed,
-        checks_note=report.render(),
+        checks_passed=passed,
+        checks_note=note,
         speakers=voice_map(meeting_dir),
         recap=recap_text(recap),
         script=render_txt(script),
