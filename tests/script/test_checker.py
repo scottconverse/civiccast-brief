@@ -202,3 +202,83 @@ def test_two_chapter_marks_together_fail_the_check():
     report = check_script(RECAP, lines)
     assert not report.passed
     assert [i.code for i in report.errors] == ["empty_chapter"]
+
+
+# Boulder, Nov 19 2026: a supported script failed on "Ideas" and "Others" at a sentence start,
+# on "eight fifty-nine p.m." for a claim's "8:59 p.m.", and on "Boulder's" in the outro.
+CLOSE = Recap(
+    city="Boulder",
+    body="City Council",
+    meeting_date="November 12, 2026",
+    video_id="n8OxJlE_2xx",
+    claims=(
+        Claim("c1", "Ideas", "A speaker suggested getting legal advice.", "1:00:00", "legal"),
+        Claim("c2", "Close", "A speaker closed the meeting at 8:59 p.m.", "2:00:00", "close"),
+    ),
+)
+
+
+def _close_report(middle: list[ScriptLine], outro: str):
+    return check_script(
+        CLOSE,
+        [
+            ScriptLine("S1", "Welcome to CivicCast Brief, with the Boulder City Council."),
+            ScriptLine("S2", DISCLAIMER),
+            *middle,
+            ScriptLine("S2", outro),
+        ],
+    )
+
+
+def test_plural_openers_clock_times_and_a_possessive_place_pass():
+    report = _close_report(
+        [
+            ScriptLine("S1", "Ideas included legal advice.", ("c1",)),
+            ScriptLine("S2", "Others agreed. The meeting closed at eight fifty-nine p.m.", ("c2",)),
+        ],
+        "That's the brief. Watch the full meeting video on the City of Boulder's YouTube channel.",
+    )
+    assert report.passed, report.render()
+
+
+def test_a_wrong_clock_time_still_fails():
+    report = _close_report(
+        [ScriptLine("S2", "The meeting closed at nine fifty-nine p.m.", ("c2",))],
+        "Watch the meeting video on YouTube.",
+    )
+    assert any(i.code == "number" for i in report.errors)
+
+
+def test_a_possessive_invented_name_still_fails():
+    report = _close_report(
+        [ScriptLine("S1", "Smith's idea was legal advice.", ("c1",))],
+        "Watch the meeting video on YouTube.",
+    )
+    assert any(i.code == "name" and "Smith" in i.message for i in report.errors)
+
+
+def test_a_one_the_claim_says_may_be_spoken():
+    phase = Recap(
+        city="Boulder",
+        body="City Council",
+        meeting_date="November 12, 2026",
+        video_id="n8OxJlE_2xx",
+        claims=(
+            Claim(
+                "c1",
+                "Arts",
+                "A speaker said it is built in phase one of the project.",
+                "1:00:00",
+                "arts",
+            ),
+        ),
+    )
+    lines = [
+        ScriptLine("S1", "Welcome to CivicCast Brief, with the Boulder City Council."),
+        ScriptLine("S2", DISCLAIMER),
+        ScriptLine("S1", "It is built in phase one, a speaker said.", ("c1",)),
+        ScriptLine("S2", "Watch the meeting video on YouTube."),
+    ]
+    assert check_script(phase, lines).passed
+    lines[2] = ScriptLine("S1", "It is built in phase two, a speaker said.", ("c1",))
+    assert any(i.code == "number" for i in check_script(phase, lines).errors)
