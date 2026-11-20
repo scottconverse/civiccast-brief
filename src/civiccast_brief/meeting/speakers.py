@@ -355,6 +355,17 @@ MIN_OWN_SHARE = 0.8
 #: of all that voice's lines fall in turns named that person. A staff voice that presents at
 #: length elsewhere fails it, so a staff answer inside a member's turn stays unknown.
 MIN_HOME_SHARE = 0.5
+#: A voice that is not the main voice of a caption turn names a line there only when it speaks at
+#: least this many lines in a row. One stray line is the diarizer's overlap at the edge of a turn,
+#: not a speaker: on Louisville's Nov 17, 2026 meeting, lines such as "for programming?" and
+#: "Front Street not be completed?" ended council members' questions in the voice of the staff
+#: member who answered and were given her name.
+MIN_MINOR_RUN_LINES = 2
+#: A name a voice gave itself (see introductions) labels only turns where that voice speaks at
+#: least this many lines. A self-introduction is one piece of evidence, and the diarizer puts some
+#: short questions in the presenter's voice: on Lafayette's Nov 17, 2026 meeting, "Water in storage
+#: evaporating higher than just like stream flow?" was a two-line turn in the water manager's voice.
+MIN_INTRODUCED_TURN_LINES = 3
 _GLUED_PRO_TEM = re.compile(r"^(?:prom|port|pro)(?=[a-z]{3,})", re.IGNORECASE)
 
 
@@ -604,6 +615,30 @@ def _voice_counts(segments: list[Segment], turn: Turn, chair: str | None) -> dic
         if voice and voice != chair:
             counts[voice] = counts.get(voice, 0) + 1
     return counts
+
+
+def _stray_lines(segments: list[Segment], turn: Turn) -> set[int]:
+    """Lines of a turn in a voice that is not the turn's main voice (the chair's counted) and that
+    speaks fewer than MIN_MINOR_RUN_LINES lines in a row there."""
+    counts: dict[str, int] = {}
+    for position in range(turn.first, turn.last + 1):
+        voice = segments[position].voice
+        if voice:
+            counts[voice] = counts.get(voice, 0) + 1
+    if not counts:
+        return set()
+    main = max(sorted(counts), key=lambda v: counts[v])
+    stray: set[int] = set()
+    position = turn.first
+    while position <= turn.last:
+        voice = segments[position].voice
+        end = position
+        while end + 1 <= turn.last and segments[end + 1].voice == voice:
+            end += 1
+        if voice and voice != main and end - position + 1 < MIN_MINOR_RUN_LINES:
+            stray.update(range(position, end + 1))
+        position = end + 1
+    return stray
 
 
 def _own_voice(segments: list[Segment], turn: Turn, chair: str | None) -> str | None:
@@ -930,6 +965,7 @@ def introductions(
         segment = segments[position]
         spoken = " ".join(words)
         entry: dict[str, Any] = {
+            "line": position,
             "start": hms(segment.start),
             "voice": segment.voice,
             "spoken": spoken,
@@ -1006,10 +1042,13 @@ def label_voices(
     - a line in the chair's voice stays unknown (the chair's words are not the member's);
     - a line in a named voice gets that voice's name;
     - a line in a voice that introduced itself by a name the documents print (see introductions)
-      gets that name;
+      gets that name, in the turn of the introduction and in turns where that voice is on at
+      least MIN_INTRODUCED_TURN_LINES lines;
     - a line of a named turn in the turn's own voice, or with no voice, keeps the turn's name,
       when that voice is on MIN_OWN_SHARE of the turn's voiced lines and, if the voice has no
       name, MIN_HOME_SHARE of the voice's lines are in turns named that person;
+    - a stray line (one line in a voice that is not the turn's main voice, see
+      MIN_MINOR_RUN_LINES) stays unknown;
     - any other line stays unknown.
     """
     chair = chair_voice(segments, turns, recognitions)
@@ -1053,7 +1092,15 @@ def label_voices(
                 key = (voice, turn.speaker)
                 home_lines[key] = home_lines.get(key, 0) + 1
     by_voice = 0
-    for turn in turns:
+    stray_lines = 0
+    short_introduced = 0
+    intro_lines = {e["line"] for e in intros if e["status"] == "named"}
+    intro_turns = {
+        index
+        for index, turn in enumerate(turns)
+        if any(turn.first <= line <= turn.last for line in intro_lines)
+    }
+    for index, turn in enumerate(turns):
         counts = _voice_counts(segments, turn, chair)
         own = _own_voice(segments, turn, chair)
         if own is not None and counts[own] / sum(counts.values()) < MIN_OWN_SHARE:
@@ -1065,20 +1112,29 @@ def label_voices(
             and home_lines.get((own, turn.speaker), 0) / voice_lines[own] < MIN_HOME_SHARE
         ):
             own = None
+        stray = _stray_lines(segments, turn)
         for position in range(turn.first, turn.last + 1):
             segment = segments[position]
             voice = segment.voice
             segment.basis = None
-            if voice is not None and voice == chair:
+            if position in stray:
+                label = None
+                stray_lines += 1
+            elif voice is not None and voice == chair:
                 label = chair_found["name"]
                 segment.basis = "chair" if label else None
             elif voice in named:
                 label = named[voice]
                 if label != turn.speaker:
                     by_voice += 1
-            elif voice in introduced:
+            elif voice in introduced and (
+                index in intro_turns or counts.get(voice, 0) >= MIN_INTRODUCED_TURN_LINES
+            ):
                 label, where = introduced[voice]
                 segment.basis = f"introduced:{where}"
+            elif voice in introduced:
+                label = None
+                short_introduced += 1
             elif turn.speaker is not None and (voice is None or voice == own):
                 label = turn.speaker
             else:
@@ -1094,4 +1150,6 @@ def label_voices(
         "min_share": MIN_VOICE_SHARE,
         "voices": voices,
         "lines_named_by_voice": by_voice,
+        "stray_voice_lines": stray_lines,
+        "short_introduced_lines": short_introduced,
     }
