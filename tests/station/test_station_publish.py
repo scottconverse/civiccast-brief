@@ -226,6 +226,7 @@ def test_the_control_room_shows_a_failed_run_and_an_edit_queues_a_publish(desk):
     token = client.app.state.desk.token
     s.runner.codes["make"] = 4
     s.run_now()
+    s.join_workers()  # the run is a background thread; wait for it before reading the page
     page = client.get("/desk/").text
     assert "Weekly job: last run" in page and "failed" in page
     assert "The last run failed (code 4)" in page
