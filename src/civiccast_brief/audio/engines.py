@@ -18,8 +18,14 @@ Timing, per engine:
   two lines, then the timeline is stretched to the file length. Chunk edges use the renderer's
   measured chunk lengths and carry the same quiet-tail offset as ``measured``. A boundary inside a
   chunk is an estimate and was not checked against the audio.
+- ``approximate`` (GeminiTTS): the API reports only the audio of a whole request. A request carries
+  whole script lines up to ``GeminiConfig.max_words_per_request`` words, and the request audio
+  lengths are exact. Inside a request, the boundary between two lines is estimated from the word
+  counts of those lines, then the whole timeline is stretched to the final file length. Requests are
+  joined in order with ``GeminiConfig.gap_s`` of silence.
 
-The remote engines drive the bake-off renderers on the GPU box over ssh and scp. Remote commands
+The remote engines drive the bake-off renderers on the GPU box over ssh and scp. GeminiTTS is the
+one hosted engine: it calls Google's Gemini TTS over HTTPS; nothing runs on the box. Remote commands
 are PowerShell (the box's default shell) sent with -EncodedCommand, so nothing has to survive
 cmd.exe quoting. Every engine runs as plain Windows Python on the box; none needs Linux or WSL.
 The outer PowerShell reports exit code 1 whenever the inner command failed, so
@@ -31,31 +37,49 @@ from __future__ import annotations
 import base64
 import dataclasses
 import json
+import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import typing
 import uuid
-from collections.abc import Callable
+import wave
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
+import httpx
+
 from civiccast_brief.audio.errors import ConfigError, EngineError
 from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg
 from civiccast_brief.audio.lines import Line
+from civiccast_brief.record.credentials import read_windows_credential
 
 Timing = Literal["exact", "measured", "approximate"]
 
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=20")
 RC_MARKER = "CIVICCAST_RC="
-ENGINE_NAMES = ("dia2", "chatterbox", "fake")
+ENGINE_NAMES = ("dia2", "chatterbox", "gemini", "fake")
 # Scott, 2026-11-12: Dia2, on Windows. Step-Audio-EditX (a Linux program) is not an option at all.
 DEFAULT_ENGINE = "dia2"
 
 _CHATTER_LINE = re.compile(r"^line\s+(\d+)\s+(S[12])\s+audio=\s*([0-9.]+)s", re.MULTILINE)
 _RC_LINE = re.compile(r"^CIVICCAST_RC=(-?\d+)\s*$", re.MULTILINE)
+
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GEMINI_API_KEY_TARGET = "CivicCastBrief/gemini-api"
+GEMINI_INSTRUCTION = (
+    "Read this two-host local news podcast transcript exactly as written, in a natural, "
+    "conversational tone:"
+)
+GEMINI_DEFAULT_RATE = 24000
+_GEMINI_RATE = re.compile(r"rate=(\d+)")
+_GEMINI_RETRY_DELAY = re.compile(r"^([0-9]+(?:\.[0-9]+)?)s$")
+_GEMINI_SPEAKER_NAMES = {"S1": "Speaker 1", "S2": "Speaker 2"}
 
 
 # --- results ---------------------------------------------------------------------------------
@@ -128,10 +152,29 @@ class Dia2Config:
 
 
 @dataclass(frozen=True)
+class GeminiConfig:
+    """Google Gemini TTS over its REST API. Scott picked voices Bodi (S1) and Sola (S2)."""
+
+    model: str = "gemini-3.8-flash-tts"
+    fallback_model: str = "gemini-3.8-flash-lite-tts"  # empty string = no fallback
+    voice_s1: str = "Bodi"
+    voice_s2: str = "Sola"
+    max_words_per_request: int = 1300
+    timeout_s: float = 300.0
+    gap_s: float = 0.35  # silence between requests' audio when a script is split
+    # Per-minute limits: wait and retry the same model before falling back. A per-day quota
+    # (or a wait longer than max_retry_wait_s) goes straight to the fallback.
+    retry_wait_s: float = 60.0  # wait when the 429 body has no usable RetryInfo
+    max_retry_wait_s: float = 90.0  # longer waits mean fall back instead
+    retries_per_model: int = 2
+
+
+@dataclass(frozen=True)
 class AudioConfig:
     box: RemoteConfig = field(default_factory=RemoteConfig)
     chatterbox: ChatterboxConfig = field(default_factory=ChatterboxConfig)
     dia2: Dia2Config = field(default_factory=Dia2Config)
+    gemini: GeminiConfig = field(default_factory=GeminiConfig)
 
 
 def load_config(path: Path | None) -> AudioConfig:
@@ -181,6 +224,8 @@ def make_engine(name: str, config: AudioConfig) -> VoiceEngine:
         return ChatterboxRemote(config.box, config.chatterbox)
     if name == "dia2":
         return Dia2Remote(config.box, config.dia2)
+    if name == "gemini":
+        return GeminiTTS(config.gemini)
     if name == "fake":
         return FakeEngine()
     raise ConfigError(f"unknown engine {name!r}; choose from {', '.join(ENGINE_NAMES)}")
@@ -516,6 +561,332 @@ class Dia2Remote:
         duration = probe_duration(out_wav)
         spans = fit_to_length(dia2_spans(chunks, lines, self.cfg.gap_s), duration)
         return _result(out_wav, self.name, "approximate", lines, spans, duration)
+
+
+# --- Gemini TTS (hosted) ---------------------------------------------------------------------
+
+
+def gemini_api_key(environ: Mapping[str, str] | None = None) -> str:
+    """The Gemini API key: the environment variable, then Credential Manager, or ConfigError.
+
+    The key is only ever returned to the caller. It goes in the ``x-goog-api-key`` header, never in
+    a URL, a log line or an error message.
+    """
+    env = os.environ if environ is None else environ
+    from_env = (env.get(GEMINI_API_KEY_ENV) or "").strip()
+    if from_env:
+        return from_env
+    saved = (read_windows_credential(GEMINI_API_KEY_TARGET) or "").strip()
+    if saved:
+        return saved
+    raise ConfigError(
+        f"no Gemini API key: set {GEMINI_API_KEY_ENV} or save Credential Manager target "
+        f"{GEMINI_API_KEY_TARGET}"
+    )
+
+
+def gemini_requests(lines: list[Line], max_words: int) -> list[list[Line]]:
+    """Whole lines in order, each request at most `max_words` words. A longer line is its own."""
+    groups: list[list[Line]] = []
+    current: list[Line] = []
+    words = 0
+    for line in lines:
+        count = len(line.text.split())
+        if current and words + count > max_words:
+            groups.append(current)
+            current = []
+            words = 0
+        current.append(line)
+        words += count
+    if current:
+        groups.append(current)
+    return groups
+
+
+def gemini_transcript(lines: list[Line]) -> str:
+    """The one-sentence instruction, then one `Speaker 1: text` line per script line."""
+    rows = [f"{_GEMINI_SPEAKER_NAMES[line.speaker]}: {line.text}" for line in lines]
+    return "\n".join([GEMINI_INSTRUCTION, *rows])
+
+
+def gemini_request_body(cfg: GeminiConfig, lines: list[Line]) -> dict[str, object]:
+    """The generateContent body: two speakers, their voices, and the transcript as one part."""
+    return {
+        "contents": [{"parts": [{"text": gemini_transcript(lines)}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "multiSpeakerVoiceConfig": {
+                    "speakerVoiceConfigs": [
+                        {
+                            "speaker": "Speaker 1",
+                            "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice_s1}},
+                        },
+                        {
+                            "speaker": "Speaker 2",
+                            "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice_s2}},
+                        },
+                    ]
+                }
+            },
+        },
+    }
+
+
+@dataclass(frozen=True)
+class GeminiAudio:
+    """Raw 16-bit little-endian mono PCM from one response, and its sample rate."""
+
+    pcm: bytes
+    sample_rate: int
+
+
+def gemini_sample_rate(mime_type: object) -> int:
+    """Sample rate from `audio/L16;codec=pcm;rate=24000`; the API's 24000 when it is absent."""
+    if isinstance(mime_type, str):
+        match = _GEMINI_RATE.search(mime_type)
+        if match is not None:
+            return int(match.group(1))
+    return GEMINI_DEFAULT_RATE
+
+
+def gemini_error_message(data: object) -> str:
+    """The API's `error.message` field, or an empty string."""
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str):
+                return message
+    return ""
+
+
+def _gemini_details(data: object, type_suffix: str) -> list[dict]:
+    """`error.details` entries whose `@type` ends with `type_suffix`."""
+    error = data.get("error") if isinstance(data, dict) else None
+    details = error.get("details") if isinstance(error, dict) else None
+    if not isinstance(details, list):
+        return []
+    return [
+        detail
+        for detail in details
+        if isinstance(detail, dict) and str(detail.get("@type", "")).endswith(type_suffix)
+    ]
+
+
+def gemini_retry_delay(data: object) -> float | None:
+    """Seconds from a `RetryInfo` detail's `retryDelay` (e.g. "27s"), or None."""
+    for detail in _gemini_details(data, "google.rpc.RetryInfo"):
+        delay = detail.get("retryDelay")
+        if not isinstance(delay, str):
+            continue
+        match = _GEMINI_RETRY_DELAY.match(delay.strip())
+        if match is not None:
+            return float(match.group(1))
+    return None
+
+
+def gemini_per_day_quota(data: object) -> bool:
+    """True if any `QuotaFailure` violation names a per-day quota (nothing to wait out)."""
+    for detail in _gemini_details(data, "google.rpc.QuotaFailure"):
+        violations = detail.get("violations")
+        for violation in violations if isinstance(violations, list) else []:
+            if isinstance(violation, dict) and "PerDay" in str(violation.get("quotaId", "")):
+                return True
+    return False
+
+
+def parse_gemini_audio(data: object, status: int) -> GeminiAudio:
+    """The first audio part of a response. No audio part is an EngineError with the finishReason."""
+    candidates = data.get("candidates") if isinstance(data, dict) else None
+    candidate = candidates[0] if isinstance(candidates, list) and candidates else None
+    if not isinstance(candidate, dict):
+        candidate = {}
+    finish = candidate.get("finishReason")
+    content = candidate.get("content")
+    parts = content.get("parts") if isinstance(content, dict) else None
+    for part in parts if isinstance(parts, list) else []:
+        if not isinstance(part, dict):
+            continue
+        inline = part.get("inlineData")
+        if not isinstance(inline, dict):
+            continue
+        encoded = inline.get("data")
+        if not isinstance(encoded, str) or not encoded:
+            continue
+        rate = gemini_sample_rate(inline.get("mimeType"))
+        try:
+            pcm = base64.b64decode(encoded, validate=True)
+        except ValueError as exc:
+            raise EngineError(f"Gemini audio is not valid base64 (HTTP {status})") from exc
+        if not pcm:
+            continue
+        if len(pcm) % 2:
+            raise EngineError(f"Gemini audio is not whole 16-bit samples (HTTP {status})")
+        return GeminiAudio(pcm, rate)
+    raise EngineError(f"Gemini returned no audio (HTTP {status}, finishReason {finish!r})")
+
+
+def write_pcm_wav(pcm: bytes, sample_rate: int, path: Path) -> float:
+    """Write 16-bit little-endian mono PCM as a WAV. Returns the exact length in seconds."""
+    if len(pcm) % 2:
+        raise EngineError("cannot write a WAV from an odd number of PCM bytes")
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm)
+    return len(pcm) / (2 * sample_rate)
+
+
+def gemini_spans(
+    groups: list[list[Line]], durations: list[float], gap_s: float
+) -> list[tuple[float, float]]:
+    """Request edges from the exact request lengths. Inside a request, split by word count."""
+    spans: list[tuple[float, float]] = []
+    cursor = 0.0
+    for group, audio in zip(groups, durations, strict=True):
+        weights = [max(1, len(line.text.split())) for line in group]
+        total = sum(weights)
+        at = cursor
+        for weight in weights:
+            length = audio * weight / total
+            spans.append((at, at + length))
+            at += length
+        cursor += audio + gap_s
+    return spans
+
+
+class GeminiTTS:
+    """Gemini TTS over its REST API. Timing is approximate inside each request.
+
+    One request carries whole script lines up to `max_words_per_request` words. The request WAVs
+    are joined in order with `gap_s` of silence. A per-minute 429 waits the server's `RetryInfo`
+    delay and retries the same model, then falls back; a per-day quota or a long wait falls back at
+    once. See the module docstring.
+    """
+
+    name = "gemini"
+
+    def __init__(
+        self,
+        cfg: GeminiConfig,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        api_key: str | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.cfg = cfg
+        self._transport = transport
+        self._api_key = api_key
+        self._sleep = sleep
+
+    def render(self, lines: list[Line], out_wav: Path) -> RenderResult:
+        if not lines:
+            raise EngineError("no spoken lines to render")
+        key = self._api_key or gemini_api_key()
+        out_wav.parent.mkdir(parents=True, exist_ok=True)
+        groups = gemini_requests(lines, self.cfg.max_words_per_request)
+        clips: list[GeminiAudio] = []
+        used: set[str] = set()
+        with httpx.Client(timeout=self.cfg.timeout_s, transport=self._transport) as client:
+            for group in groups:
+                clip, models = self._request(client, group, key)
+                clips.append(clip)
+                used.update(models)
+
+        rate = clips[0].sample_rate
+        for clip in clips:
+            if clip.sample_rate != rate:
+                raise EngineError(
+                    f"Gemini returned mixed sample rates ({rate} and {clip.sample_rate} Hz)"
+                )
+        gap_pcm = b"\x00" * (round(self.cfg.gap_s * rate) * 2)
+        pcm = gap_pcm.join(clip.pcm for clip in clips)
+        duration = write_pcm_wav(pcm, rate, out_wav)
+        durations = [len(clip.pcm) / (2 * rate) for clip in clips]
+        spans = fit_to_length(gemini_spans(groups, durations, self.cfg.gap_s), duration)
+        name = f"gemini:{self.cfg.model}"
+        if self.cfg.fallback_model and self.cfg.fallback_model in used:
+            name += f"+{self.cfg.fallback_model}"
+        return _result(out_wav, name, "approximate", lines, spans, duration)
+
+    def _request(
+        self, client: httpx.Client, group: list[Line], key: str
+    ) -> tuple[GeminiAudio, list[str]]:
+        body = gemini_request_body(self.cfg, group)
+        response = self._post_retrying(client, self.cfg.model, body, key)
+        models = [self.cfg.model]
+        if response.status_code == 429:
+            if not self.cfg.fallback_model:
+                raise EngineError(
+                    f"Gemini model {self.cfg.model} is out of quota (HTTP 429) "
+                    "and no fallback model is set"
+                )
+            response = self._post_retrying(client, self.cfg.fallback_model, body, key)
+            models.append(self.cfg.fallback_model)
+            if response.status_code == 429:
+                raise EngineError(
+                    f"Gemini is out of quota: both {self.cfg.model} and "
+                    f"{self.cfg.fallback_model} answered HTTP 429"
+                )
+        data = self._json(response)
+        if response.status_code != 200:
+            message = gemini_error_message(data) or "no error message"
+            raise EngineError(f"Gemini answered HTTP {response.status_code}: {message}")
+        return parse_gemini_audio(data, response.status_code), models
+
+    def _post_retrying(
+        self, client: httpx.Client, model: str, body: dict[str, object], key: str
+    ) -> httpx.Response:
+        """POST once, then wait out per-minute 429s on the same model up to the retry limit.
+
+        A per-day quota or a wait longer than `max_retry_wait_s` returns the 429 as-is so the
+        caller can fall back at once. Any other status is returned as-is.
+        """
+        response = self._post(client, model, body, key)
+        retries = 0
+        while response.status_code == 429 and retries < self.cfg.retries_per_model:
+            data = self._json_or_empty(response)
+            if gemini_per_day_quota(data):
+                return response
+            wait = gemini_retry_delay(data)
+            if wait is None:
+                wait = self.cfg.retry_wait_s
+            if wait > self.cfg.max_retry_wait_s:
+                return response
+            seconds = wait + 1.0
+            print(f"gemini: rate limited on {model}, waiting {seconds:.0f} s", file=sys.stderr)
+            self._sleep(seconds)
+            retries += 1
+            response = self._post(client, model, body, key)
+        return response
+
+    def _post(
+        self, client: httpx.Client, model: str, body: dict[str, object], key: str
+    ) -> httpx.Response:
+        url = GEMINI_API_URL.format(model=model)
+        try:
+            return client.post(url, json=body, headers={"x-goog-api-key": key})
+        except httpx.HTTPError as exc:
+            raise EngineError(
+                f"cannot reach Gemini for model {model} ({type(exc).__name__})"
+            ) from exc
+
+    @staticmethod
+    def _json(response: httpx.Response) -> object:
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise EngineError(f"Gemini answered HTTP {response.status_code} with no JSON") from exc
+
+    @staticmethod
+    def _json_or_empty(response: httpx.Response) -> object:
+        """Parse a 429 body for its quota details; a body that is not JSON is treated as empty."""
+        try:
+            return response.json()
+        except ValueError:
+            return {}
 
 
 def fake_duration(text: str) -> float:
