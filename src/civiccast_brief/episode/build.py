@@ -218,7 +218,8 @@ def _roster_of(meeting_dir: Path | None) -> tuple[Any, str] | None:
     if not path.is_file():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
-    file = (data.get("roster") or {}).get("file")
+    used = data.get("roster") or {}
+    file = used.get("file")
     if not file:
         return None
     # The path was written by the run that made speakers.json; a relative one is resolved from
@@ -227,11 +228,40 @@ def _roster_of(meeting_dir: Path | None) -> tuple[Any, str] | None:
     candidates += [parent / file for parent in [meeting_dir, *meeting_dir.parents]]
     found = next((p for p in candidates if p.is_file()), None)
     if found is None:
-        return None
+        # Runs before Nov 6, 2026 wrote "default" for the built-in roster they used. The run
+        # still recorded which city and body that roster was, so the city folder's roster of
+        # that same body is the record for it.
+        return _roster_of_body(
+            meeting_dir, str(used.get("city") or ""), str(used.get("body") or "")
+        )
     try:
         return load_roster(found), str(found)
     except (OSError, ValueError):
         return None
+
+
+def _roster_of_body(meeting_dir: Path, city: str, body: str) -> tuple[Any, str] | None:
+    """The one roster file in the nearest cities/ folder above the meeting for ``city``'s
+    ``body``, or None when there is none or more than one."""
+    if not city or not body:
+        return None
+    for parent in meeting_dir.parents:
+        cities = parent / "cities"
+        if not cities.is_dir():
+            continue
+        found = []
+        for file in [*cities.glob("*/roster.json"), *cities.glob("*/rosters/*.json")]:
+            try:
+                roster = load_roster(file)
+            except (OSError, ValueError):
+                continue
+            if (roster.city.casefold(), roster.body.casefold()) == (
+                city.casefold(),
+                body.casefold(),
+            ):
+                found.append((roster, str(file)))
+        return found[0] if len(found) == 1 else None
+    return None
 
 
 def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool = False) -> People:
@@ -294,9 +324,14 @@ def _name_fixes(
     for wrong, right in pairs:
         targets.setdefault(wrong, set()).add(right)
     # A lone word with no title is changed only when the meeting also names that person with
-    # a title or in full: "Leaf" after "Commissioner Leaf" is Leef, but "the Burning" in a
-    # meeting that never names a Browning is not a person.
+    # a title or in full ("Leaf" after "Commissioner Leaf" is Leef), or when it sounds like the
+    # surname of a member of the meeting's own body on its roster and the meeting never puts
+    # it after "the", "a" or the like: a roll call's "Trusty Joselyn" is Trustee Joslin, but
+    # "the Burning" is not Trustee Browning. A word that is already a whole part of the
+    # surname is a name of its own, not a mishearing: "Connor" may be someone named Connor,
+    # not Council Member O'Connor.
     named = {right for wrong, right in pairs if " " in wrong.strip()}
+    board = {person.last for person in people.persons if person.on_board and person.last}
     out: list[dict[str, str]] = []
     seen: set[str] = set()
     for wrong, right in pairs:
@@ -314,11 +349,25 @@ def _name_fixes(
         if len(words) == 1:
             if wrong.lower() in ordinary:
                 continue
-            if not any(right in full.split() for full in named):
+            if not any(right in full.split() for full in named) and (
+                right not in board
+                or _after_a_determiner(wrong, texts)
+                or wrong in re.split(r"[-'’]", right)
+            ):
                 continue
         seen.add(wrong)
         out.append({"from": wrong, "to": right})
     return out
+
+
+_DETERMINER = r"(?i:the|a|an|this|that|these|those|our|their|his|her|its|my|your|some|any|no|every)"
+
+
+def _after_a_determiner(word: str, texts: list[str]) -> bool:
+    """The meeting says ``word`` after "the", "a", "our" and the like somewhere: a thing, not
+    a person addressed by surname."""
+    pattern = re.compile(rf"(?<!\w){_DETERMINER}\s+{re.escape(word)}(?!\w)")
+    return any(pattern.search(text) for text in texts)
 
 
 def episode_slug(recap: Recap, city_slug: str) -> str:

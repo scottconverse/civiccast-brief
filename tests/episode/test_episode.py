@@ -578,3 +578,36 @@ def test_a_built_file_gets_name_fixes_from_the_current_records_and_nothing_else(
         "published": "2026-10-21T09:00:00-06:00",
     }
     assert B.refresh_name_fixes(built, meeting) is False
+
+
+def _city_rosters(root: Path) -> None:
+    council = {"city": "Longmont", "body": "City Council", "state": "CO", "members": []}
+    council["members"] = [
+        {"name": "Diane Crist", "first": "Diane", "last": "Crist", "role": "Ward 1"}
+    ]
+    library = {**council, "body": "Library Advisory Board", "members": []}
+    (root / "cities" / "longmont" / "rosters").mkdir(parents=True)
+    (root / "cities" / "longmont" / "roster.json").write_text(json.dumps(council), encoding="utf-8")
+    board = root / "cities" / "longmont" / "rosters" / "library-advisory-board.json"
+    board.write_text(json.dumps(library), encoding="utf-8")
+
+
+def test_an_old_run_that_wrote_default_for_its_roster_uses_the_city_roster_of_its_body(
+    tmp_path,
+):
+    # Runs before Nov 6, 2026 wrote "default" for the built-in Longmont council roster.
+    _city_rosters(tmp_path)
+    meeting = tmp_path / "runs" / "legacy" / "jhsFsEz0P5A"
+    meeting.mkdir(parents=True)
+    used = {"file": "default", "city": "Longmont", "body": "City Council"}
+    (meeting / "speakers.json").write_text(json.dumps({"roster": used}), encoding="utf-8")
+    found = B._roster_of(meeting)
+    assert found is not None
+    roster, path = found
+    assert [m.name for m in roster.members] == ["Diane Crist"]
+    assert Path(path) == tmp_path / "cities" / "longmont" / "roster.json"
+
+    # A body with no roster file of its own gets none, not another body's.
+    used["body"] = "Planning and Zoning Commission"
+    (meeting / "speakers.json").write_text(json.dumps({"roster": used}), encoding="utf-8")
+    assert B._roster_of(meeting) is None
