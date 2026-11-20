@@ -43,7 +43,12 @@ from civiccast_brief.article.names import (
     spans,
 )
 from civiccast_brief.article.terms import Record, term_issues
-from civiccast_brief.script.checker import _claim_words, _proper_nouns, header_text
+from civiccast_brief.script.checker import (
+    _POSSESSIVE_RE,
+    _claim_words,
+    _proper_nouns,
+    header_text,
+)
 from civiccast_brief.script.numbers import number_atoms
 from civiccast_brief.script.recap import Recap, seconds_of
 
@@ -1159,6 +1164,9 @@ def _check_text(
     allowed_words = _claim_words(sources) | HOUSE_WORDS
     for name in _names(text):
         if name.lower() in allowed_words:
+            continue
+        # "Lafayette's" is the city's name with an "'s": the script checker allows it too.
+        if _POSSESSIVE_RE.sub("", name.lower()) in allowed_words:
             continue
         if _STREET_WORDS.get(name.lower()) in allowed_words:
             continue
