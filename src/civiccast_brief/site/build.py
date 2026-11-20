@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from civiccast_brief.article.names import apply_fixes
 from civiccast_brief.site import graphics, images, seo, stills
 from civiccast_brief.site.feed import artwork_path, build_feed
-from civiccast_brief.site.model import InputError, SiteInput, load_site_input
+from civiccast_brief.site.model import Episode, InputError, SiteInput, Story, load_site_input
 from civiccast_brief.site.pages import (
     FAVICON_PNG,
     ROBOTS_PATH,
@@ -35,6 +37,46 @@ class BuildReport:
     pages: tuple[str, ...]
     feed_items: int
     files_written: int
+
+
+# Fields that hold ids, slugs, addresses or record data, never words a speaker said.
+_NOT_SPEECH = {"id", "city", "board", "type", "kind", "topic", "tags", "topics", "approved_by"}
+
+
+def _fix_value[T](value: T, pairs: tuple[tuple[str, str], ...]) -> T:
+    if isinstance(value, str):
+        return apply_fixes(value, pairs)  # type: ignore[return-value]
+    if isinstance(value, tuple):
+        return tuple(_fix_value(part, pairs) for part in value)  # type: ignore[return-value]
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        changes: dict[str, Any] = {
+            field.name: _fix_value(getattr(value, field.name), pairs)
+            for field in dataclasses.fields(value)
+            if field.name not in _NOT_SPEECH
+            and field.name != "name_fixes"
+            and not field.name.endswith("url")
+        }
+        return dataclasses.replace(value, **changes)
+    return value
+
+
+def with_own_name_fixes(site: SiteInput) -> SiteInput:
+    """Each meeting's text with its own name fixes applied, and no other meeting's.
+
+    A fix comes from one meeting's records and captions: "Shaw" in Superior's October 12
+    meeting is Council Member Neal Shah. Applied to the whole site it would also change a
+    resident named Shaw who speaks at another meeting. Fixing each item's own text means every
+    page, the search index and the feed print a meeting's names with that meeting's fixes only.
+    """
+
+    def fix(item: Episode | Story) -> Any:
+        return _fix_value(item, item.name_fixes) if item.name_fixes else item
+
+    return dataclasses.replace(
+        site,
+        episodes=tuple(fix(episode) for episode in site.episodes),
+        stories=tuple(fix(story) for story in site.stories),
+    )
 
 
 def prepare_output(out_dir: Path) -> None:
@@ -125,7 +167,7 @@ def build_site(
     frame from a meeting's own media (see :mod:`stills`). Without them only stills already in the
     cache folder are used."""
     urls = Urls.from_base(base_url)
-    site = load_site_input(episodes_dir)
+    site = with_own_name_fixes(load_site_input(episodes_dir))
     if not site.episodes and not site.stories:
         raise InputError([f"{episodes_dir}: no approved episodes or stories to build"])
     stamp = now or datetime.now().astimezone()
@@ -152,19 +194,10 @@ def build_site(
         write_file(out_dir, still_paths[key], data)
         files += 1
 
-    # The recap and transcript carry the same speech-to-text names as the story. The site
-    # prints the records' spellings in every place it prints a name.
-    fixes = [
-        fix for item in (*site.episodes, *site.stories) for fix in getattr(item, "name_fixes", ())
-    ]
-
-    def fixed(text: str) -> str:
-        return apply_fixes(text, fixes)
-
     env = make_environment(urls)
     for spec in pages:
         context = {**spec.context, "scripts": list(spec.scripts)}
-        html = fixed(render(env, spec.template, context))
+        html = render(env, spec.template, context)
         write_file(out_dir, _page_file(spec.path), html)
         files += 1
 
@@ -173,9 +206,9 @@ def build_site(
     write_file(
         out_dir,
         SEARCH_INDEX_PATH,
-        fixed(seo.search_index_json(urls, site.episodes, site.stories)),
+        seo.search_index_json(urls, site.episodes, site.stories),
     )
-    write_file(out_dir, "feed.xml", fixed(build_feed(site.city, urls, site.episodes, stamp)))
+    write_file(out_dir, "feed.xml", build_feed(site.city, urls, site.episodes, stamp))
     write_file(out_dir, HEADERS_PATH, HEADERS_FILE)
     files += 5
     if site.merged_stories:

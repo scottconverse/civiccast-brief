@@ -141,3 +141,53 @@ def test_an_unknown_address_gets_a_not_found_page_kept_out_of_search(
     assert '<meta name="robots" content="noindex">' in html
     assert "404.html" not in (out / "sitemap.xml").read_text(encoding="utf-8")
     assert "noindex" not in (out / "index.html").read_text(encoding="utf-8")
+
+
+def _two_meetings_with_a_shaw(tmp_path: Path) -> Path:
+    """The council meeting heard Council Member Shah as "Shaw"; the planning commission meeting
+    heard a resident who really is named Shaw."""
+    import json
+    import shutil
+
+    episodes = tmp_path / "episodes"
+    shutil.copytree(FIXTURES, episodes)
+    council = episodes / "ep-2026-10-20-example-council.json"
+    data = json.loads(council.read_text(encoding="utf-8"))
+    data["article"]["headline"] = "Council Member Shaw casts the deciding vote"
+    data["transcript"].append({"t": "0:00:30", "speaker": "Mayor", "text": "Council Member Shaw?"})
+    data["name_fixes"] = [{"from": "Council Member Shaw", "to": "Council Member Neal Shah"}]
+    council.write_text(json.dumps(data), encoding="utf-8")
+    sample = episodes / "ep-2026-10-06-example-sample.json"
+    data = json.loads(sample.read_text(encoding="utf-8"))
+    data["headline"] = "Resident Bob Shaw asks for a test zoning map"
+    sample.write_text(json.dumps(data), encoding="utf-8")
+    return episodes
+
+
+def test_a_name_fix_changes_only_its_own_meeting(tmp_path: Path) -> None:
+    out = tmp_path / "site"
+    build_site(_two_meetings_with_a_shaw(tmp_path), out, BASE_URL, now=NOW)
+
+    def text(rel: str) -> str:
+        return (out / rel).read_text(encoding="utf-8")
+
+    council = text("episodes/2026-10-20-example-council/index.html")
+    transcript = text("episodes/2026-10-20-example-council/transcript/index.html")
+    sample = text("episodes/2026-10-06-example-sample/index.html")
+    assert "Council Member Neal Shah casts the deciding vote" in council
+    assert "Council Member Neal Shah?" in transcript
+    assert "Council Member Shaw" not in council + transcript
+    # The other meeting's resident keeps his own name on his page.
+    assert "Resident Bob Shaw asks" in sample
+    assert "Resident Bob Shah" not in sample
+
+
+def test_a_page_of_many_meetings_prints_each_with_its_own_fixes(tmp_path: Path) -> None:
+    out = tmp_path / "site"
+    build_site(_two_meetings_with_a_shaw(tmp_path), out, BASE_URL, now=NOW)
+    for rel in ("index.html", "archive/2026-10/index.html", "search-index.json", "feed.xml"):
+        page = (out / rel).read_text(encoding="utf-8")
+        assert "Council Member Neal Shah casts the deciding vote" in page, rel
+        assert "Council Member Shaw casts" not in page, rel
+        assert "Resident Bob Shaw asks" in page, rel
+        assert "Resident Bob Shah" not in page, rel
