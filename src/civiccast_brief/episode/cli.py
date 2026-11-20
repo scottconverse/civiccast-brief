@@ -1,4 +1,4 @@
-"""Command line: ``python -m civiccast_brief.episode stage|assemble``."""
+"""Command line: ``python -m civiccast_brief.episode stage|assemble|story|names``."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from civiccast_brief.episode.build import EpisodeError, assemble, assemble_story, stage
+from civiccast_brief.episode.build import (
+    EpisodeError,
+    assemble,
+    assemble_story,
+    refresh_name_fixes,
+    stage,
+)
 from civiccast_brief.review.store import ReviewError
 
 
@@ -37,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--city", required=True, help="city slug, e.g. longmont")
     t.add_argument("--published", required=True, help="publish time if the item has none")
     t.add_argument("--out", type=Path, required=True, help="story JSON file to write")
+    n = commands.add_parser(
+        "names", help="set a built site file's name fixes from the meeting's current records"
+    )
+    n.add_argument("--file", type=Path, required=True, help="built episode or story JSON")
+    n.add_argument("--meeting", type=Path, required=True, help="meeting run folder")
     return parser
 
 
@@ -45,6 +56,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "stage":
             print(f"staged item {stage(args.db, args.meeting, args.script)}")
+            return 0
+        if args.command == "names":
+            changed = refresh_name_fixes(args.file, args.meeting)
+            print(f"{'updated' if changed else 'unchanged'} {args.file}")
             return 0
         if args.command == "story":
             story = assemble_story(

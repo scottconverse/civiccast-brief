@@ -485,3 +485,31 @@ def _speaker(segment: transcript_mod.Segment, names: dict[str, str]) -> str:
         return segment.speaker
     named = names.get(segment.voice or "", UNKNOWN)
     return named if named != UNKNOWN else UNKNOWN
+
+
+def meeting_name_fixes(meeting_dir: Path) -> list[dict[str, str]]:
+    """The name fixes a site file of this meeting gets, from the meeting's records as they are
+    now: the same pairs ``assemble`` and ``assemble_story`` write."""
+    recap, data = _meeting(meeting_dir)
+    roundup = recap.video_id == ROUNDUP_ID
+    segments = [] if roundup else transcript_mod.from_json(data)
+    return _name_fixes(
+        recap,
+        _people_of(meeting_dir, meeting_dir / "documents.json", roundup),
+        [s.text for s in segments],
+    )
+
+
+def refresh_name_fixes(site_file: Path, meeting_dir: Path) -> bool:
+    """Set a built episode or story file's name fixes to what the current code and records give.
+
+    A file is built again only when its desk item changes, so a better name match (or a roster
+    corrected since) would never reach a published meeting. Only ``name_fixes`` is rewritten:
+    the publish time, audio and text stay as approved. Returns whether the file changed."""
+    episode = json.loads(site_file.read_text(encoding="utf-8"))
+    pairs = meeting_name_fixes(meeting_dir)
+    if episode.get("name_fixes") == pairs:
+        return False
+    episode["name_fixes"] = pairs
+    site_file.write_text(json.dumps(episode, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True

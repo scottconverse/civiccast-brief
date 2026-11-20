@@ -544,3 +544,37 @@ def test_a_script_with_no_facts_is_held_not_published(tmp_path, meeting):
     assert item.status == "review"
     assert item.checks_passed is False
     assert "states no fact" in item.checks_note
+
+
+def test_a_built_file_gets_name_fixes_from_the_current_records_and_nothing_else(tmp_path, meeting):
+    meeting, _ = meeting
+    # The captions misheard the mayor; the roster was added after the episode was built.
+    data = json.loads((meeting / "transcript.json").read_text(encoding="utf-8"))
+    data["segments"][1]["text"] = "Mayor Peek, the consent agenda passes."
+    (meeting / "transcript.json").write_text(json.dumps(data), encoding="utf-8")
+    built = tmp_path / "ep.json"
+    approved = {"id": "ep", "published": "2026-10-21T09:00:00-06:00", "name_fixes": []}
+    built.write_text(json.dumps(approved), encoding="utf-8")
+    assert B.refresh_name_fixes(built, meeting) is False  # no roster: nothing to fix
+
+    roster = tmp_path / "roster.json"
+    member = {"name": "Joan Peck", "first": "Joan", "last": "Peck", "role": "Mayor"}
+    roster.write_text(
+        json.dumps(
+            {"city": "Longmont", "body": "City Council", "state": "CO", "members": [member]}
+        ),
+        encoding="utf-8",
+    )
+    speakers = json.loads((meeting / "speakers.json").read_text(encoding="utf-8"))
+    speakers["roster"] = {"file": str(roster)}
+    (meeting / "speakers.json").write_text(json.dumps(speakers), encoding="utf-8")
+
+    assert B.refresh_name_fixes(built, meeting) is True
+    after = json.loads(built.read_text(encoding="utf-8"))
+    assert after["name_fixes"] == B.meeting_name_fixes(meeting)
+    assert any(fix["to"].endswith("Joan Peck") for fix in after["name_fixes"])
+    assert {k: v for k, v in after.items() if k != "name_fixes"} == {
+        "id": "ep",
+        "published": "2026-10-21T09:00:00-06:00",
+    }
+    assert B.refresh_name_fixes(built, meeting) is False

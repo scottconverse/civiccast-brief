@@ -367,7 +367,18 @@ def test_publish_builds_each_published_episode_once_with_its_story(tmp_path):
     rerun = Fake()
     rerun.exported = fake.exported
     run_week(settings, [COUNCIL_MEETING], LAST, rerun.steps())
-    assert rerun.names() == [("review", "export"), ("site", "build")]
+    # Nothing is built again; the built episode and story only get the current name fixes.
+    assert rerun.names() == [
+        ("review", "export"),
+        ("episode", "names"),
+        ("episode", "names"),
+        ("site", "build"),
+    ]
+    refreshed = [_opt(a, "--file") for step, a in rerun.calls if a[0] == "names"]
+    assert refreshed == [
+        str(site.episodes / "ep-oWZpzjzjwnE.json"),
+        str(site.episodes / "stories" / "owzpzjzjwne.json"),
+    ]
 
 
 def test_a_redrafted_episode_is_built_again_with_audio_from_the_desks_script(tmp_path):
@@ -638,7 +649,8 @@ def test_a_published_story_reaches_the_site_with_no_published_episode(tmp_path):
     again = Fake()
     again.exported = fake.exported
     run_week(settings, [COUNCIL_MEETING], LAST, again.steps())
-    assert again.names() == [("review", "export"), ("site", "build")]  # not made twice
+    # Not made twice; the built story only gets the current name fixes.
+    assert again.names() == [("review", "export"), ("episode", "names"), ("site", "build")]
 
 
 def test_a_story_no_longer_published_leaves_the_site(tmp_path):
