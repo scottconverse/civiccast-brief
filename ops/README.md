@@ -27,7 +27,30 @@ Both read the Cloudflare deploy token from Windows Credential Manager
 `CIVICCAST_CF_ACCOUNT_ID`. Neither is stored here.
 
 Scheduled tasks named `CivicCast Brief weekly (<City>)` run the weekly script for Boulder,
-Lafayette, Longmont, Louisville and Lyons.
+Erie, Lafayette, Longmont, Louisville, Lyons, Nederland and Superior.
 
 `city-check.json` (a city's setup check) is left out because it copies agenda text that includes
 staff contact details; the city setup writes it again.
+
+## Nightly backup
+
+`backup-brief.ps1` copies the working files to `D:\CivicCast-Brief-backups`. The scheduled task
+`CivicCast Brief backup` runs it every night at 11 PM, while the user is logged in. It runs the
+copy kept at `C:\dev\civiccast-brief-scratchackupackup-brief.ps1`.
+
+- Each run makes `daily\yyyy-MM-dd\` with every `weekly-*` folder and `publish-city.ps1`.
+- `.wav` files are left out: the raw city meeting audio (it can usually be downloaded again)
+  and the voice-render scratch files. Finished episode mp3s are kept. A run is about 0.8 GB.
+- Each `desk*.db` is copied with the SQLite backup API and checked with `PRAGMA integrity_check`.
+- Kept: the newest 30 runs, plus the oldest run of each month for a year.
+- `backup.log` has every run; `last-result.txt` has the last result (`OK ...` or `FAIL ...`).
+- `-DryRun` shows what it would do; `-Source` and `-Dest` point it somewhere else for a test.
+
+### Restore
+
+1. Stop the weekly task for the city (or wait until no run is going).
+2. Copy the city folder back:
+   `robocopy D:\CivicCast-Brief-backups\daily\<date>\weekly-<city> C:\dev\civiccast-brief-scratch\weekly-<city> /E`
+   This brings back the desk database, transcripts, documents, drafts and settings. It does not
+   delete newer files.
+3. The raw meeting audio is not in the backup. A re-run that needs it downloads it again.
