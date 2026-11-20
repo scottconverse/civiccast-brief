@@ -151,6 +151,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 - Name: CivicCast Brief. Public site civiccast.org, code civiccast.io. Buy civiccastbrief.com/.org and redirect.
 - Licence: Apache-2.0.
 - Voice: free and open-source engines only. No hosted TTS.
+  - Changed by Scott, 2026-11-20: Gemini TTS (hosted, Google) is added as an engine (`--engine gemini`, voices Bodi and Sola, Flash TTS with Flash-Lite fallback). Dia2 stays.
 - Stack: Python, SQLite, static site, separate sign-up worker.
 - Capture runs on the operator's machine.
 - ~~No tracking or analytics on city sites.~~ Replaced 2026-11-08 (Scott): add Cloudflare Web Analytics.

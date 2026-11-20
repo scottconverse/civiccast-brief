@@ -54,6 +54,13 @@ Not run: Orpheus (gated on Hugging Face; needs Scott to accept its terms) and El
 Step-Audio-EditX needs vLLM, which has no Windows build, so it ran only in WSL. Scott, 2026-11-12: this is a
 Windows-first shop, and the Linux program is not an option at all. Its adapter was removed.
 
+## Round 4 (Nov 20 2026)
+
+Scott listened in Google AI Studio to a 12-line Louisville script on Gemini 3.8 Flash TTS (voices
+Fola/Rami, then Bodi/Sola) and on Flash-Lite TTS (Bodi/Sola). He chose Bodi/Sola, rated Flash above
+Lite, and rated both above the free engines. Free tier seen in AI Studio: 3 requests/min, 10K input
+tokens/min, 10 requests/day per model. Wired in as `--engine gemini`; Dia2 stays the default.
+
 ### Dia2 setup
 
 On the voice PC (Windows, NVIDIA GPU, reached over ssh), as plain Windows Python:

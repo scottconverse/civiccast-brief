@@ -1,6 +1,6 @@
 """Command line for the audio package.
 
-    python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|fake] --out DIR
+    python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|gemini|fake] --out DIR
                                     [--intro FILE] [--outro FILE] [--config FILE]
 
 The default engine is dia2 (Scott, 2026-11-12). Output in DIR:
@@ -48,7 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         type=Path,
-        help="JSON file overriding the GPU box, engine paths and voices (see engines.py)",
+        help=(
+            "JSON file overriding the GPU box, engine paths, Gemini settings and voices "
+            "(see engines.py)"
+        ),
     )
     return parser
 
