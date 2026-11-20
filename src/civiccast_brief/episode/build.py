@@ -236,10 +236,12 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
     found = _roster_of(meeting_dir)
     roster, roster_path = found if found else (None, "")
     rosters = [(roster, roster_path)] if roster else []
-    # The writer also saw the city's other body rosters (rosters/*.json).
+    # The writer also saw the city's other body rosters (rosters/*.json). Their members are
+    # matched only by exact name: see load_people.
+    others = []
     for other in sorted((Path(roster_path).parent / "rosters").glob("*.json")):
         try:
-            rosters.append((load_roster(other), str(other)))
+            others.append((load_roster(other), str(other)))
         except (OSError, ValueError):
             continue
     pages = load_documents(documents) if documents and documents.exists() else None
@@ -251,7 +253,7 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
             except (OSError, ValueError):
                 continue
         pages = merged or None
-    return load_people(rosters, pages, str(documents) if documents else "")
+    return load_people(rosters, pages, str(documents) if documents else "", others)
 
 
 def _name_fixes(
