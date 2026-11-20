@@ -317,6 +317,11 @@ class Person:
     role: str
     source: str
     evidence: str
+    #: A member of another body's roster: matched only when printed exactly. A council
+    #: transcript's "Michael Watson" is not the arts board's Rachel Hanson, and "Aurora Water"
+    #: is not the youth board's Jordan Walker; only the meeting's own body and documents are
+    #: close enough to correct a misheard spelling.
+    exact_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -423,6 +428,8 @@ def _score(wanted: list[str], person: Person, has_role: bool = False) -> float:
     full = _normal(person.name)
     if printed == full:
         return 1.0
+    if person.exact_only:
+        return 0.95 if len(wanted) == 1 and wanted[0] in (*first, *last) else 0.0
     # A surname alone cannot confirm a full name the record never prints in full.
     if len(wanted) >= 2 and len(record) == 1:
         return 0.0
@@ -1035,24 +1042,33 @@ def _other_member(word: str, person: Person, people: People) -> bool:
 def _seat_replacement(tail: str, person: Person, people: People | None = None) -> str:
     """The record's seat and name, keeping the words after it that are not the printed name."""
     record = f"Mayor Pro Tem {person.name}"
-    words = [word.strip(",.;:") for word in tail.split() if word.strip(",.;:")]
-    if not words:
-        return record
-    if words[0].lower() in _NOT_A_NAME_AFTER_SEAT:
-        return f"{record} {' '.join(words)}"
-    first, last = _normal(person.first), _normal(person.last)
-    if _normal(words[0]) == first and len(words) > 1 and _normal(words[1]) == last:
-        rest = words[2:]
-    elif _normal(words[0]) in (first, last):
-        rest = words[1:]
-    elif people is not None and _other_member(words[0], person, people):
-        # Another member is printed after the seat ("Mayor Pro Tem, Stephanie Miller"). The
-        # seat takes the record's holder and the other member keeps their name.
-        return " ".join([record + ",", *words])
-    else:
-        # A garbled spelling of the holder. The holder is the record's.
-        rest = words[1:]
-    return " ".join([record, *rest])
+    words = list(_WORD_RE.finditer(tail))
+    # Only the holder's printed name, or a misheard spelling of it, is replaced. Every other
+    # word after the seat stays as printed, commas too: "mayor pro tem, city manager" is two
+    # people, and "pro tem or whoever's" keeps its "or".
+    consumed = 0
+    for word in words[:2]:
+        text = word.group(0)
+        if text.lower() in _NOT_A_NAME_AFTER_SEAT:
+            break
+        exact = _normal(text) in (*_tokens(person.first), *_tokens(person.last))
+        if (
+            not exact
+            and consumed == 0
+            and people is not None
+            and _other_member(text, person, people)
+        ):
+            # Another member is printed after the seat ("Mayor Pro Tem, Stephanie Miller").
+            # The seat takes the record's holder; the other keeps their name.
+            rest = tail if tail.lstrip().startswith(",") else "," + tail
+            return record + rest
+        # A misheard spelling of the holder ("mayor protem cowish"): a longer word only, so
+        # an ordinary "time" is not taken for "Tim".
+        garbled = len(text) >= 5 and _score(_tokens(text), person, has_role=True) > 0
+        if not (exact or garbled):
+            break
+        consumed = word.end()
+    return record + tail[consumed:]
 
 
 def seat_fixes(text: str, people: People | None) -> list[tuple[str, str]]:
@@ -1136,15 +1152,15 @@ _PRESENTED_RE = re.compile(r"(?:Presented|Prepared)\s+[Bb]y\s*:\s*(.+)", re.IGNO
 #: A role immediately before a name: "Council Member Mike Foster", "Mayor Pro-tem Jenn Kaaoush".
 #: A motion line names who moved or seconded: "moved by Alex Kalkhofer".
 _MOTION_BY_RE = re.compile(
-    r"(?:moved|seconded|motion|made)\s+by\s+"
-    r"([A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+){0,2})",
+    r"(?:moved|seconded|motion|made)\s+by[ \t]+"
+    r"([A-Z][A-Za-z'’\-]+(?:[ \t]+[A-Z][A-Za-z'’\-]+){0,2})",
     re.IGNORECASE,
 )
 _ROLE_BEFORE_RE = re.compile(
     r"(Mayor\s+Pro[- ]?[Tt]em|Mayor|Council\s*Member|Council\s+President|Trustee|Commissioner|"
     r"Town\s+Manager|Assistant\s+Town\s+Manager|Asst\.?\s+Town\s+Manager|Deputy\s+Town\s+Clerk|"
     r"Town\s+Clerk|Town\s+Attorney|Director|Chief|Superintendent|Administrator|Supervisor|"
-    r"Attorney|Clerk)\s+([A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+){0,2})"
+    r"Attorney|Clerk)[ \t]+([A-Z][A-Za-z'’\-]+(?:[ \t]+[A-Z][A-Za-z'’\-]+){0,2})"
 )
 #: Words that mark a chunk in a "Presented By" line as a role, not a name.
 _ROLE_MARKERS = {
@@ -1318,22 +1334,32 @@ def load_people(
     rosters: list[tuple[Any, str]] | None = None,
     pages: dict[str, Any] | None = None,
     documents_path: str = "",
+    other_rosters: list[tuple[Any, str]] | None = None,
 ) -> People:
-    """The people a meeting's records name, from its roster files and its documents."""
+    """The people a meeting's records name, from its roster files and its documents.
+
+    ``other_rosters`` are the city's other bodies. Their members are known by name, so a name
+    printed exactly is theirs, but a misheard spelling is never corrected to one of them: a
+    council meeting's speaker is not a member of the arts board who sounds alike.
+    """
     persons: list[Person] = []
     seen: set[str] = set()
+
+    def keep(person: Person) -> None:
+        key = _normal(person.name)
+        if key not in seen:
+            seen.add(key)
+            persons.append(person)
+
     for roster, path in rosters or []:
         for person in people_from_roster(roster, path):
-            key = _normal(person.name)
-            if key not in seen:
-                seen.add(key)
-                persons.append(person)
+            keep(person)
     if pages:
         for person in people_from_documents(pages, documents_path):
-            key = _normal(person.name)
-            if key not in seen:
-                seen.add(key)
-                persons.append(person)
+            keep(person)
+    for roster, path in other_rosters or []:
+        for person in people_from_roster(roster, path):
+            keep(replace(person, exact_only=True))
     text = " ".join(
         [
             *(_normal(p.name) for p in persons),

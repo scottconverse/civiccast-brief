@@ -207,10 +207,13 @@ def _people(args: argparse.Namespace, recap, pages: dict[str, DocPage] | None) -
     documents = args.documents or args.recap.with_name("documents.json")
     if recap.video_id == ROUNDUP_ID:
         pages = _record_pages(args, recap)
+    # The body's roster comes first; the city's other bodies are matched only by exact name.
+    rosters = _rosters(args, recap)
     return load_people(
-        _rosters(args, recap),
+        rosters[:1],
         pages,
         str(documents) if documents.exists() else "",
+        rosters[1:],
     )
 
 

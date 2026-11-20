@@ -543,3 +543,73 @@ def test_a_different_surname_is_not_swapped() -> None:
     people = load_people([(roster, "rosters/appeals.json")], {}, "")
     assert fixes("John Bolton spoke.", people) == []
     assert fixes("Jake Parsim spoke.", people) == [("Jake Parsim", "Jake Marsing")]
+
+
+# Lafayette, Nov 19 2026: the site printed "Mayor Pro Tem Tim Barnes Executive", "Rachel
+# Hanson" for the speaker Michael Watson, and "Jordan Walker" for Aurora Water.
+LAFAYETTE_ROSTER = roster_from_dict(
+    {
+        "city": "Lafayette",
+        "body": "City Council",
+        "state": "CO",
+        "members": [
+            {"name": "Tim Barnes", "first": "Tim", "last": "Barnes", "role": "Mayor Pro Tem"},
+            {"name": "Adam Gianola", "first": "Adam", "last": "Gianola", "role": "Councilor"},
+        ],
+    }
+)
+ARTS_BOARD = roster_from_dict(
+    {
+        "city": "Lafayette",
+        "body": "Cultural Arts Board",
+        "state": "CO",
+        "members": [
+            {"name": "Rachel Hanson", "first": "Rachel", "last": "Hanson", "role": "Member"},
+            {"name": "Jordan Walker", "first": "Jordan", "last": "Walker", "role": "Member"},
+        ],
+    }
+)
+NORMS_MEMO = (
+    "Council Agenda Memo \nPrepared by: \n- Councilor Adam Gianola  \n"
+    "- Mayor Pro Tem Tim Barnes \n \nExecutive Summary \nThe Council Norms and Procedures\n"
+    "Sustainability Director\nMelanie Asquith Principal Utilities Engineer\n"
+)
+LAFAYETTE = load_people(
+    [(LAFAYETTE_ROSTER, "roster.json")],
+    {"p562": DocPage("p562", "agenda", "https://example.test/agenda", 562, NORMS_MEMO)},
+    "documents.json",
+    [(ARTS_BOARD, "rosters/cultural-arts-board.json")],
+)
+
+
+def test_a_document_name_does_not_run_into_the_next_line() -> None:
+    names = {person.name for person in LAFAYETTE.persons}
+    assert "Tim Barnes Executive" not in names
+    assert not any("Principal" in name for name in names)
+
+
+def test_another_bodys_member_is_never_a_misheard_spelling() -> None:
+    from civiccast_brief.article.names import seat_fixes
+
+    text = "Michael Watson spoke for Aurora Water. Rachel Hanson spoke too."
+    assert fixes(text, LAFAYETTE) == []
+    assert seat_fixes(text, LAFAYETTE) == []
+    out, _ = repair_text("Michael Watson spoke.", LAFAYETTE)
+    assert "Rachel Hanson" not in out
+    # The meeting's own body still corrects a misheard member.
+    assert fixes("Adam Giannola spoke.", LAFAYETTE) == [("Adam Giannola", "Adam Gianola")]
+
+
+def test_the_seat_fix_keeps_the_words_after_the_seat() -> None:
+    from civiccast_brief.article.names import seat_fixes
+
+    pairs = dict(
+        seat_fixes(
+            "Thanks, mayor pro tem, city manager. The pro tem or whoever's next. "
+            "Mayor Pro Tem Barnes.",
+            LAFAYETTE,
+        )
+    )
+    assert pairs["mayor pro tem, city manager"] == "Mayor Pro Tem Tim Barnes, city manager"
+    assert pairs["pro tem or whoever's"] == "Mayor Pro Tem Tim Barnes or whoever's"
+    assert pairs["Mayor Pro Tem Barnes"] == "Mayor Pro Tem Tim Barnes"
