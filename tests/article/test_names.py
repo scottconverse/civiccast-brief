@@ -926,3 +926,26 @@ def test_a_lone_word_for_a_member_of_another_body_is_not_fixed() -> None:
     recap = Recap("Lyons", "Board of Trustees", "2026-11-16", "abc", ())
     pairs = [(p["from"], p["to"]) for p in _name_fixes(recap, other, ["Trusty Browing?"])]
     assert all(wrong != "Browing" for wrong, _ in pairs)
+
+
+def test_a_word_that_is_already_part_of_a_board_surname_is_left_as_heard() -> None:
+    from civiccast_brief.episode.build import _name_fixes
+
+    member = {"name": "Brian O'Connor", "first": "Brian", "last": "O'Connor", "role": "Member"}
+    town = load_people(
+        [
+            (
+                roster_from_dict(
+                    {"city": "Erie", "body": "Town Council", "state": "CO", "members": [member]}
+                ),
+                "cities/erie/roster.json",
+            )
+        ],
+        {},
+        "documents.json",
+    )
+    recap = Recap("Erie", "Town Council", "2026-10-13", "abc", ())
+    lines = ["That's for real, Connor.", "Thank you, O'Conner."]
+    pairs = [(p["from"], p["to"]) for p in _name_fixes(recap, town, lines)]
+    # "Connor" is a name of its own, not a mishearing of Council Member O'Connor.
+    assert ("Connor", "O'Connor") not in pairs

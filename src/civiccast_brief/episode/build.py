@@ -327,7 +327,9 @@ def _name_fixes(
     # a title or in full ("Leaf" after "Commissioner Leaf" is Leef), or when it sounds like the
     # surname of a member of the meeting's own body on its roster and the meeting never puts
     # it after "the", "a" or the like: a roll call's "Trusty Joselyn" is Trustee Joslin, but
-    # "the Burning" is not Trustee Browning.
+    # "the Burning" is not Trustee Browning. A word that is already a whole part of the
+    # surname is a name of its own, not a mishearing: "Connor" may be someone named Connor,
+    # not Council Member O'Connor.
     named = {right for wrong, right in pairs if " " in wrong.strip()}
     board = {person.last for person in people.persons if person.on_board and person.last}
     out: list[dict[str, str]] = []
@@ -348,7 +350,9 @@ def _name_fixes(
             if wrong.lower() in ordinary:
                 continue
             if not any(right in full.split() for full in named) and (
-                right not in board or _after_a_determiner(wrong, texts)
+                right not in board
+                or _after_a_determiner(wrong, texts)
+                or wrong in re.split(r"[-'’]", right)
             ):
                 continue
         seen.add(wrong)
