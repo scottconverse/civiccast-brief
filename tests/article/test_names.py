@@ -613,3 +613,42 @@ def test_the_seat_fix_keeps_the_words_after_the_seat() -> None:
     assert pairs["mayor pro tem, city manager"] == "Mayor Pro Tem Tim Barnes, city manager"
     assert pairs["pro tem or whoever's"] == "Mayor Pro Tem Tim Barnes or whoever's"
     assert pairs["Mayor Pro Tem Barnes"] == "Mayor Pro Tem Tim Barnes"
+
+
+def test_a_place_word_is_not_a_surname_by_sound() -> None:
+    from civiccast_brief.article.names import People, Person
+
+    walton = Person(
+        name="Morgan Walton",
+        first="Morgan",
+        last="Walton",
+        role="Director",
+        source="documents.json agenda p. 15",
+        evidence="Deputy Finance Director Morgan Walton",
+    )
+    people = People(persons=(walton,), text="deputy finance director morgan walton")
+    assert fixes("It's where the Oldtown digital sign stood.", people) == []
+    assert fixes("Director Waltin spoke.", people) == [("Waltin", "Morgan Walton")]
+
+
+def test_a_misheard_holder_after_the_seat_is_replaced_whole() -> None:
+    from civiccast_brief.article.names import seat_fixes
+
+    pairs = dict(seat_fixes("Mayor Pro Tem Jen Kawish. Mayor Pro Tem the Cowish.", PEOPLE))
+    assert pairs["Mayor Pro Tem Jen Kawish"] == "Mayor Pro Tem Jenn Kaaoush"
+    assert pairs["Mayor Pro Tem the Cowish"] == "Mayor Pro Tem Jenn Kaaoush"
+
+
+def test_a_commenter_is_not_a_packet_name_with_another_first_sound() -> None:
+    from civiccast_brief.article.names import People, Person
+
+    ooton = Person(
+        name="Jenn Ooton",
+        first="Jenn",
+        last="Ooton",
+        role="",
+        source="documents.json packet p. 59",
+        evidence="Presented by: Jenn Ooton",
+    )
+    people = People(persons=(ooton,), text="jenn ooton")
+    assert fixes("Okay. Um next person, John Bolton.", people) == []
