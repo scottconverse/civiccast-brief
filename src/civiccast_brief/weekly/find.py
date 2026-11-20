@@ -3,9 +3,12 @@
 - A **PrimeGov** portal lists every meeting with its documents. A meeting whose video is on
   YouTube carries that link, an HTML agenda becomes the run's ``agenda.txt``, and its packet
   and minutes become ``documents.json`` (fetched when the run gets to them).
-- A **YouTube** channel's public feed lists its newest videos. A title must read as a meeting
-  and name one of the source's bodies, or another body the city's sources list: a city's channel
-  carries all its bodies' meetings, and setup names only the bodies its newest titles showed.
+- A **YouTube** channel's public feed lists its newest videos. A title must name one of the
+  source's bodies, or another body the city's sources list: a city's channel carries all its
+  bodies' meetings, and setup names only the bodies its newest titles showed. A title may name
+  a body another way ("Water Advisory Board" for "Water Board", "PCDC" for its initials), and
+  on a channel of one body a title that names only a sitting ("Regular Meeting") is that body's.
+  A title that names no body is kept, with that reason, only when it reads as a meeting.
 - A **Granicus** archive lists its clips with their names and dates.
 - A **Cablecast** site lists its shows that have a video; a title must name one of the source's
   bodies (the site also carries shows that are not meetings).
@@ -148,6 +151,69 @@ def match_body(title: str, bodies: Iterable[str], city: str = "") -> str:
             for b in bodies
             if _fold(b) == named or f" {_fold(b)} " in folded or shortened_match(b, lowered, city)
         ]
+    if hits:
+        return max(hits, key=len)
+    return _core_match(title, bodies, city) or _initials_match(title, bodies)
+
+
+#: Words that say what kind of body it is, not which one. A channel and a portal often write one
+#: body two ways: "Water Advisory Board" and "Water Board", "Library Board" and "Library Advisory
+#: Board", "Arts in Public Places Commission" and "Art in Public Places Board".
+_KIND_WORDS = frozenset(
+    {"board", "commission", "commissioners", "committee", "advisory", "panel", "of", "the"}
+)
+
+
+def _core(text: str, city: str, *, title: bool = False) -> list[str]:
+    """The words that tell one body from another: no kind word, no city name, no plural s.
+
+    A title's "Meeting" goes too. A body's stays: a source whose bodies are named
+    "LOVELAND CITY COUNCIL MEETING" and "... STUDY SESSION" keeps them apart that way."""
+    city_words = set(_fold(city).split()) | ({"meeting"} if title else set())
+    words = [w for w in _fold(text).split() if w not in _KIND_WORDS and w not in city_words]
+    return [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in words]
+
+
+def _core_match(title: str, bodies: Iterable[str], city: str) -> str:
+    """The one listed body whose core words are the core of the body the title names.
+
+    "Water Advisory Board - October 2026" names "Water Board". A body of two or more core words
+    may also start a longer name: "Housing and Human Services Advisory Education Hearing" names
+    "Housing and Human Service Advisory Board". Two bodies with one core ("Longmont Housing
+    Authority Advisory Board" and "... Board of Commissioners") match neither.
+    """
+    named = _core(re.sub(r"\([^)]*\)", " ", body_name(title)), city, title=True)
+    if not named:
+        return ""
+    hits = []
+    for body in bodies:
+        core = _core(re.sub(r"\([^)]*\)", " ", body), city)
+        if not core:
+            continue
+        if core == named or (len(core) >= 2 and named[: len(core)] == core):
+            hits.append((len(core), body))
+    if not hits:
+        return ""
+    best = max(n for n, _ in hits)
+    top = [b for n, b in hits if n == best]
+    return top[0] if len(top) == 1 else ""
+
+
+def _initials(name: str, small_words: bool) -> str:
+    words = [
+        w for w in _fold(name).split() if w != "and" and (small_words or w not in {"of", "the"})
+    ]
+    return "".join(w[0] for w in words).upper()
+
+
+def _initials_match(title: str, bodies: Iterable[str]) -> str:
+    """The one listed body a title names by its initials: "PCDC" for "Planning & Community
+    Development Commission", "BOT" for "Board of Trustees". Only a word of three or more capital
+    letters counts."""
+    shorts = set(re.findall(r"\b[A-Z]{3,}\b", title))
+    if not shorts:
+        return ""
+    hits = [b for b in bodies if shorts & {_initials(b, True), _initials(b, False)}]
     return max(hits, key=len) if hits else ""
 
 
@@ -249,15 +315,33 @@ def _youtube(source: Source, first: date, last: date, listers: Listers) -> list[
         named = title_day(title)
         day = named or posted
         in_days = any(d is not None and first <= d <= last for d in (day, posted))
-        if day is None or not in_days or not listers.classifier.is_meeting(title):
+        if day is None or not in_days:
             continue
-        body = match_body(title, source.bodies, listers.city)
+        # A title that does not read as a meeting is kept only when it names a body, here or in
+        # another of the city's sources (find_meetings drops the rest): "11-17-26 Planning Board
+        # Meeting" and "Water Board Meeting" have no meeting keyword.
+        body = match_body(title, source.bodies, listers.city) or _only_body(title, source, listers)
         if body:
             reason = _day_reason(title, last)
         else:
             reason = f"the title names no body this source covers ({body_name(title)})"
         found.append(Found(body, day, title, source.id, str(video.video_id), reason=reason))
     return found
+
+
+#: Words a channel of one body puts in a title instead of the body's name:
+#: "November 10, 2026 Regular Meeting", "August 25, 2026 Work Session".
+_SITTING_WORDS = frozenset(
+    {"regular", "special", "work", "study", "session", "workshop", "retreat", "budget", "emergency"}
+)
+
+
+def _only_body(title: str, source: Source, listers: Listers) -> str:
+    """The source's one body, for a title that names only a sitting and a date."""
+    if len(source.bodies) != 1:
+        return ""
+    words = meeting_name(title, listers.city).split()
+    return source.bodies[0] if words and set(words) <= _SITTING_WORDS else ""
 
 
 _DISTINGUISHING_WORDS = frozenset(
@@ -508,7 +592,9 @@ def _one_video_per_meeting(by_key: dict[str, Found], city: str) -> None:
     for key, meeting in list(by_key.items()):
         if meeting.reason or not meeting.body or not meeting.video:
             continue
-        same = (meeting.body, meeting.day, meeting_name(meeting.title, city))
+        # By the name's core words, so "Arts in Public Places Commission - October 15" and
+        # "Art in Public Places Board Meeting, Oct. 15" are one meeting.
+        same = (meeting.body, meeting.day, " ".join(_core(meeting_name(meeting.title, city), city)))
         first = kept.setdefault(same, meeting)
         if first is not meeting:
             reason = f"another video of this meeting runs ({first.video})"
@@ -555,6 +641,9 @@ def find_meetings(
                 continue
             if source.kind == "youtube":
                 meetings = [_city_body(m, city_bodies, last, listers.city) for m in meetings]
+                # A video that names no body and does not read as a meeting is not one: a news
+                # show, a press conference, a parade.
+                meetings = [m for m in meetings if m.body or listers.classifier.is_meeting(m.title)]
             for meeting in meetings:
                 held = by_key.get(meeting.key)
                 if held is None:

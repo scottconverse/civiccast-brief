@@ -525,3 +525,98 @@ def test_two_videos_of_one_meeting_run_once():
         "yK8bes8CYTM": "another video of this meeting runs (kqArjgcjLF0)",
         "P1PPPPPPPPP": "",
     }
+
+
+def test_a_channel_video_that_names_a_listed_body_is_kept_with_no_meeting_keyword():
+    """Boulder's channel titles had no meeting keyword, so the Planning Board, the Board of
+    Zoning Adjustment and the Landmarks Board were passed over without a word."""
+    channel = Source(kind="youtube", bodies=(COUNCIL,), channel_id="UC" + "b" * 22)
+    boards = Source(
+        kind="webpage", bodies=("Planning Board", "Landmarks Board"), url="https://x.example/b"
+    )
+    videos = [
+        NS(video_id="GGGGGGGGGGG", title="11-03-26 Planning Board Meeting", published="2026-11-04T00:00:00Z"),
+        NS(video_id="HHHHHHHHHHH", title="11-04-26 Landmarks Board Meeting", published="2026-11-05T00:00:00Z"),
+        NS(video_id="IIIIIIIIIII", title="Inside Boulder News - November 6, 2026", published="2026-11-06T00:00:00Z"),
+    ]  # fmt: skip
+    listers = Listers(youtube=lambda cid: videos, documents=lambda s, f, l: [])
+    found, _ = find_meetings([channel, boards], FIRST, LAST, listers)
+    assert [(m.video, m.body, m.reason) for m in found] == [
+        ("GGGGGGGGGGG", "Planning Board", ""),
+        ("HHHHHHHHHHH", "Landmarks Board", ""),
+    ]
+
+
+def test_a_one_body_channel_title_that_names_only_the_sitting_is_that_body():
+    """The school board's channel titles its meetings "November 10, 2026 Regular Meeting"."""
+    board = Source(kind="youtube", bodies=("Board of Education",), channel_id="UC" + "c" * 22)
+    videos = [
+        NS(video_id="JJJJJJJJJJJ", title="November 3, 2026 Regular Meeting", published="2026-11-04T00:00:00Z"),
+        NS(video_id="KKKKKKKKKKK", title="October 28, 2026 Work Session", published="2026-10-29T00:00:00Z"),
+        NS(video_id="LLLLLLLLLLL", title="3 de noviembre - Reunión del Consejo de Educación", published="2026-11-04T00:00:00Z"),
+    ]  # fmt: skip
+    found, _ = find_meetings([board], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    assert [(m.video, m.body) for m in found] == [
+        ("KKKKKKKKKKK", "Board of Education"),
+        ("JJJJJJJJJJJ", "Board of Education"),
+    ]
+    # A channel of two bodies cannot tell whose "Regular Meeting" it is; with no meeting
+    # keyword either, it is passed over as before.
+    two = Source(kind="youtube", bodies=(COUNCIL, PZ), channel_id="UC" + "c" * 22)
+    found, _ = find_meetings([two], FIRST, LAST, Listers(youtube=lambda cid: videos[:1]))
+    assert found == []
+
+
+def test_match_body_reads_a_body_written_another_way():
+    bodies = [
+        "Water Board",
+        "Planning and Zoning Commission",
+        "Callahan House Board",
+        "Art in Public Places Commission",
+        "Housing and Human Services Advisory Board",
+        "Library Advisory Board",
+        "Longmont Housing Authority Advisory Board",
+        "Longmont Housing Authority Board of Commissioners",
+    ]
+    city = "Longmont"
+    assert match_body("Water Advisory Board - October 2026", bodies, city) == "Water Board"
+    assert match_body("Longmont Planning & Zoning - Regular Session", bodies, city) == bodies[1]
+    assert (
+        match_body("Callahan House Advisory Board Meeting, Oct. 14, 2026", bodies, city)
+        == bodies[2]
+    )
+    assert match_body("Arts in Public Places Commission - October 15", bodies, city) == bodies[3]
+    assert (
+        match_body("Art in Public Places Board Meeting, Oct. 15, 2026", bodies, city) == bodies[3]
+    )
+    assert match_body("Housing and Human Service Advisory Board", bodies, city) == bodies[4]
+    hearing = "Housing and Human Services Advisory Education Hearing Oct. 22, 2026"
+    assert match_body(hearing, bodies, city) == bodies[4]
+    assert match_body("Library Board", bodies, city) == bodies[5]
+    # Two bodies with one core: neither.
+    assert match_body("Longmont Housing Authority Board - November 2026", bodies, city) == ""
+    # One core word must match whole: "Water Resources" is not "Water".
+    assert match_body("Water Resources Advisory Board", bodies, city) == ""
+
+
+def test_match_body_reads_a_body_by_its_initials():
+    bodies = ["Board of Trustees", "Planning & Community Development Commission"]
+    assert match_body("August 24, 2026 PCDC Meeting", bodies) == bodies[1]
+    assert match_body("August 10, 2026, PCDC & BOT Joint Meeting", bodies) == bodies[1]
+    assert match_body("BOT Regular Meeting", bodies) == bodies[0]
+    assert match_body("pcdc meeting", bodies) == ""  # initials are capitals
+
+
+def test_two_videos_of_one_meeting_titled_two_ways_make_one_episode():
+    """Longmont posted its 15 October Art in Public Places meeting twice, once as "Board"."""
+    body = "Art in Public Places Commission"
+    channel = Source(kind="youtube", bodies=(body,), channel_id="UC" + "d" * 22)
+    videos = [
+        NS(video_id="MMMMMMMMMMM", title="Arts in Public Places Commission - November 5, 2026", published="2026-11-06T00:00:00Z"),
+        NS(video_id="NNNNNNNNNNN", title="Art in Public Places Board Meeting, Nov. 5, 2026", published="2026-11-07T00:00:00Z"),
+    ]  # fmt: skip
+    found, _ = find_meetings([channel], FIRST, LAST, Listers(youtube=lambda cid: videos))
+    assert [(m.video, m.body) for m in found if not m.reason] == [("MMMMMMMMMMM", body)]
+    assert [m.reason for m in found if m.reason] == [
+        "another video of this meeting runs (MMMMMMMMMMM)"
+    ]
