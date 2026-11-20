@@ -882,3 +882,47 @@ def test_a_bare_seat_title_gets_no_name_on_the_site() -> None:
 def test_two_ordinary_words_are_not_a_name_on_the_site() -> None:
     pairs = _site_pairs("The grant went to Sharing Housing.", "We like sharing; housing is short.")
     assert all(wrong != "Sharing Housing" for wrong, _ in pairs)
+
+
+def test_a_roll_call_surname_of_a_board_member_is_fixed_without_the_full_name() -> None:
+    # The meeting never says Sam Browning in full, but he sits on this board's roster, so the
+    # surname heard alone is his.
+    assert ("Browing", "Browning") in _site_pairs("Thank you, Browing.", "Here.")
+
+
+def test_a_board_surname_after_the_or_a_is_a_thing_not_the_member() -> None:
+    pairs = _site_pairs("Trusty Browing?", "We toured the Browing on Main Street.")
+    assert all(wrong != "Browing" for wrong, _ in pairs)
+
+
+def test_a_lone_word_for_a_member_of_another_body_is_not_fixed() -> None:
+    other = load_people(
+        [],
+        {},
+        "documents.json",
+        [
+            (
+                roster_from_dict(
+                    {
+                        "city": "Lyons",
+                        "body": "Parks Board",
+                        "state": "CO",
+                        "members": [
+                            {
+                                "name": "Sam Browning",
+                                "first": "Sam",
+                                "last": "Browning",
+                                "role": "Member",
+                            },
+                        ],
+                    }
+                ),
+                "cities/lyons/rosters/parks.json",
+            )
+        ],
+    )
+    from civiccast_brief.episode.build import _name_fixes
+
+    recap = Recap("Lyons", "Board of Trustees", "2026-11-16", "abc", ())
+    pairs = [(p["from"], p["to"]) for p in _name_fixes(recap, other, ["Trusty Browing?"])]
+    assert all(wrong != "Browing" for wrong, _ in pairs)

@@ -330,6 +330,9 @@ class Person:
     #: A member of another body's roster, even when this meeting's documents print the name
     #: (then misspellings are corrected, but a seat title still says it is not them).
     other_body: bool = False
+    #: A member of the meeting's own body, from that body's roster file: the people a roll
+    #: call names by surname alone ("Council Member Crist?").
+    on_board: bool = False
 
 
 @dataclass(frozen=True)
@@ -1498,7 +1501,7 @@ def load_people(
 
     for roster, path in rosters or []:
         for person in people_from_roster(roster, path):
-            keep(person)
+            keep(replace(person, on_board=True))
     if pages:
         for person in people_from_documents(pages, documents_path):
             keep(person)
