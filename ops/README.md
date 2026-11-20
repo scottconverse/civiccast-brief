@@ -36,7 +36,7 @@ staff contact details; the city setup writes it again.
 
 `backup-brief.ps1` copies the working files to `D:\CivicCast-Brief-backups`. The scheduled task
 `CivicCast Brief backup` runs it every night at 11 PM, while the user is logged in. It runs the
-copy kept at `C:\dev\civiccast-brief-scratchackupackup-brief.ps1`.
+copy kept at `C:\dev\civiccast-brief-scratch\backup\backup-brief.ps1`.
 
 - Each run makes `daily\yyyy-MM-dd\` with every `weekly-*` folder and `publish-city.ps1`.
 - `.wav` files are left out: the raw city meeting audio (it can usually be downloaded again)
