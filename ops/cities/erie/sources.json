@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "civicclerk:erieco",
+      "kind": "civicclerk",
+      "tenant": "erieco",
+      "bodies": [
+        "Town Council",
+        "Planning Commission",
+        "Urban Renewal Authority",
+        "Board of Adjustment/Board of Appeals",
+        "Liquor License Authority"
+      ]
+    }
+  ]
+}

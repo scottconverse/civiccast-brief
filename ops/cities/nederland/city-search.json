@@ -1,0 +1,38 @@
+{
+  "name": "Nederland",
+  "state": "CO",
+  "website": "https://nederlandco.org/",
+  "sources": [
+    {
+      "source": {
+        "id": "youtube:UCknLzh_H3jXUCHNN2r-H37w",
+        "kind": "youtube",
+        "channel_id": "UCknLzh_H3jXUCHNN2r-H37w",
+        "bodies": [
+          "Board of Trustees",
+          "Planning Commission"
+        ]
+      },
+      "how": "channel UCknLzh_H3jXUCHNN2r-H37w; its newest video titles name these bodies"
+    },
+    {
+      "source": {
+        "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "kind": "youtube",
+        "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "bodies": [
+          "Board of Education"
+        ]
+      },
+      "how": "channel UCbIqNnmnUXr1bWfNvYRyaAQ; its newest video titles name these bodies"
+    }
+  ],
+  "bodies": [
+    "Board of Trustees",
+    "Planning Commission",
+    "Board of Education"
+  ],
+  "found_not_read": [],
+  "notes": [],
+  "requests": 6
+}

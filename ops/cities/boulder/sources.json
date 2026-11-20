@@ -1,0 +1,174 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "primegov:bouldercolorado.primegov.com",
+      "kind": "primegov",
+      "url": "https://bouldercolorado.primegov.com",
+      "bodies": [
+        "City Council"
+      ]
+    },
+    {
+      "id": "youtube:UCAHm_LCXkzWpph_NDqZ0I4Q",
+      "kind": "youtube",
+      "channel_id": "UCAHm_LCXkzWpph_NDqZ0I4Q",
+      "bodies": [
+        "City Council"
+      ]
+    },
+    {
+      "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "kind": "youtube",
+      "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "bodies": [
+        "Board of Education"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=31311&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=31311&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Arts Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=32034&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=32034&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Beverage Licensing Authority"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=32770&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=32770&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Board of Zoning Adjustment"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=34701&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=34701&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "BJAD Parking Commission",
+        "BJAD TDM Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=34781&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=34781&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Boulder Urban Renewal Authority"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=172515&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=172515&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Cannabis Licensing Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=35146&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=35146&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Design Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=35378&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=35378&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Downtown Management Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=36420&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=36420&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Environmental Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=165019&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=165019&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Housing Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=38014&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=38014&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Human Relations Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=38866&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=38866&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Landmarks Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=198102&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=198102&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Open Space Board of Trustees"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=43279&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=43279&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Parks and Recreation Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=47549&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=47549&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Planning Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=54523&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=54523&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Transportation Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=55883&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=55883&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "University Hill Commercial Area Management Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=58033&dbid=0&repo=LF8PROD2",
+      "kind": "laserfiche",
+      "url": "https://documents.bouldercolorado.gov/WebLink/Browse.aspx?id=58033&dbid=0&repo=LF8PROD2",
+      "bodies": [
+        "Water Resources Advisory Board"
+      ]
+    }
+  ]
+}

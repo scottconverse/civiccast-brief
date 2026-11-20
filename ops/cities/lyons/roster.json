@@ -1,0 +1,54 @@
+{
+  "city": "Lyons",
+  "state": "CO",
+  "body": "Board of Trustees",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.townoflyons.com/183/Board-of-Trustees"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources. The page prints no title for Leigh Williams, Mariah McCreary, Amy Schwartz, Greg Lowell, Julie Jacobs; they are listed as Trustee.",
+  "members": [
+    {
+      "name": "Mark Browning",
+      "first": "Mark",
+      "last": "Browning",
+      "role": "Mayor"
+    },
+    {
+      "name": "Jen Wingard",
+      "first": "Jen",
+      "last": "Wingard",
+      "role": "Mayor Pro Tem"
+    },
+    {
+      "name": "Leigh Williams",
+      "first": "Leigh",
+      "last": "Williams",
+      "role": "Trustee"
+    },
+    {
+      "name": "Mariah McCreary",
+      "first": "Mariah",
+      "last": "McCreary",
+      "role": "Trustee"
+    },
+    {
+      "name": "Amy Schwartz",
+      "first": "Amy",
+      "last": "Schwartz",
+      "role": "Trustee"
+    },
+    {
+      "name": "Greg Lowell",
+      "first": "Greg",
+      "last": "Lowell",
+      "role": "Trustee"
+    },
+    {
+      "name": "Julie Jacobs",
+      "first": "Julie",
+      "last": "Jacobs",
+      "role": "Trustee"
+    }
+  ]
+}

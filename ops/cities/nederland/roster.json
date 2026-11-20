@@ -1,0 +1,48 @@
+{
+  "city": "Nederland",
+  "state": "CO",
+  "body": "Board of Trustees",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://nederlandco.org/1231/Board-of-Trustees"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Billy Giblin",
+      "first": "Billy",
+      "last": "Giblin",
+      "role": "Trustee"
+    },
+    {
+      "name": "Nichole Sterling",
+      "first": "Nichole",
+      "last": "Sterling",
+      "role": "Mayor"
+    },
+    {
+      "name": "Luke Miller",
+      "first": "Luke",
+      "last": "Miller",
+      "role": "Mayor Pro Tem"
+    },
+    {
+      "name": "Kristopher Larsen",
+      "first": "Kristopher",
+      "last": "Larsen",
+      "role": "Trustee"
+    },
+    {
+      "name": "Andrew Dewart",
+      "first": "Andrew",
+      "last": "Dewart",
+      "role": "Trustee"
+    },
+    {
+      "name": "Andrew Joslin",
+      "first": "Andrew",
+      "last": "Joslin",
+      "role": "Trustee"
+    }
+  ]
+}

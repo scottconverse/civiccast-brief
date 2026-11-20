@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Recreation Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/recreation-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Daniel Brenner",
+      "first": "Daniel",
+      "last": "Brenner",
+      "role": "Member"
+    },
+    {
+      "name": "Michael Knapp",
+      "first": "Michael",
+      "last": "Knapp",
+      "role": "Member"
+    },
+    {
+      "name": "Douglas Minter",
+      "first": "Douglas",
+      "last": "Minter",
+      "role": "Member"
+    },
+    {
+      "name": "Lisa Norgard",
+      "first": "Lisa",
+      "last": "Norgard",
+      "role": "Member"
+    },
+    {
+      "name": "Carla Rupp",
+      "first": "Carla",
+      "last": "Rupp",
+      "role": "Member"
+    },
+    {
+      "name": "Michele Van Pelt",
+      "first": "Michele",
+      "last": "Van Pelt",
+      "role": "Member"
+    },
+    {
+      "name": "Everett Weiss",
+      "first": "Everett",
+      "last": "Weiss",
+      "role": "Member"
+    }
+  ]
+}

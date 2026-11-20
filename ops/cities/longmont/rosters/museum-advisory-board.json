@@ -1,0 +1,72 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Museum Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Sheila Conroy",
+      "first": "Sheila",
+      "last": "Conroy",
+      "role": "Board Member"
+    },
+    {
+      "name": "Catherine A Cox",
+      "first": "Catherine",
+      "last": "Cox",
+      "role": "Board Member"
+    },
+    {
+      "name": "Linda Buchsbaum",
+      "first": "Linda",
+      "last": "Buchsbaum",
+      "role": "Board Member"
+    },
+    {
+      "name": "Robert A. Lee",
+      "first": "Robert",
+      "last": "Lee",
+      "role": "Board Member"
+    },
+    {
+      "name": "Catlyn Keenan",
+      "first": "Catlyn",
+      "last": "Keenan",
+      "role": "Board Member"
+    },
+    {
+      "name": "Michael Gallifrey",
+      "first": "Michael",
+      "last": "Gallifrey",
+      "role": "Board Member"
+    },
+    {
+      "name": "Casey A Scherer",
+      "first": "Casey",
+      "last": "Scherer",
+      "role": "Board Member"
+    },
+    {
+      "name": "Haley Elaine Gould",
+      "first": "Haley",
+      "last": "Gould",
+      "role": "Board Member"
+    },
+    {
+      "name": "Caley Cordova",
+      "first": "Caley",
+      "last": "Cordova",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jake Marsing",
+      "first": "Jake",
+      "last": "Marsing",
+      "role": "Council Liaison"
+    }
+  ]
+}

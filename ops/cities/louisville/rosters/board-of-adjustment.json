@@ -1,0 +1,42 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Board of Adjustment",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/board-of-adjustment/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Scott Berger",
+      "first": "Scott",
+      "last": "Berger",
+      "role": "Member"
+    },
+    {
+      "name": "Jim Branum",
+      "first": "Jim",
+      "last": "Branum",
+      "role": "Member"
+    },
+    {
+      "name": "Julia Cline",
+      "first": "Julia",
+      "last": "Cline",
+      "role": "Member"
+    },
+    {
+      "name": "Rachel Croft",
+      "first": "Rachel",
+      "last": "Croft",
+      "role": "Member"
+    },
+    {
+      "name": "Jennifer Singer-Rupp",
+      "first": "Jennifer",
+      "last": "Singer-Rupp",
+      "role": "Member"
+    }
+  ]
+}

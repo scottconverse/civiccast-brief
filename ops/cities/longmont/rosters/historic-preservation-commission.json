@@ -1,0 +1,60 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Historic Preservation Commission",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Richard Jacobi",
+      "first": "Richard",
+      "last": "Jacobi",
+      "role": "Board Member"
+    },
+    {
+      "name": "Mary-Frances O'Dea",
+      "first": "Mary-Frances",
+      "last": "O'Dea",
+      "role": "Board Member"
+    },
+    {
+      "name": "Holly Norton",
+      "first": "Holly",
+      "last": "Norton",
+      "role": "Board Member"
+    },
+    {
+      "name": "Doug Barnert",
+      "first": "Doug",
+      "last": "Barnert",
+      "role": "Board Member"
+    },
+    {
+      "name": "Steve Lane",
+      "first": "Steve",
+      "last": "Lane",
+      "role": "Board Member"
+    },
+    {
+      "name": "Aaron Haberman",
+      "first": "Aaron",
+      "last": "Haberman",
+      "role": "Board Member"
+    },
+    {
+      "name": "Dawn Terrick",
+      "first": "Dawn",
+      "last": "Terrick",
+      "role": "Board Member"
+    },
+    {
+      "name": "Sue W Henderson",
+      "first": "Sue",
+      "last": "Henderson",
+      "role": "Alternate"
+    }
+  ]
+}

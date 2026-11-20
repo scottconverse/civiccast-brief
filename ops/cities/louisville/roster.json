@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "City Council",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-council/meet-the-mayor-and-council/"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Chris Leh",
+      "first": "Chris",
+      "last": "Leh",
+      "role": "Mayor"
+    },
+    {
+      "name": "Caleb Dickinson",
+      "first": "Caleb",
+      "last": "Dickinson",
+      "role": "Council Member, Ward I"
+    },
+    {
+      "name": "Josh Cooperman",
+      "first": "Josh",
+      "last": "Cooperman",
+      "role": "Council Member, Ward I"
+    },
+    {
+      "name": "Deborah Fahey",
+      "first": "Deborah",
+      "last": "Fahey",
+      "role": "Council Member, Ward II"
+    },
+    {
+      "name": "Judi Kern",
+      "first": "Judi",
+      "last": "Kern",
+      "role": "Council Member, Ward II"
+    },
+    {
+      "name": "Barbara Hamlington",
+      "first": "Barbara",
+      "last": "Hamlington",
+      "role": "Mayor Pro Tem, Ward III"
+    },
+    {
+      "name": "Dietrich Hoefner",
+      "first": "Dietrich",
+      "last": "Hoefner",
+      "role": "Council Member, Ward III"
+    }
+  ]
+}

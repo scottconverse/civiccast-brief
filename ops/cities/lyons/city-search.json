@@ -1,0 +1,52 @@
+{
+  "name": "Lyons",
+  "state": "CO",
+  "website": "https://www.townoflyons.com/",
+  "sources": [
+    {
+      "source": {
+        "id": "civicplus:www.townoflyons.com",
+        "kind": "civicplus",
+        "site": "www.townoflyons.com",
+        "bodies": [
+          "Board of Trustees",
+          "Arts & Humanities Commission",
+          "Board of Adjustments",
+          "Ecology Advisory Board",
+          "Economic Vitality Commission",
+          "Historic Preservation Commission",
+          "Housing & Human Services Commission",
+          "IGA Taskforce Committee",
+          "Lyons Urban Renewal Authority",
+          "Parks and Recreation Commission",
+          "Planning & Community Development Commission",
+          "Student Advisory Commission",
+          "Sundance Film Festival Task Force",
+          "Sustainable Futures Commission",
+          "Utilities & Engineering Board"
+        ]
+      },
+      "how": "linked from the city site; the Agenda Center list 15 bodies"
+    }
+  ],
+  "bodies": [
+    "Board of Trustees",
+    "Arts & Humanities Commission",
+    "Board of Adjustments",
+    "Ecology Advisory Board",
+    "Economic Vitality Commission",
+    "Historic Preservation Commission",
+    "Housing & Human Services Commission",
+    "IGA Taskforce Committee",
+    "Lyons Urban Renewal Authority",
+    "Parks and Recreation Commission",
+    "Planning & Community Development Commission",
+    "Student Advisory Commission",
+    "Sundance Film Festival Task Force",
+    "Sustainable Futures Commission",
+    "Utilities & Engineering Board"
+  ],
+  "found_not_read": [],
+  "notes": [],
+  "requests": 6
+}

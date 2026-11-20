@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Parks and Recreation Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Sarah M Flinn",
+      "first": "Sarah",
+      "last": "Flinn",
+      "role": "Board Member"
+    },
+    {
+      "name": "Sam Libby",
+      "first": "Sam",
+      "last": "Libby",
+      "role": "Board Member"
+    },
+    {
+      "name": "Erin E Angel",
+      "first": "Erin",
+      "last": "Angel",
+      "role": "Board Member"
+    },
+    {
+      "name": "Brandi Bradshaw Reyes",
+      "first": "Brandi",
+      "last": "Reyes",
+      "role": "Board Member"
+    },
+    {
+      "name": "Scott Conlin",
+      "first": "Scott",
+      "last": "Conlin",
+      "role": "Board Member"
+    },
+    {
+      "name": "Hannah Mulroy",
+      "first": "Hannah",
+      "last": "Mulroy",
+      "role": "Chair"
+    },
+    {
+      "name": "Nick Novello",
+      "first": "Nick",
+      "last": "Novello",
+      "role": "Board Member"
+    }
+  ]
+}

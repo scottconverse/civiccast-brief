@@ -1,0 +1,36 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Building Code Board of Appeals",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/building-code-board-of-appeals/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Matthew K. Berry",
+      "first": "Matthew",
+      "last": "Berry",
+      "role": "Member"
+    },
+    {
+      "name": "Mason Gatto",
+      "first": "Mason",
+      "last": "Gatto",
+      "role": "Member"
+    },
+    {
+      "name": "Peter Giese",
+      "first": "Peter",
+      "last": "Giese",
+      "role": "Member"
+    },
+    {
+      "name": "Steve Norwood",
+      "first": "Steve",
+      "last": "Norwood",
+      "role": "Member"
+    }
+  ]
+}

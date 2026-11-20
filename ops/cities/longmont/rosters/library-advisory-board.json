@@ -1,0 +1,48 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Library Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Nicole M Gallifrey",
+      "first": "Nicole",
+      "last": "Gallifrey",
+      "role": "Board Member"
+    },
+    {
+      "name": "Geoff - Dolman",
+      "first": "Geoff",
+      "last": "Dolman",
+      "role": "Board Member"
+    },
+    {
+      "name": "Brian D Litwin",
+      "first": "Brian",
+      "last": "Litwin",
+      "role": "Board Member"
+    },
+    {
+      "name": "Keri A Dunphy",
+      "first": "Keri",
+      "last": "Dunphy",
+      "role": "Board Member"
+    },
+    {
+      "name": "Diane Crist",
+      "first": "Diane",
+      "last": "Crist",
+      "role": "Council Member"
+    },
+    {
+      "name": "Charlene M Kellsey",
+      "first": "Charlene",
+      "last": "Kellsey",
+      "role": "Board Member"
+    }
+  ]
+}

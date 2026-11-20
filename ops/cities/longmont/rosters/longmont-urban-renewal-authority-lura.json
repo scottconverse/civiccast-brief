@@ -1,0 +1,78 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Longmont Urban Renewal Authority (LURA)",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Marta Loachamin",
+      "first": "Marta",
+      "last": "Loachamin",
+      "role": "no term, continues until replaced"
+    },
+    {
+      "name": "Wes Parker",
+      "first": "Wes",
+      "last": "Parker",
+      "role": "no term, continues until replaced"
+    },
+    {
+      "name": "Jim Berthold",
+      "first": "Jim",
+      "last": "Berthold",
+      "role": "no term, continues until replaced"
+    },
+    {
+      "name": "Chris McGilvray",
+      "first": "Chris",
+      "last": "McGilvray",
+      "role": "5 year term"
+    },
+    {
+      "name": "Matthew Popkin",
+      "first": "Matthew",
+      "last": "Popkin",
+      "role": "LURA Chairperson"
+    },
+    {
+      "name": "Crystal Prieto",
+      "first": "Crystal",
+      "last": "Prieto",
+      "role": "LURA Board Member"
+    },
+    {
+      "name": "Sean McCoy",
+      "first": "Sean",
+      "last": "McCoy",
+      "role": "LURA Board Member"
+    },
+    {
+      "name": "Susie Hidalgo-Fahring",
+      "first": "Susie",
+      "last": "Hidalgo-Fahring",
+      "role": "LURA Board Member"
+    },
+    {
+      "name": "Diane Crist",
+      "first": "Diane",
+      "last": "Crist",
+      "role": "LURA Board Member"
+    },
+    {
+      "name": "Jake Marsing",
+      "first": "Jake",
+      "last": "Marsing",
+      "role": "LURA Board Member"
+    },
+    {
+      "name": "Alex Kalkhofer",
+      "first": "Alex",
+      "last": "Kalkhofer",
+      "role": "LURA Board Member"
+    }
+  ]
+}

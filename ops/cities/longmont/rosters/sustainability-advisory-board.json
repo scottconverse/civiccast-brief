@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Sustainability Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Alec R Solimeo",
+      "first": "Alec",
+      "last": "Solimeo",
+      "role": "Board Member"
+    },
+    {
+      "name": "Alyssa Harding",
+      "first": "Alyssa",
+      "last": "Harding",
+      "role": "Board Member"
+    },
+    {
+      "name": "Robert Paul Davidson",
+      "first": "Robert",
+      "last": "Davidson",
+      "role": "Board Member"
+    },
+    {
+      "name": "Daniel Corbin Leonard",
+      "first": "Daniel",
+      "last": "Leonard",
+      "role": "Board Member"
+    },
+    {
+      "name": "Korkut Onaran",
+      "first": "Korkut",
+      "last": "Onaran",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jeffrey M Gawrych",
+      "first": "Jeffrey",
+      "last": "Gawrych",
+      "role": "Board Member"
+    },
+    {
+      "name": "John V Lembke",
+      "first": "John",
+      "last": "Lembke",
+      "role": "Board Member"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Callahan House Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Karen Kruse",
+      "first": "Karen",
+      "last": "Kruse",
+      "role": "Board Member"
+    },
+    {
+      "name": "Dianna Sue Lasek",
+      "first": "Dianna",
+      "last": "Lasek",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jeffrey L. Gallaher",
+      "first": "Jeffrey",
+      "last": "Gallaher",
+      "role": "Board Member"
+    },
+    {
+      "name": "Julia Stroh Brown",
+      "first": "Julia",
+      "last": "Brown",
+      "role": "Board Member"
+    },
+    {
+      "name": "Angela M Maniaci",
+      "first": "Angela",
+      "last": "Maniaci",
+      "role": "Board Member"
+    },
+    {
+      "name": "Cindy G Martini",
+      "first": "Cindy",
+      "last": "Martini",
+      "role": "Board Member"
+    },
+    {
+      "name": "Candis Schey",
+      "first": "Candis",
+      "last": "Schey",
+      "role": "Board Member"
+    }
+  ]
+}

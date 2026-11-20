@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Senior Citizens Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Marta Valenzuela Moreno",
+      "first": "Marta",
+      "last": "Valenzuela Moreno",
+      "role": "Board Member"
+    },
+    {
+      "name": "David W Brenna",
+      "first": "David",
+      "last": "Brenna",
+      "role": "Board Member"
+    },
+    {
+      "name": "Erik D Brack",
+      "first": "Erik",
+      "last": "Brack",
+      "role": "Board Member"
+    },
+    {
+      "name": "John T. Higgins",
+      "first": "John",
+      "last": "Higgins",
+      "role": "Board Member"
+    },
+    {
+      "name": "Maria Guadalupe Cortez",
+      "first": "Maria",
+      "last": "Cortez",
+      "role": "Board Member"
+    },
+    {
+      "name": "John D Pillmann",
+      "first": "John",
+      "last": "Pillmann",
+      "role": "Board Member"
+    },
+    {
+      "name": "Ellon Dooley",
+      "first": "Ellon",
+      "last": "Dooley",
+      "role": "Board Member"
+    }
+  ]
+}

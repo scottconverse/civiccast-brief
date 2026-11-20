@@ -1,0 +1,101 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "youtube:UCH5_wkpLrKYb1JuUk6-UdNg",
+      "kind": "youtube",
+      "channel_id": "UCH5_wkpLrKYb1JuUk6-UdNg",
+      "bodies": [
+        "City Council",
+        "Sustainability Advisory Board",
+        "Water Board",
+        "Board of Education"
+      ]
+    },
+    {
+      "id": "youtube:UCXFW3IRzfCc6q_XM-uutAmw",
+      "kind": "youtube",
+      "channel_id": "UCXFW3IRzfCc6q_XM-uutAmw",
+      "bodies": [
+        "City Council"
+      ]
+    },
+    {
+      "id": "primegov:longmont.primegov.com",
+      "kind": "primegov",
+      "url": "https://longmont.primegov.com",
+      "bodies": [
+        "City Council",
+        "Airport Advisory Board",
+        "Art in Public Places Commission",
+        "Callahan House Board",
+        "General Employees' Retirement Plan Board (GERP)",
+        "General Public Meeting Notices (includes Neighborhood & Topic Specific Meetings )",
+        "Golf Course Advisory Board",
+        "Historic Preservation Commission",
+        "Housing and Human Services Advisory Board",
+        "Library Advisory Board",
+        "Local Licensing Authority",
+        "Longmont Housing Authority Advisory Board",
+        "Longmont Housing Authority Board of Commissioners",
+        "Longmont Urban Renewal Authority (LURA)",
+        "Marijuana Licensing Authority",
+        "Master Board of Appeals",
+        "MOPC",
+        "Museum Advisory Board",
+        "New Hire Fire",
+        "New Hire Police",
+        "Old Hire Fire",
+        "Parks and Recreation Advisory Board",
+        "Planning and Zoning Commission",
+        "Public Safety Professional Standards Review Panel",
+        "Senior Citizens Advisory Board",
+        "Sustainability Advisory Board",
+        "Technology Policy Advisory Board",
+        "Transportation Advisory Board",
+        "Water Board"
+      ]
+    },
+    {
+      "id": "webpage:https://www.svvsd.org/about/board-of-education/board-meetings/2026-board-meetings/",
+      "kind": "webpage",
+      "url": "https://www.svvsd.org/about/board-of-education/board-meetings/2026-board-meetings/",
+      "follow": "/boardmeetings/",
+      "bodies": [
+        "Board of Education"
+      ]
+    },
+    {
+      "id": "webpage:https://www.flagstaffacademy.org/apps/pages/index.jsp?uREC_ID=560576&type=d&pREC_ID=2760940",
+      "kind": "webpage",
+      "url": "https://www.flagstaffacademy.org/apps/pages/index.jsp?uREC_ID=560576&type=d&pREC_ID=2760940",
+      "bodies": [
+        "Flagstaff Academy Board of Directors"
+      ]
+    },
+    {
+      "id": "webpage:https://www.svcmontessori.org/board-meetings",
+      "kind": "webpage",
+      "url": "https://www.svcmontessori.org/board-meetings",
+      "bodies": [
+        "St. Vrain Community Montessori Board"
+      ]
+    },
+    {
+      "id": "gdrive:15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2",
+      "kind": "gdrive",
+      "folder_id": "15YuyqNfAkNPcbaoT8r6SSedKGyZ6Box2",
+      "bodies": [
+        "Twin Peaks Classical Academy Board of Directors"
+      ]
+    },
+    {
+      "id": "vimeo:svvsd",
+      "kind": "vimeo",
+      "tenant": "svvsd",
+      "bodies": [
+        "Board of Education"
+      ]
+    }
+  ]
+}

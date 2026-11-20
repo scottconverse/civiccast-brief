@@ -1,0 +1,72 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Art in Public Places Commission",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Iris P Hannon",
+      "first": "Iris",
+      "last": "Hannon",
+      "role": "Board Member"
+    },
+    {
+      "name": "Susan Jaggers",
+      "first": "Susan",
+      "last": "Jaggers",
+      "role": "Board Member"
+    },
+    {
+      "name": "Michelle A Jones",
+      "first": "Michelle",
+      "last": "Jones",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jenny M Rabellino",
+      "first": "Jenny",
+      "last": "Rabellino",
+      "role": "Board Member"
+    },
+    {
+      "name": "Scott D Toillion",
+      "first": "Scott",
+      "last": "Toillion",
+      "role": "Board Member"
+    },
+    {
+      "name": "Randi Long",
+      "first": "Randi",
+      "last": "Long",
+      "role": "Board Member"
+    },
+    {
+      "name": "Rhonda Zoker Beaupre",
+      "first": "Rhonda",
+      "last": "Beaupre",
+      "role": "Board Member"
+    },
+    {
+      "name": "Eve Lacey",
+      "first": "Eve",
+      "last": "Lacey",
+      "role": "Board Member"
+    },
+    {
+      "name": "Trisa Baxter",
+      "first": "Trisa",
+      "last": "Baxter",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jennifer Miller",
+      "first": "Jennifer",
+      "last": "Miller",
+      "role": "Chair"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "Louisville",
+  "state": "CO",
+  "website": "https://www.louisvilleco.gov/",
+  "sources": [
+    {
+      "source": {
+        "id": "youtube:UCro5PeODE-MCnNzuWyxRJ6A",
+        "kind": "youtube",
+        "channel_id": "UCro5PeODE-MCnNzuWyxRJ6A",
+        "bodies": [
+          "City Council",
+          "Planning Commission"
+        ]
+      },
+      "how": "channel UCro5PeODE-MCnNzuWyxRJ6A; its newest video titles name these bodies"
+    },
+    {
+      "source": {
+        "id": "civicclerk:louisvilleco",
+        "kind": "civicclerk",
+        "tenant": "louisvilleco",
+        "bodies": [
+          "City Council"
+        ]
+      },
+      "how": "given; the portal lists 16 bodies"
+    }
+  ],
+  "bodies": [
+    "City Council",
+    "Planning Commission"
+  ],
+  "found_not_read": [
+    {
+      "platform": "Legistar",
+      "url": "https://louisville.legistar.com",
+      "note": "not linked from the city site; a place of the same name elsewhere may own it; 147 bodies: Metro Council, Planning Committee, Policy & Procedures Committee, Land Development & Transportation Committee, Development Review Committee, Public Safety Committee, Committee on Appointments, Community Affairs Committee, ..."
+    },
+    {
+      "platform": "Laserfiche WebLink",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?dbid=0&repo=Louisville",
+      "note": ""
+    }
+  ],
+  "notes": [],
+  "requests": 12
+}

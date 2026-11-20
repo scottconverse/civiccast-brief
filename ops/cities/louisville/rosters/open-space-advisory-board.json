@@ -1,0 +1,60 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Open Space Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/open-space-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Michiko Christiansen",
+      "first": "Michiko",
+      "last": "Christiansen",
+      "role": "Member"
+    },
+    {
+      "name": "Andy Dorsey",
+      "first": "Andy",
+      "last": "Dorsey",
+      "role": "Member"
+    },
+    {
+      "name": "Susan McEachern",
+      "first": "Susan",
+      "last": "McEachern",
+      "role": "Member"
+    },
+    {
+      "name": "Denise Montagu",
+      "first": "Denise",
+      "last": "Montagu",
+      "role": "Member"
+    },
+    {
+      "name": "Mark Poletti",
+      "first": "Mark",
+      "last": "Poletti",
+      "role": "Member"
+    },
+    {
+      "name": "Brad Pugh",
+      "first": "Brad",
+      "last": "Pugh",
+      "role": "Member"
+    },
+    {
+      "name": "Daniel Rupp",
+      "first": "Daniel",
+      "last": "Rupp",
+      "role": "Member"
+    },
+    {
+      "name": "Bud Talbot",
+      "first": "Bud",
+      "last": "Talbot",
+      "role": "Member"
+    }
+  ]
+}

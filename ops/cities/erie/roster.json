@@ -1,0 +1,54 @@
+{
+  "city": "Erie",
+  "state": "CO",
+  "body": "Town Council",
+  "retrieved": "2026-11-16",
+  "sources": [
+    "https://www.erieco.gov/318/Town-Council"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-16 from the page in sources.",
+  "members": [
+    {
+      "name": "Andrew J. Moore",
+      "first": "Andrew",
+      "last": "Moore",
+      "role": "Mayor"
+    },
+    {
+      "name": "Anil Pesaramelli",
+      "first": "Anil",
+      "last": "Pesaramelli",
+      "role": "Council Member"
+    },
+    {
+      "name": "John Mortellaro",
+      "first": "John",
+      "last": "Mortellaro",
+      "role": "Council Member"
+    },
+    {
+      "name": "Dan Hoback",
+      "first": "Dan",
+      "last": "Hoback",
+      "role": "Council Member"
+    },
+    {
+      "name": "Brandon Bell",
+      "first": "Brandon",
+      "last": "Bell",
+      "role": "Mayor Pro Tem"
+    },
+    {
+      "name": "Emily Baer",
+      "first": "Emily",
+      "last": "Baer",
+      "role": "Council Member"
+    },
+    {
+      "name": "Brian O'Connor",
+      "first": "Brian",
+      "last": "O'Connor",
+      "role": "Council Member"
+    }
+  ]
+}

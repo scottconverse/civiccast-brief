@@ -1,0 +1,48 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "MOPC",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Angela Brill",
+      "first": "Angela",
+      "last": "Brill",
+      "role": "Board Member"
+    },
+    {
+      "name": "Matthew J Bolkovatz",
+      "first": "Matthew",
+      "last": "Bolkovatz",
+      "role": "Board Member"
+    },
+    {
+      "name": "Nicola Davidson",
+      "first": "Nicola",
+      "last": "Davidson",
+      "role": "Board Member"
+    },
+    {
+      "name": "Teresa Molloy",
+      "first": "Teresa",
+      "last": "Molloy",
+      "role": "Chief Financial Officer"
+    },
+    {
+      "name": "Harold Dominguez",
+      "first": "Harold",
+      "last": "Dominguez",
+      "role": "City Manager"
+    },
+    {
+      "name": "Joanne Zeas",
+      "first": "Joanne",
+      "last": "Zeas",
+      "role": "Chief Human Resources Officer"
+    }
+  ]
+}

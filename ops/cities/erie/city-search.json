@@ -1,0 +1,66 @@
+{
+  "name": "Erie",
+  "state": "CO",
+  "website": "https://www.erieco.gov",
+  "sources": [
+    {
+      "source": {
+        "id": "granicus:erie.granicus.com/16",
+        "kind": "granicus",
+        "host": "erie.granicus.com",
+        "view_id": "16",
+        "bodies": [
+          "Town Council",
+          "Planning Commission"
+        ]
+      },
+      "how": "linked from the city site; the archive page names these bodies"
+    },
+    {
+      "source": {
+        "id": "civicclerk:erieco",
+        "kind": "civicclerk",
+        "tenant": "erieco",
+        "bodies": [
+          "Town Council",
+          "Airport Economic Development Advisory Board",
+          "Board of Adjustment/Board of Appeals",
+          "Historic Preservation Advisory Board",
+          "Liquor License Authority",
+          "Open Space and Trails Advisory Board",
+          "Planning Commission",
+          "Sustainability Advisory Board",
+          "Tree Advisory Board",
+          "Urban Renewal Authority"
+        ]
+      },
+      "how": "linked from the city site; the portal lists 10 bodies"
+    }
+  ],
+  "bodies": [
+    "Town Council",
+    "Planning Commission",
+    "Airport Economic Development Advisory Board",
+    "Board of Adjustment/Board of Appeals",
+    "Historic Preservation Advisory Board",
+    "Liquor License Authority",
+    "Open Space and Trails Advisory Board",
+    "Sustainability Advisory Board",
+    "Tree Advisory Board",
+    "Urban Renewal Authority"
+  ],
+  "found_not_read": [
+    {
+      "platform": "Granicus",
+      "url": "https://erie.granicus.com/player/camera/3?publish_id=5&redirect=true",
+      "note": "no view_id in the link"
+    },
+    {
+      "platform": "CivicPlus Agenda Center",
+      "url": "https://www.erieco.gov/Archive.aspx?AMID=48",
+      "note": "the Agenda Center and Archive Center list, and names no body"
+    }
+  ],
+  "notes": [],
+  "requests": 14
+}

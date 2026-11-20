@@ -1,0 +1,42 @@
+{
+  "city": "Superior",
+  "state": "CO",
+  "body": "Town Council",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.superiorcolorado.gov/Government/Town-Council"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Mark Lacis",
+      "first": "Mark",
+      "last": "Lacis",
+      "role": "Mayor"
+    },
+    {
+      "name": "Heather Cracraft",
+      "first": "Heather",
+      "last": "Cracraft",
+      "role": "Council Member"
+    },
+    {
+      "name": "Jenn Kaaoush",
+      "first": "Jenn",
+      "last": "Kaaoush",
+      "role": "Mayor Pro Tem"
+    },
+    {
+      "name": "Stephanie Miller",
+      "first": "Stephanie",
+      "last": "Miller",
+      "role": "Council Member"
+    },
+    {
+      "name": "Neal Shah",
+      "first": "Neal",
+      "last": "Shah",
+      "role": "Council Member"
+    }
+  ]
+}
