@@ -652,3 +652,124 @@ def test_a_commenter_is_not_a_packet_name_with_another_first_sound() -> None:
     )
     people = People(persons=(ooton,), text="jenn ooton")
     assert fixes("Okay. Um next person, John Bolton.", people) == []
+
+
+# Lafayette, Nov 2 and Nov 17, 2026: the captions wrote "Councelor Johnson" for Councilor
+# Jensen, the minutes list every councilor and none is a Johnson, and Roy Johnson, a member of
+# the IDEA board, spoke in public comment.
+LAFAYETTE_COUNCIL = roster_from_dict(
+    {
+        "city": "Lafayette",
+        "body": "City Council",
+        "state": "CO",
+        "members": [
+            {"name": "Saul Tapia Vega", "first": "Saul", "last": "Tapia Vega", "role": "Mayor"},
+            {"name": "Annmarie Jensen", "first": "Annmarie", "last": "Jensen", "role": "Councilor"},
+            {
+                "name": "Crystal Gallegos",
+                "first": "Crystal",
+                "last": "Gallegos",
+                "role": "Councilor",
+            },
+        ],
+    }
+)
+IDEA_BOARD = roster_from_dict(
+    {
+        "city": "Lafayette",
+        "body": "IDEA Board",
+        "state": "CO",
+        "members": [{"name": "Roy Johnson", "first": "Roy", "last": "Johnson", "role": "Member"}],
+    }
+)
+MINUTES = "Public Input\n3. Roy Johnson spoke in support of naming the pocket park.\n"
+LAFAYETTE_NOV = load_people(
+    [(LAFAYETTE_COUNCIL, "roster.json")],
+    {"m3": DocPage("m3", "minutes", "https://example.test/minutes", 3, MINUTES)},
+    "documents.json",
+    [(IDEA_BOARD, "rosters/idea-board.json")],
+)
+
+
+def test_a_misheard_councilor_under_the_title_is_the_councilor_not_a_commenter() -> None:
+    from civiccast_brief.article.names import apply_fixes
+
+    pairs = fixes("Thank you, Mayor. Councelor Johnson.", LAFAYETTE_NOV)
+    assert pairs == [("Councelor Johnson", "Councelor Annmarie Jensen")]
+    # The fix is tied to the title: the commenter's own name stays as printed.
+    assert fixes("Next we'll hear from Roy Johnson.", LAFAYETTE_NOV) == []
+    assert apply_fixes("I'm still Roy Johnson, Sweetwater Circle.", pairs) == (
+        "I'm still Roy Johnson, Sweetwater Circle."
+    )
+
+
+def test_a_councilor_title_is_never_the_mayor() -> None:
+    # "Councilor Vegas" was called on during council feedback; the mayor is addressed as mayor.
+    assert fixes("Councilor Vegas.", LAFAYETTE_NOV) == []
+
+
+def test_a_roster_seat_beats_an_earlier_holder_in_the_packet() -> None:
+    from civiccast_brief.article.names import seat_fixes
+
+    # Louisville, Nov 2, 2026: a committee's history says "2024 - Mayor Pro Tem Dickinson";
+    # the roster says Barbara Hamlington holds the seat now.
+    roster = roster_from_dict(
+        {
+            "city": "Louisville",
+            "body": "City Council",
+            "state": "CO",
+            "members": [
+                {
+                    "name": "Caleb Dickinson",
+                    "first": "Caleb",
+                    "last": "Dickinson",
+                    "role": "Council Member, Ward I",
+                },
+                {
+                    "name": "Barbara Hamlington",
+                    "first": "Barbara",
+                    "last": "Hamlington",
+                    "role": "Mayor Pro Tem, Ward III",
+                },
+            ],
+        }
+    )
+    history = (
+        "Previous Committee Members:\n2024 - Mayor Pro Tem Dickinson and Council member Fahey\n"
+    )
+    people = load_people(
+        [(roster, "roster.json")],
+        {"p9": DocPage("p9", "packet", "https://example.test/packet", 9, history)},
+        "documents.json",
+    )
+    pairs = dict(seat_fixes("Thank you, Mayor Pro Tem Hamlington. The pro tem seconded.", people))
+    assert pairs["Mayor Pro Tem Hamlington"] == "Mayor Pro Tem Barbara Hamlington"
+    assert "Dickinson" not in " ".join(pairs.values())
+
+
+def test_another_bodys_member_the_documents_name_is_corrected() -> None:
+    # Lyons, Nov 16, 2026: the agenda prints "Neal Evers to Planning & Community Development
+    # Commission"; the captions wrote "Neil Evers".
+    commission = roster_from_dict(
+        {
+            "city": "Lyons",
+            "body": "Planning & Community Development Commission",
+            "state": "CO",
+            "members": [
+                {"name": "Neal Evers", "first": "Neal", "last": "Evers", "role": "Vice Chair"}
+            ],
+        }
+    )
+    agenda = "Mayoral Appointments\nNeal Evers to Planning & Community Development Commission\n"
+    people = load_people(
+        [],
+        {"a2": DocPage("a2", "agenda", "https://example.test/agenda", 2, agenda)},
+        "documents.json",
+        [(commission, "rosters/planning-community-development-commission.json")],
+    )
+    assert fixes("next on this agenda is Neil Evers who is a", people) == [
+        ("Neil Evers", "Neal Evers")
+    ]
+    # Without the documents printing the name, another body's member stays exact-only.
+    alone = load_people([], {}, "documents.json", [(commission, "rosters/pcdc.json")])
+    assert fixes("next on this agenda is Neil Evers who is a", alone) == []

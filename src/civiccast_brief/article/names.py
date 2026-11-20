@@ -31,6 +31,10 @@ ROLE_WORDS = (
     "Council",
     "Member",
     "Councilmember",
+    # Lafayette's title, and the captions' spellings of it ("Councelor Johnson").
+    "Councilor",
+    "Councillor",
+    "Councelor",
     "President",
     "Vice",
     "Trustee",
@@ -322,6 +326,9 @@ class Person:
     #: is not the youth board's Jordan Walker; only the meeting's own body and documents are
     #: close enough to correct a misheard spelling.
     exact_only: bool = False
+    #: A member of another body's roster, even when this meeting's documents print the name
+    #: (then misspellings are corrected, but a seat title still says it is not them).
+    other_body: bool = False
 
 
 @dataclass(frozen=True)
@@ -341,7 +348,16 @@ class People:
         if not wanted:
             return None
         best: tuple[float, Person] | None = None
+        printed_role = _role_key(role)
         for person in self.persons:
+            # A title names the seat: "Councilor Johnson" is a councilor, not another board's
+            # member who happens to be named Johnson.
+            if person.other_body and printed_role and _role_key(person.role) not in printed_role:
+                continue
+            # The mayor is addressed as mayor: "Councilor Vegas" is a councilor, not Mayor
+            # Tapia Vega.
+            if _member_title(printed_role) and _role_key(person.role) == "mayor":
+                continue
             score = _score(wanted, person, has_role=bool(role))
             if score and role and _role_key(role) == _role_key(person.role):
                 score += 0.001  # break a tie between two similar names
@@ -503,9 +519,36 @@ def _initial(word: str) -> str:
 
 
 def _role_key(role: str) -> str:
-    key = " ".join(_normal(role).replace("-", " ").split())
+    # A roster adds the ward after a comma ("Mayor Pro Tem, Ward III"); the seat is before it.
+    key = " ".join(_normal(role.split(",")[0]).replace("-", " ").split())
     # The captions write the seat three ways ("pro tem", "protem", "pro-tem").
-    return key.replace("protem", "pro tem")
+    key = key.replace("protem", "pro tem")
+    # And the councilor's title as the captions spell it.
+    return re.sub(r"\bcounc(?:e|il)l?or\b", "councilor", key)
+
+
+_MEMBER_TITLE_RE = re.compile(r"\b(?:councilor|council member|councilmember|trustee)$")
+
+
+def _member_title(role_key: str) -> bool:
+    """Whether the printed title, nearest the name, is a member's: councilor or trustee."""
+    return bool(_MEMBER_TITLE_RE.search(role_key))
+
+
+def _holds_seat(printed_role: str, person: Person) -> bool:
+    """Whether the title printed before a name is the seat this record person holds."""
+    seat = _role_key(person.role)
+    printed = _role_key(printed_role)
+    return bool(seat and printed) and not person.other_body and printed.endswith(seat)
+
+
+def _misheard_seat_holder(span: Span, person: Person) -> bool:
+    """A misspelling of the record name under the seat's own title ("Councelor Johnson").
+
+    A name already spelled as the record prints it needs no fix, so this is only a misspelling.
+    """
+    record = {*_tokens(person.first), *_tokens(person.last), *_tokens(person.name)}
+    return _holds_seat(span.role, person) and not set(_tokens(span.name)) & record
 
 
 def _role_phrase(role: str, context: str, at_start: bool) -> str:
@@ -878,7 +921,17 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
         if not span.role and people.not_a_person(span.name):
             continue
         person = people.match(span.name, span.role)
-        if person is None or people.verbatim(span.name):
+        # A word the record prints is left alone, unless the printed title names the seat the
+        # record person holds: the captions' "Councelor Johnson" is Councilor Jensen even though
+        # a commenter named Johnson is in the packet.
+        if person is None:
+            continue
+        if people.verbatim(span.name):
+            if _misheard_seat_holder(span, person):
+                # The pair keeps the title, so the fix applies only under it: the same text's
+                # "Next we'll hear from Roy Johnson" is the commenter and stays as printed.
+                printed = text[span.lead_start : span.end]
+                out.append((printed, text[span.lead_start : span.start] + person.name))
             continue
         if _tokens(span.name) == _tokens(person.name) or _sentence_word(text, span, person):
             continue
@@ -1046,6 +1099,10 @@ def _seat_holder(people: People, role: str) -> Person | None:
     full name ("Jenn Kaaoush"). The full name is the one to print.
     """
     holders = [p for p in people.persons if _role_key(p.role) == _role_key(role)]
+    # The roster says who holds the seat now. A packet can print an earlier holder ("2024 -
+    # Mayor Pro Tem Dickinson" in a committee's history), so the roster wins when it names one.
+    current = [p for p in holders if not p.other_body and p.source.endswith(".json")]
+    holders = current or holders
     if not holders:
         return None
     return max(holders, key=lambda p: (len(_tokens(p.name)), p.name))
@@ -1391,9 +1448,14 @@ def load_people(
     if pages:
         for person in people_from_documents(pages, documents_path):
             keep(person)
+    printed = f" {_normal(' '.join(str(page.text) for page in (pages or {}).values()))} "
     for roster, path in other_rosters or []:
         for person in people_from_roster(roster, path):
-            keep(replace(person, exact_only=True))
+            # The meeting's own documents print this member's full name ("Mayoral Appointments:
+            # Neal Evers to Planning & Community Development"), so they are part of this meeting
+            # and a misheard spelling of them is corrected like any other.
+            here = f" {_normal(person.name)} " in printed
+            keep(replace(person, other_body=True, exact_only=not here))
     text = " ".join(
         [
             *(_normal(p.name) for p in persons),
