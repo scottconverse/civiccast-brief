@@ -1,6 +1,7 @@
 """Gemini TTS: request shape, WAV writing, splitting, quota fallback and errors. No network."""
 
 import base64
+import io
 import json
 import wave
 from pathlib import Path
@@ -11,7 +12,6 @@ import pytest
 from civiccast_brief.audio.engines import (
     DEFAULT_ENGINE,
     GEMINI_API_KEY_ENV,
-    GEMINI_INSTRUCTION,
     AudioConfig,
     GeminiAudio,
     GeminiConfig,
@@ -39,18 +39,33 @@ def _pcm(seconds: float, rate: int = RATE) -> bytes:
     return b"\x00\x00" * round(seconds * rate)
 
 
-def _reply(seconds: float | None = 3.0, rate: int = RATE, finish: str = "STOP") -> dict:
-    parts = []
-    if seconds is not None:
-        parts.append(
-            {
-                "inlineData": {
-                    "mimeType": f"audio/L16;codec=pcm;rate={rate}",
-                    "data": base64.b64encode(_pcm(seconds, rate)).decode("ascii"),
-                }
-            }
-        )
-    return {"candidates": [{"content": {"parts": parts}, "finishReason": finish}]}
+def _wav(seconds: float, rate: int = RATE) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(_pcm(seconds, rate))
+    return buffer.getvalue()
+
+
+def _audio_item(data: bytes, mime_type: str) -> dict:
+    return {
+        "type": "audio",
+        "mime_type": mime_type,
+        "data": base64.b64encode(data).decode("ascii"),
+    }
+
+
+def _reply(seconds: float | None = 3.0, rate: int = RATE, status: str = "completed") -> dict:
+    content = [] if seconds is None else [_audio_item(_wav(seconds, rate), "audio/wav")]
+    return {
+        "id": "v1_test",
+        "status": status,
+        "steps": [{"type": "model_output", "content": content}],
+        "object": "interaction",
+        "model": "gemini-3.8-flash-tts",
+    }
 
 
 class Transport:
@@ -86,54 +101,61 @@ def _engine(
 # --- request shape ---------------------------------------------------------------------------
 
 
-def test_request_has_both_speakers_their_voices_the_lines_and_the_key_in_a_header(
+def test_request_uses_the_interactions_url_with_the_key_in_a_header(tmp_path: Path) -> None:
+    transport = Transport([(200, _reply())])
+    _engine(transport).render(list(LINES), tmp_path / "voice.wav")
+
+    (request,) = transport.requests
+    assert str(request.url) == "https://generativelanguage.googleapis.com/v1beta/interactions"
+    assert KEY not in str(request.url)
+    assert request.headers["x-goog-api-key"] == KEY
+    assert transport.bodies()[0]["model"] == "gemini-3.8-flash-tts"
+
+
+def test_request_has_one_content_item_per_line_with_its_speaker_and_the_voices(
     tmp_path: Path,
 ) -> None:
     transport = Transport([(200, _reply())])
     _engine(transport).render(list(LINES), tmp_path / "voice.wav")
 
-    (request,) = transport.requests
-    assert "gemini-3.8-flash-tts:generateContent" in str(request.url)
-    assert KEY not in str(request.url)
-    assert request.headers["x-goog-api-key"] == KEY
-
     body = transport.bodies()[0]
-    config = body["generationConfig"]
-    assert config["responseModalities"] == ["AUDIO"]
-    speakers = config["speechConfig"]["multiSpeakerVoiceConfig"]["speakerVoiceConfigs"]
-    assert [s["speaker"] for s in speakers] == ["Speaker 1", "Speaker 2"]
-    assert [s["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] for s in speakers] == [
-        "Bodi",
-        "Sola",
-    ]
+    assert body["response_format"] == {"type": "audio"}
 
-    text = body["contents"][0]["parts"][0]["text"]
-    rows = text.splitlines()
-    assert rows[0] == GEMINI_INSTRUCTION
-    assert rows[1:] == [
-        "Speaker 1: This is CivicCast Brief, for the November twentieth session.",
-        "Speaker 2: This episode is AI-generated from the public meeting video.",
-        "Speaker 1: Council approved the minutes.",
+    speakers = body["generation_config"]["speech_config"]["speakers"]
+    assert [s["speaker"] for s in speakers] == ["Speaker 1", "Speaker 2"]
+    assert [s["voice"] for s in speakers] == ["Bodi", "Sola"]
+
+    (user_input,) = body["input"]
+    assert user_input["type"] == "user_input"
+    items = user_input["content"]
+    assert [item["type"] for item in items] == ["text", "text", "text"]
+    assert [item["text"] for item in items] == [line.text for line in LINES]
+    assert [[annotation["speaker"] for annotation in item["annotations"]] for item in items] == [
+        ["Speaker 1"],
+        ["Speaker 2"],
+        ["Speaker 1"],
     ]
+    assert all(
+        annotation["type"] == "speech_metadata"
+        for item in items
+        for annotation in item["annotations"]
+    )
+    # No instruction sentence: it would be spoken.
+    assert all("Read this two-host" not in item["text"] for item in items)
 
 
 def test_voice_names_in_the_request_come_from_the_config(tmp_path: Path) -> None:
     transport = Transport([(200, _reply())])
     cfg = GeminiConfig(voice_s1="Fola", voice_s2="Rami")
     _engine(transport, cfg).render(list(LINES), tmp_path / "voice.wav")
-    speakers = transport.bodies()[0]["generationConfig"]["speechConfig"]["multiSpeakerVoiceConfig"][
-        "speakerVoiceConfigs"
-    ]
-    assert [s["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] for s in speakers] == [
-        "Fola",
-        "Rami",
-    ]
+    speakers = transport.bodies()[0]["generation_config"]["speech_config"]["speakers"]
+    assert [s["voice"] for s in speakers] == ["Fola", "Rami"]
 
 
 # --- the WAV and its timings -----------------------------------------------------------------
 
 
-def test_pcm_response_becomes_a_24k_mono_wav_with_one_timing_per_line(tmp_path: Path) -> None:
+def test_wav_response_becomes_a_24k_mono_wav_with_one_timing_per_line(tmp_path: Path) -> None:
     transport = Transport([(200, _reply(seconds=3.0))])
     out = tmp_path / "out" / "voice.wav"
     result = _engine(transport).render(list(LINES), out)
@@ -155,15 +177,58 @@ def test_pcm_response_becomes_a_24k_mono_wav_with_one_timing_per_line(tmp_path: 
     assert result.duration == pytest.approx(3.0, abs=0.001)
 
 
+def test_l16_raw_pcm_response_still_works(tmp_path: Path) -> None:
+    payload = {
+        "status": "completed",
+        "steps": [
+            {
+                "type": "model_output",
+                "content": [_audio_item(_pcm(2.0, 48000), "audio/l16;codec=pcm;rate=48000")],
+            }
+        ],
+    }
+    transport = Transport([(200, payload)])
+    out = tmp_path / "voice.wav"
+    result = _engine(transport).render(list(LINES), out)
+
+    with wave.open(str(out), "rb") as wav:
+        assert wav.getframerate() == 48000
+        assert wav.getnframes() == 48000 * 2
+    assert result.duration == pytest.approx(2.0, abs=0.001)
+
+
+def test_the_last_model_output_audio_item_is_used() -> None:
+    payload = {
+        "status": "completed",
+        "steps": [
+            {
+                "type": "model_output",
+                "content": [_audio_item(_wav(1.0), "audio/wav")],
+            },
+            {
+                "type": "model_output",
+                "content": [{"type": "text", "text": "ignored"}],
+            },
+            {
+                "type": "model_output",
+                "content": [_audio_item(_wav(2.0), "audio/wav")],
+            },
+        ],
+    }
+    clip = parse_gemini_audio(payload, 200)
+    assert clip.sample_rate == RATE
+    assert len(clip.pcm) == RATE * 2 * 2
+
+
 def test_sample_rate_is_read_from_the_mime_type() -> None:
     assert gemini_sample_rate("audio/L16;codec=pcm;rate=24000") == 24000
     assert gemini_sample_rate("audio/L16;codec=pcm;rate=48000") == 48000
     assert gemini_sample_rate(None) == RATE
 
 
-def test_parse_gemini_audio_reports_a_missing_audio_part_with_status_and_finish_reason() -> None:
-    with pytest.raises(EngineError, match=r"HTTP 200, finishReason 'MAX_TOKENS'"):
-        parse_gemini_audio(_reply(seconds=None, finish="MAX_TOKENS"), 200)
+def test_parse_gemini_audio_reports_missing_audio_with_status_and_status_field() -> None:
+    with pytest.raises(EngineError, match=r"HTTP 200, status 'incomplete'"):
+        parse_gemini_audio(_reply(seconds=None, status="incomplete"), 200)
 
 
 # --- splitting -------------------------------------------------------------------------------
@@ -238,7 +303,7 @@ def test_a_per_minute_429_waits_out_retry_info_and_keeps_the_same_model(tmp_path
 
     assert sleeps == [pytest.approx(21.0)]
     assert len(transport.requests) == 2
-    assert all("gemini-3.8-flash-tts:generateContent" in str(r.url) for r in transport.requests)
+    assert [b["model"] for b in transport.bodies()] == ["gemini-3.8-flash-tts"] * 2
     assert result.engine == "gemini:gemini-3.8-flash-tts"
 
 
@@ -255,7 +320,7 @@ def test_a_429_with_no_details_waits_the_default_twice_then_succeeds(tmp_path: P
 
     assert sleeps == [pytest.approx(61.0), pytest.approx(61.0)]
     assert len(transport.requests) == 3
-    assert all("gemini-3.8-flash-tts:generateContent" in str(r.url) for r in transport.requests)
+    assert [b["model"] for b in transport.bodies()] == ["gemini-3.8-flash-tts"] * 3
     assert result.engine == "gemini:gemini-3.8-flash-tts"
 
 
@@ -266,7 +331,7 @@ def test_a_per_day_quota_does_not_wait_and_uses_the_fallback(tmp_path: Path) -> 
 
     assert sleeps == []
     assert len(transport.requests) == 2
-    assert "gemini-3.8-flash-lite-tts:generateContent" in str(transport.requests[1].url)
+    assert transport.bodies()[1]["model"] == "gemini-3.8-flash-lite-tts"
     assert result.engine == "gemini:gemini-3.8-flash-tts+gemini-3.8-flash-lite-tts"
 
 
@@ -276,7 +341,7 @@ def test_a_retry_delay_over_the_max_does_not_wait_and_uses_the_fallback(tmp_path
     result = _engine(transport, sleeps=sleeps).render(list(LINES), tmp_path / "voice.wav")
 
     assert sleeps == []
-    assert "gemini-3.8-flash-lite-tts:generateContent" in str(transport.requests[1].url)
+    assert transport.bodies()[1]["model"] == "gemini-3.8-flash-lite-tts"
     assert result.engine == "gemini:gemini-3.8-flash-tts+gemini-3.8-flash-lite-tts"
 
 
@@ -287,8 +352,12 @@ def test_429_on_the_main_model_retries_then_uses_the_fallback(tmp_path: Path) ->
 
     assert sleeps == [pytest.approx(61.0)] * 2
     assert len(transport.requests) == 4
-    assert "gemini-3.8-flash-tts:generateContent" in str(transport.requests[2].url)
-    assert "gemini-3.8-flash-lite-tts:generateContent" in str(transport.requests[3].url)
+    assert [b["model"] for b in transport.bodies()] == [
+        "gemini-3.8-flash-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.8-flash-lite-tts",
+    ]
     assert result.engine == "gemini:gemini-3.8-flash-tts+gemini-3.8-flash-lite-tts"
 
 
@@ -324,6 +393,12 @@ def test_a_400_carries_the_api_error_message_and_never_the_key(tmp_path: Path) -
     assert "HTTP 400" in str(caught.value)
     assert "voice 'Bodi' is not supported" in str(caught.value)
     assert KEY not in str(caught.value)
+
+
+def test_a_400_with_a_top_level_message_is_reported(tmp_path: Path) -> None:
+    transport = Transport([(400, {"message": "bad request"})])
+    with pytest.raises(EngineError, match="HTTP 400: bad request"):
+        _engine(transport).render(list(LINES), tmp_path / "voice.wav")
 
 
 # --- the key ---------------------------------------------------------------------------------

@@ -18,15 +18,16 @@ Timing, per engine:
   two lines, then the timeline is stretched to the file length. Chunk edges use the renderer's
   measured chunk lengths and carry the same quiet-tail offset as ``measured``. A boundary inside a
   chunk is an estimate and was not checked against the audio.
-- ``approximate`` (GeminiTTS): the API reports only the audio of a whole request. A request carries
-  whole script lines up to ``GeminiConfig.max_words_per_request`` words, and the request audio
-  lengths are exact. Inside a request, the boundary between two lines is estimated from the word
-  counts of those lines, then the whole timeline is stretched to the final file length. Requests are
-  joined in order with ``GeminiConfig.gap_s`` of silence.
+- ``approximate`` (GeminiTTS): the API reports only the audio of a whole interaction. A request
+  carries whole script lines up to ``GeminiConfig.max_words_per_request`` words, and the request
+  audio lengths are exact. Inside a request, the boundary between two lines is estimated from the
+  word counts of those lines, then the whole timeline is stretched to the final file length.
+  Requests are joined in order with ``GeminiConfig.gap_s`` of silence.
 
 The remote engines drive the bake-off renderers on the GPU box over ssh and scp. GeminiTTS is the
-one hosted engine: it calls Google's Gemini TTS over HTTPS; nothing runs on the box. Remote commands
-are PowerShell (the box's default shell) sent with -EncodedCommand, so nothing has to survive
+one hosted engine: it calls Google's Gemini TTS Interactions API over HTTPS; nothing runs on the
+box. Remote commands are PowerShell (the box's default shell) sent with -EncodedCommand, so
+nothing has to survive
 cmd.exe quoting. Every engine runs as plain Windows Python on the box; none needs Linux or WSL.
 The outer PowerShell reports exit code 1 whenever the inner command failed, so
 the exit code is not trusted. Each remote command prints CIVICCAST_RC=<n>, and that line decides.
@@ -36,6 +37,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import io
 import json
 import os
 import re
@@ -69,13 +71,9 @@ DEFAULT_ENGINE = "dia2"
 _CHATTER_LINE = re.compile(r"^line\s+(\d+)\s+(S[12])\s+audio=\s*([0-9.]+)s", re.MULTILINE)
 _RC_LINE = re.compile(r"^CIVICCAST_RC=(-?\d+)\s*$", re.MULTILINE)
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_API_KEY_TARGET = "CivicCastBrief/gemini-api"
-GEMINI_INSTRUCTION = (
-    "Read this two-host local news podcast transcript exactly as written, in a natural, "
-    "conversational tone:"
-)
 GEMINI_DEFAULT_RATE = 24000
 _GEMINI_RATE = re.compile(r"rate=(\d+)")
 _GEMINI_RETRY_DELAY = re.compile(r"^([0-9]+(?:\.[0-9]+)?)s$")
@@ -603,32 +601,40 @@ def gemini_requests(lines: list[Line], max_words: int) -> list[list[Line]]:
     return groups
 
 
-def gemini_transcript(lines: list[Line]) -> str:
-    """The one-sentence instruction, then one `Speaker 1: text` line per script line."""
-    rows = [f"{_GEMINI_SPEAKER_NAMES[line.speaker]}: {line.text}" for line in lines]
-    return "\n".join([GEMINI_INSTRUCTION, *rows])
+def gemini_request_body(cfg: GeminiConfig, lines: list[Line], model: str) -> dict[str, object]:
+    """The Interactions body: one text item per line with its speaker, plus the two voices.
 
-
-def gemini_request_body(cfg: GeminiConfig, lines: list[Line]) -> dict[str, object]:
-    """The generateContent body: two speakers, their voices, and the transcript as one part."""
+    Only the script lines are sent. There is no instruction sentence, because the model would
+    speak it.
+    """
     return {
-        "contents": [{"parts": [{"text": gemini_transcript(lines)}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "multiSpeakerVoiceConfig": {
-                    "speakerVoiceConfigs": [
-                        {
-                            "speaker": "Speaker 1",
-                            "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice_s1}},
-                        },
-                        {
-                            "speaker": "Speaker 2",
-                            "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice_s2}},
-                        },
-                    ]
-                }
-            },
+        "model": model,
+        "input": [
+            {
+                "type": "user_input",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": line.text,
+                        "annotations": [
+                            {
+                                "type": "speech_metadata",
+                                "speaker": _GEMINI_SPEAKER_NAMES[line.speaker],
+                            }
+                        ],
+                    }
+                    for line in lines
+                ],
+            }
+        ],
+        "response_format": {"type": "audio"},
+        "generation_config": {
+            "speech_config": {
+                "speakers": [
+                    {"speaker": "Speaker 1", "voice": cfg.voice_s1},
+                    {"speaker": "Speaker 2", "voice": cfg.voice_s2},
+                ]
+            }
         },
     }
 
@@ -651,13 +657,16 @@ def gemini_sample_rate(mime_type: object) -> int:
 
 
 def gemini_error_message(data: object) -> str:
-    """The API's `error.message` field, or an empty string."""
+    """The API's `error.message`, then a top-level `message`, then an empty string."""
     if isinstance(data, dict):
         error = data.get("error")
         if isinstance(error, dict):
             message = error.get("message")
             if isinstance(message, str):
                 return message
+        message = data.get("message")
+        if isinstance(message, str):
+            return message
     return ""
 
 
@@ -696,35 +705,60 @@ def gemini_per_day_quota(data: object) -> bool:
     return False
 
 
+def _gemini_audio_item(data: object) -> dict[str, object] | None:
+    """The last audio item of the last model_output step, or None."""
+    steps = data.get("steps") if isinstance(data, dict) else None
+    found: dict[str, object] | None = None
+    for step in steps if isinstance(steps, list) else []:
+        if not isinstance(step, dict) or step.get("type") != "model_output":
+            continue
+        content = step.get("content")
+        for item in content if isinstance(content, list) else []:
+            if not isinstance(item, dict) or item.get("type") != "audio":
+                continue
+            encoded = item.get("data")
+            if isinstance(encoded, str) and encoded:
+                found = item
+    return found
+
+
+def _gemini_wav_audio(audio: bytes, status: int) -> GeminiAudio:
+    """PCM and rate from a complete WAV file. Only mono 16-bit is accepted."""
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as wav:
+            channels = wav.getnchannels()
+            width = wav.getsampwidth()
+            rate = wav.getframerate()
+            pcm = wav.readframes(wav.getnframes())
+    except (wave.Error, EOFError) as exc:
+        raise EngineError(f"Gemini WAV audio could not be read (HTTP {status})") from exc
+    if channels != 1 or width != 2:
+        raise EngineError(
+            f"Gemini WAV audio is {channels} channel(s) at {width * 8} bits (HTTP {status}); "
+            "only mono 16-bit is supported"
+        )
+    return GeminiAudio(pcm, rate)
+
+
 def parse_gemini_audio(data: object, status: int) -> GeminiAudio:
-    """The first audio part of a response. No audio part is an EngineError with the finishReason."""
-    candidates = data.get("candidates") if isinstance(data, dict) else None
-    candidate = candidates[0] if isinstance(candidates, list) and candidates else None
-    if not isinstance(candidate, dict):
-        candidate = {}
-    finish = candidate.get("finishReason")
-    content = candidate.get("content")
-    parts = content.get("parts") if isinstance(content, dict) else None
-    for part in parts if isinstance(parts, list) else []:
-        if not isinstance(part, dict):
-            continue
-        inline = part.get("inlineData")
-        if not isinstance(inline, dict):
-            continue
-        encoded = inline.get("data")
-        if not isinstance(encoded, str) or not encoded:
-            continue
-        rate = gemini_sample_rate(inline.get("mimeType"))
-        try:
-            pcm = base64.b64decode(encoded, validate=True)
-        except ValueError as exc:
-            raise EngineError(f"Gemini audio is not valid base64 (HTTP {status})") from exc
-        if not pcm:
-            continue
-        if len(pcm) % 2:
-            raise EngineError(f"Gemini audio is not whole 16-bit samples (HTTP {status})")
-        return GeminiAudio(pcm, rate)
-    raise EngineError(f"Gemini returned no audio (HTTP {status}, finishReason {finish!r})")
+    """The last audio item of an interaction, as PCM. No audio item is an EngineError."""
+    item = _gemini_audio_item(data)
+    if item is None:
+        state = data.get("status") if isinstance(data, dict) else None
+        raise EngineError(f"Gemini returned no audio (HTTP {status}, status {state!r})")
+    encoded = typing.cast(str, item["data"])
+    mime_type = item.get("mime_type")
+    try:
+        audio = base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise EngineError(f"Gemini audio is not valid base64 (HTTP {status})") from exc
+    if audio.startswith(b"RIFF") or (
+        isinstance(mime_type, str) and mime_type.startswith("audio/wav")
+    ):
+        return _gemini_wav_audio(audio, status)
+    if len(audio) % 2:
+        raise EngineError(f"Gemini audio is not whole 16-bit samples (HTTP {status})")
+    return GeminiAudio(audio, gemini_sample_rate(mime_type))
 
 
 def write_pcm_wav(pcm: bytes, sample_rate: int, path: Path) -> float:
@@ -814,7 +848,7 @@ class GeminiTTS:
     def _request(
         self, client: httpx.Client, group: list[Line], key: str
     ) -> tuple[GeminiAudio, list[str]]:
-        body = gemini_request_body(self.cfg, group)
+        body = gemini_request_body(self.cfg, group, self.cfg.model)
         response = self._post_retrying(client, self.cfg.model, body, key)
         models = [self.cfg.model]
         if response.status_code == 429:
@@ -823,7 +857,8 @@ class GeminiTTS:
                     f"Gemini model {self.cfg.model} is out of quota (HTTP 429) "
                     "and no fallback model is set"
                 )
-            response = self._post_retrying(client, self.cfg.fallback_model, body, key)
+            fallback_body = gemini_request_body(self.cfg, group, self.cfg.fallback_model)
+            response = self._post_retrying(client, self.cfg.fallback_model, fallback_body, key)
             models.append(self.cfg.fallback_model)
             if response.status_code == 429:
                 raise EngineError(
@@ -865,9 +900,8 @@ class GeminiTTS:
     def _post(
         self, client: httpx.Client, model: str, body: dict[str, object], key: str
     ) -> httpx.Response:
-        url = GEMINI_API_URL.format(model=model)
         try:
-            return client.post(url, json=body, headers={"x-goog-api-key": key})
+            return client.post(GEMINI_API_URL, json=body, headers={"x-goog-api-key": key})
         except httpx.HTTPError as exc:
             raise EngineError(
                 f"cannot reach Gemini for model {model} ({type(exc).__name__})"
