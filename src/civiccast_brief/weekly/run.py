@@ -551,6 +551,7 @@ def _publish_stories(
         wanted.add(name)
         out = folder / name
         if out.is_file() and built_from.get(meeting_id) == meta.get("content_hash"):
+            log += _refresh_names(steps, out, runs.get(meeting_id), meeting_id)
             continue
         entry = runs.get(meeting_id)
         if entry is None:
@@ -580,6 +581,22 @@ def _publish_stories(
             old.unlink()
             log.append((f"{old.stem}: story is no longer published; removed from the site", False))
     return log
+
+
+def _refresh_names(
+    steps: Steps, site_file: Path, entry: dict[str, Any] | None, meeting_id: str
+) -> list[tuple[str, bool]]:
+    """Bring a built file's name fixes up to the current code and records. The file is built
+    again only when its desk item changes, so without this a better name match never reached
+    a meeting already on the site."""
+    if entry is None:
+        return []
+    argv = ["names", "--file", str(site_file), "--meeting", str(entry["folder"])]
+    try:
+        _call(steps.episode, argv, "episode names")
+    except StepFailed as exc:
+        return [(f"{meeting_id}: {exc}", True)]
+    return []
 
 
 def _drop_twice_published(folder: Path, wanted: set[str]) -> list[tuple[str, bool]]:
@@ -683,6 +700,9 @@ def publish(
         if meta.get("kind") != "episode":
             continue
         if meeting_id in built and built_from.get(meeting_id) == meta.get("content_hash"):
+            built_file = site.episodes / f"{built[meeting_id]}.json"
+            if built_file.is_file():
+                log += _refresh_names(steps, built_file, runs.get(meeting_id), meeting_id)
             continue
         entry = runs.get(meeting_id)
         if entry is None:

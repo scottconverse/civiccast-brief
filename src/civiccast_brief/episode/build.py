@@ -9,7 +9,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.article.names import People, fixes, load_people, seat_fixes
+from civiccast_brief.article.names import (
+    People,
+    fixes,
+    load_people,
+    ordinary_words,
+    seat_name_fixes,
+)
 from civiccast_brief.article.title import check_title, load_title, render_issues
 from civiccast_brief.article.writer import (
     ArticleFormatError,
@@ -270,16 +276,46 @@ def _name_fixes(
     pairs: list[tuple[str, str]] = []
     for claim in recap.claims:
         for text in (claim.text, claim.quote):
-            pairs += seat_fixes(text, people)
+            pairs += seat_name_fixes(text, people)
             pairs += fixes(text, people)
     for text in transcript_texts:
-        pairs += seat_fixes(text, people)
+        pairs += seat_name_fixes(text, people)
         pairs += fixes(text, people)
+    # The site replaces a printed name wherever it appears, so a one-word name that this
+    # meeting also says as an ordinary word ("Well" for Trustee Lowell, beside "well") is left
+    # as printed.
+    texts = [*(t for c in recap.claims for t in (c.text, c.quote)), *transcript_texts]
+    ordinary = ordinary_words(texts)
+    # A record name prints without its packet note: "Meosha Babbs (SVVSD)" is Meosha Babbs.
+    pairs = [(wrong, re.sub(r"\s*\([^)]*\)", "", right).strip()) for wrong, right in pairs]
+    pairs = [(wrong, right) for wrong, right in pairs if wrong != right and right]
+    # One printed form has one record name; a form that matches two people is left as printed.
+    targets: dict[str, set[str]] = {}
+    for wrong, right in pairs:
+        targets.setdefault(wrong, set()).add(right)
+    # A lone word with no title is changed only when the meeting also names that person with
+    # a title or in full: "Leaf" after "Commissioner Leaf" is Leef, but "the Burning" in a
+    # meeting that never names a Browning is not a person.
+    named = {right for wrong, right in pairs if " " in wrong.strip()}
     out: list[dict[str, str]] = []
     seen: set[str] = set()
     for wrong, right in pairs:
-        if wrong == right or wrong in seen:
+        if wrong in seen or len(targets[wrong]) > 1:
             continue
+        words = wrong.split()
+        # Two words with no title, each one the meeting also says as an ordinary word:
+        # "Sharing Housing" beside "sharing" and "housing" is a group, not Karin Hoskin.
+        if (
+            len(words) > 1
+            and words[0].lower() != right.split()[0].lower()
+            and all(word.strip(",.;:?!").lower() in ordinary for word in words)
+        ):
+            continue
+        if len(words) == 1:
+            if wrong.lower() in ordinary:
+                continue
+            if not any(right in full.split() for full in named):
+                continue
         seen.add(wrong)
         out.append({"from": wrong, "to": right})
     return out
@@ -485,3 +521,31 @@ def _speaker(segment: transcript_mod.Segment, names: dict[str, str]) -> str:
         return segment.speaker
     named = names.get(segment.voice or "", UNKNOWN)
     return named if named != UNKNOWN else UNKNOWN
+
+
+def meeting_name_fixes(meeting_dir: Path) -> list[dict[str, str]]:
+    """The name fixes a site file of this meeting gets, from the meeting's records as they are
+    now: the same pairs ``assemble`` and ``assemble_story`` write."""
+    recap, data = _meeting(meeting_dir)
+    roundup = recap.video_id == ROUNDUP_ID
+    segments = [] if roundup else transcript_mod.from_json(data)
+    return _name_fixes(
+        recap,
+        _people_of(meeting_dir, meeting_dir / "documents.json", roundup),
+        [s.text for s in segments],
+    )
+
+
+def refresh_name_fixes(site_file: Path, meeting_dir: Path) -> bool:
+    """Set a built episode or story file's name fixes to what the current code and records give.
+
+    A file is built again only when its desk item changes, so a better name match (or a roster
+    corrected since) would never reach a published meeting. Only ``name_fixes`` is rewritten:
+    the publish time, audio and text stay as approved. Returns whether the file changed."""
+    episode = json.loads(site_file.read_text(encoding="utf-8"))
+    pairs = meeting_name_fixes(meeting_dir)
+    if episode.get("name_fixes") == pairs:
+        return False
+    episode["name_fixes"] = pairs
+    site_file.write_text(json.dumps(episode, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
