@@ -205,3 +205,49 @@ def test_addressing_the_council_is_a_greeting_before_the_name():
     )
     label(segments, pages)
     assert [s.speaker for s in segments[1:]] == ["Susan Bartlett", "Susan Bartlett"]
+
+
+CUMMINGS_PACKET = (
+    "packet",
+    128,
+    "Prepared By: Brandi Cummings, Director\nPresented By: Brandi Cummings, Director",
+)
+
+
+def test_one_stray_line_in_another_turn_does_not_take_the_introduced_name():
+    # Louisville, Nov 17, 2026: a council member's question ended on one caption line the
+    # diarizer gave to the staff member who answered ("for programming?"). It got her name.
+    segments = lines(
+        ("Good evening, council members. Brandi", True, "voice 10"),
+        ("Cummings, director of Cultural Services.", False, "voice 10"),
+        ("Excited to be here tonight with the art", False, "voice 10"),
+        ("So right now it's about 60/40. Do you know", True, "voice 08"),
+        ("how much the city uses", False, "voice 08"),
+        ("for programming?", False, "voice 10"),
+        ("Absolutely. We use about 20% of the", True, "voice 10"),
+        ("remaining 40% for our arts grants.", False, "voice 10"),
+    )
+    _turns, report = label(segments, printed(CUMMINGS_PACKET))
+    assert report["introduced_voices"] == {"voice 10": "Brandi Cummings"}
+    assert [s.speaker for s in segments] == [
+        "Brandi Cummings", "Brandi Cummings", "Brandi Cummings",
+        "unknown", "unknown", "unknown",
+        "Brandi Cummings", "Brandi Cummings",
+    ]  # fmt: skip
+    assert report["stray_voice_lines"] == 1
+
+
+def test_two_lines_in_a_row_in_another_voice_keep_that_voice_name():
+    # A turn the captioner did not split: the answer runs two lines in the presenter's voice.
+    segments = lines(
+        ("Good evening, council members. Brandi", True, "voice 10"),
+        ("Cummings, director of Cultural Services.", False, "voice 10"),
+        ("Is there a fee for the groups", True, "voice 08"),
+        ("that use the center today?", False, "voice 08"),
+        ("in the first year of the pilot?", False, "voice 08"),
+        ("No, there is no fee for the", False, "voice 10"),
+        ("granted hours in the pilot.", False, "voice 10"),
+    )
+    _turns, report = label(segments, printed(CUMMINGS_PACKET))
+    assert [s.speaker for s in segments][-2:] == ["Brandi Cummings", "Brandi Cummings"]
+    assert report["stray_voice_lines"] == 0
