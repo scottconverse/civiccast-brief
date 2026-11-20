@@ -628,7 +628,9 @@ def test_a_place_word_is_not_a_surname_by_sound() -> None:
     )
     people = People(persons=(walton,), text="deputy finance director morgan walton")
     assert fixes("It's where the Oldtown digital sign stood.", people) == []
-    assert fixes("Director Waltin spoke.", people) == [("Waltin", "Morgan Walton")]
+    assert fixes("Director Waltin spoke.", people) == [
+        ("Director Waltin", "Director Morgan Walton")
+    ]
 
 
 def test_a_misheard_holder_after_the_seat_is_replaced_whole() -> None:
@@ -773,3 +775,110 @@ def test_another_bodys_member_the_documents_name_is_corrected() -> None:
     # Without the documents printing the name, another body's member stays exact-only.
     alone = load_people([], {}, "documents.json", [(commission, "rosters/pcdc.json")])
     assert fixes("next on this agenda is Neil Evers who is a", alone) == []
+
+
+# The site applies a meeting's name pairs to the whole page, transcript included, so each pair
+# must be safe wherever its printed form appears.
+TOWN = load_people(
+    [
+        (
+            roster_from_dict(
+                {
+                    "city": "Lyons",
+                    "body": "Board of Trustees",
+                    "state": "CO",
+                    "members": [
+                        {
+                            "name": "Greg Lowell",
+                            "first": "Greg",
+                            "last": "Lowell",
+                            "role": "Trustee",
+                        },
+                        {
+                            "name": "Karin Hoskin",
+                            "first": "Karin",
+                            "last": "Hoskin",
+                            "role": "Trustee",
+                        },
+                        {
+                            "name": "Sam Browning",
+                            "first": "Sam",
+                            "last": "Browning",
+                            "role": "Trustee",
+                        },
+                        {
+                            "name": "Neal Shah",
+                            "first": "Neal",
+                            "last": "Shah",
+                            "role": "Mayor Pro Tem",
+                        },
+                        {
+                            "name": "Meosha Babbs (SVVSD)",
+                            "first": "Meosha",
+                            "last": "Babbs",
+                            "role": "Trustee",
+                        },
+                    ],
+                }
+            ),
+            "cities/lyons/roster.json",
+        )
+    ],
+    {},
+    "documents.json",
+)
+
+
+def test_a_fix_replaces_whole_words_only() -> None:
+    from civiccast_brief.article.names import apply_fixes
+
+    pairs = [("Shaw", "Shah")]
+    assert apply_fixes("Trustee Shaw spoke about Shawnee Road.", pairs) == (
+        "Trustee Shah spoke about Shawnee Road."
+    )
+
+
+def test_two_words_are_a_name_only_when_the_first_sounds_like_the_person() -> None:
+    assert fixes("We hiked to Lake Powell last year.", TOWN) == []
+    assert ("Greg Lowel", "Greg Lowell") in fixes("We thank Greg Lowel for it.", TOWN)
+
+
+def test_a_lone_word_under_a_title_keeps_the_title() -> None:
+    assert ("Trustee Lowel", "Trustee Greg Lowell") in fixes("Trustee Lowel, go ahead.", TOWN)
+
+
+def _site_pairs(*lines: str) -> list[tuple[str, str]]:
+    from civiccast_brief.episode.build import _name_fixes
+
+    recap = Recap("Lyons", "Board of Trustees", "2026-11-16", "abc", ())
+    return [(p["from"], p["to"]) for p in _name_fixes(recap, TOWN, list(lines))]
+
+
+def test_a_lone_word_the_meeting_also_says_in_lower_case_is_left_as_printed() -> None:
+    pairs = _site_pairs("Trustee Lowel moved it.", "Lowel seconded.", "lowel is a word here.")
+    assert ("Trustee Lowel", "Trustee Greg Lowell") in pairs
+    assert all(wrong != "Lowel" for wrong, _ in pairs)
+
+
+def test_a_lone_word_with_no_title_needs_the_person_named_in_the_meeting() -> None:
+    # "the Burning" is not Trustee Browning when nobody names Browning.
+    assert all(wrong != "Burning" for wrong, _ in _site_pairs("We've also done the Burning."))
+    pairs = _site_pairs("Trustee Browing moved it.", "We heard from Browing again.")
+    assert ("Browing", "Browning") in pairs
+
+
+def test_a_record_name_prints_without_its_packet_note() -> None:
+    pairs = _site_pairs("Trustee Babs had the first.")
+    assert ("Trustee Babs", "Trustee Meosha Babbs") in pairs
+
+
+def test_a_bare_seat_title_gets_no_name_on_the_site() -> None:
+    # Electing "a new mayor pro tem" is not the current holder; only a misheard name is fixed.
+    pairs = _site_pairs("Council will elect a new mayor protem.", "Mayor Proton Shaw, go ahead.")
+    assert all("elect" not in wrong and wrong.lower() != "mayor protem" for wrong, _ in pairs)
+    assert ("Mayor Proton Shaw, go", "Mayor Pro Tem Neal Shah, go") in pairs
+
+
+def test_two_ordinary_words_are_not_a_name_on_the_site() -> None:
+    pairs = _site_pairs("The grant went to Sharing Housing.", "We like sharing; housing is short.")
+    assert all(wrong != "Sharing Housing" for wrong, _ in pairs)
