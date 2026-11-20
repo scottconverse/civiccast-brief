@@ -1,0 +1,108 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Public Safety Professional Standards Review Panel",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Craig Schmidle",
+      "first": "Craig",
+      "last": "Schmidle",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Stephen Hejny",
+      "first": "Stephen",
+      "last": "Hejny",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Jennifer Zender",
+      "first": "Jennifer",
+      "last": "Zender",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Stephen Clifton",
+      "first": "Stephen",
+      "last": "Clifton",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Susan Townley",
+      "first": "Susan",
+      "last": "Townley",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Greg Klipstein",
+      "first": "Greg",
+      "last": "Klipstein",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Ralph Josephsohn",
+      "first": "Ralph",
+      "last": "Josephsohn",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Daniel Breton",
+      "first": "Daniel",
+      "last": "Breton",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Andy Feaster",
+      "first": "Andy",
+      "last": "Feaster",
+      "role": "Supervisor"
+    },
+    {
+      "name": "Nathan Miller",
+      "first": "Nathan",
+      "last": "Miller",
+      "role": "Officer"
+    },
+    {
+      "name": "Todd Chambers",
+      "first": "Todd",
+      "last": "Chambers",
+      "role": "Officer - Alternate"
+    },
+    {
+      "name": "Stewart Visser",
+      "first": "Stewart",
+      "last": "Visser",
+      "role": "Lieutenant"
+    },
+    {
+      "name": "Dave Ptaszek",
+      "first": "Dave",
+      "last": "Ptaszek",
+      "role": "Firefighter Engineer"
+    },
+    {
+      "name": "Paul Stephens",
+      "first": "Paul",
+      "last": "Stephens",
+      "role": "Firefighter - Alternate"
+    },
+    {
+      "name": "David Halvorson",
+      "first": "David",
+      "last": "Halvorson",
+      "role": "Civilian Appointment"
+    },
+    {
+      "name": "Peter Bronski",
+      "first": "Peter",
+      "last": "Bronski",
+      "role": "Civilian Appointment"
+    }
+  ]
+}

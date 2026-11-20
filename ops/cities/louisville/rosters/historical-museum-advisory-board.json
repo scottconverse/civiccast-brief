@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Historical Museum Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/historical-museum-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Jeanette Bangs",
+      "first": "Jeanette",
+      "last": "Bangs",
+      "role": "Member"
+    },
+    {
+      "name": "David Hosansky",
+      "first": "David",
+      "last": "Hosansky",
+      "role": "Member"
+    },
+    {
+      "name": "Eric Lenderman",
+      "first": "Eric",
+      "last": "Lenderman",
+      "role": "Member"
+    },
+    {
+      "name": "Scott McElroy",
+      "first": "Scott",
+      "last": "McElroy",
+      "role": "Member"
+    },
+    {
+      "name": "Barbara Taylor",
+      "first": "Barbara",
+      "last": "Taylor",
+      "role": "Member"
+    },
+    {
+      "name": "Joseph Teasdale",
+      "first": "Joseph",
+      "last": "Teasdale",
+      "role": "Member"
+    },
+    {
+      "name": "Erika winter",
+      "first": "Erika",
+      "last": "winter",
+      "role": "Member"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Local Licensing Authority",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/local-licensing-authority/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "John Carlson",
+      "first": "John",
+      "last": "Carlson",
+      "role": "Member"
+    },
+    {
+      "name": "Rob Carpenter",
+      "first": "Rob",
+      "last": "Carpenter",
+      "role": "Member"
+    },
+    {
+      "name": "Derek Cole",
+      "first": "Derek",
+      "last": "Cole",
+      "role": "Member"
+    },
+    {
+      "name": "Elizabeth Kaufman",
+      "first": "Elizabeth",
+      "last": "Kaufman",
+      "role": "Member"
+    },
+    {
+      "name": "Matthew Machado",
+      "first": "Matthew",
+      "last": "Machado",
+      "role": "Member"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "city": "Boulder",
+  "state": "CO",
+  "body": "City Council",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://bouldercolorado.gov/government/city-council"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Taishya Adams",
+      "first": "Taishya",
+      "last": "Adams",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Matt Benjamin",
+      "first": "Matt",
+      "last": "Benjamin",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Aaron Brockett",
+      "first": "Aaron",
+      "last": "Brockett",
+      "role": "Mayor"
+    },
+    {
+      "name": "Rob Kaplan",
+      "first": "Rob",
+      "last": "Kaplan",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Tina Marquis",
+      "first": "Tina",
+      "last": "Marquis",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Ryan Schuchard",
+      "first": "Ryan",
+      "last": "Schuchard",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Nicole Speer",
+      "first": "Nicole",
+      "last": "Speer",
+      "role": "City Council Member"
+    },
+    {
+      "name": "Tara Winer",
+      "first": "Tara",
+      "last": "Winer",
+      "role": "Mayor Pro Tem"
+    }
+  ]
+}

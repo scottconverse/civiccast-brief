@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Historic Preservation Commission",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/historic-preservation-commission/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Marty Beauchamp",
+      "first": "Marty",
+      "last": "Beauchamp",
+      "role": "Member"
+    },
+    {
+      "name": "Keith Keller",
+      "first": "Keith",
+      "last": "Keller",
+      "role": "Member"
+    },
+    {
+      "name": "Jeff Moline",
+      "first": "Jeff",
+      "last": "Moline",
+      "role": "Member"
+    },
+    {
+      "name": "Jamie Peterson",
+      "first": "Jamie",
+      "last": "Peterson",
+      "role": "Member"
+    },
+    {
+      "name": "Austen Welker",
+      "first": "Austen",
+      "last": "Welker",
+      "role": "Member"
+    },
+    {
+      "name": "Sloane Whidden",
+      "first": "Sloane",
+      "last": "Whidden",
+      "role": "Member"
+    },
+    {
+      "name": "Talbot Wilt",
+      "first": "Talbot",
+      "last": "Wilt",
+      "role": "Member"
+    }
+  ]
+}

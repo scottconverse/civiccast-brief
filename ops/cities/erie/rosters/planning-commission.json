@@ -1,0 +1,54 @@
+{
+  "city": "Erie",
+  "state": "CO",
+  "body": "Planning Commission",
+  "retrieved": "2026-11-16",
+  "sources": [
+    "https://www.erieco.gov/338/Planning-Commission"
+  ],
+  "note": "Names and titles as the town page prints them, copied on 2026-11-16 from the page in sources. The page prints a title for the Chair and the Vice Chair only; the other members are listed as Commissioner. The page also prints a term end date and an email link for each member; the dates are not stored and the email addresses are never stored. The page lists Darryll Wolnik (Staff Liaison) and Jaime Medina (Staff Secretary) below the members; they are town staff, not members, and are not in this roster.",
+  "members": [
+    {
+      "name": "Andrew Sawusch",
+      "first": "Andrew",
+      "last": "Sawusch",
+      "role": "Chair"
+    },
+    {
+      "name": "Sherri Booth",
+      "first": "Sherri",
+      "last": "Booth",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Alex Schatz",
+      "first": "Alex",
+      "last": "Schatz",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Robert (Bob) Braudes",
+      "first": "Robert",
+      "last": "Braudes",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Paul M. Leef",
+      "first": "Paul",
+      "last": "Leef",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Delaney Dreckman",
+      "first": "Delaney",
+      "last": "Dreckman",
+      "role": "Vice Chair"
+    },
+    {
+      "name": "Ben Hemphill",
+      "first": "Ben",
+      "last": "Hemphill",
+      "role": "Commissioner"
+    }
+  ]
+}

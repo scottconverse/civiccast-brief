@@ -1,0 +1,38 @@
+{
+  "name": "Boulder",
+  "state": "CO",
+  "website": "https://bouldercolorado.gov/",
+  "sources": [
+    {
+      "source": {
+        "id": "primegov:bouldercolorado.primegov.com",
+        "kind": "primegov",
+        "url": "https://bouldercolorado.primegov.com",
+        "bodies": [
+          "City Council"
+        ]
+      },
+      "how": "not linked: the city site answers HTTP 403 to this program, so the address was found by trying bouldercolorado.primegov.com (2026-11-10); the portal lists 1 committee"
+    },
+    {
+      "source": {
+        "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "kind": "youtube",
+        "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "bodies": [
+          "Board of Education"
+        ]
+      },
+      "how": "BVSD Board of Education channel @BVSDcoloradoBOE, linked from https://www.bvsd.org/about/board-of-education"
+    }
+  ],
+  "bodies": [
+    "City Council",
+    "Board of Education"
+  ],
+  "found_not_read": [],
+  "notes": [
+    "the city site https://bouldercolorado.gov/ answers HTTP 403 to this program (curl gets 200): its other boards and their packet pages are not read"
+  ],
+  "requests": 3
+}

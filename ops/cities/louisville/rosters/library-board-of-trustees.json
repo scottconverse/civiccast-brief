@@ -1,0 +1,60 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Library Board of Trustees",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/library-board-of-trustees/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Jeanne Baker",
+      "first": "Jeanne",
+      "last": "Baker",
+      "role": "Member"
+    },
+    {
+      "name": "Allie Benz",
+      "first": "Allie",
+      "last": "Benz",
+      "role": "Member"
+    },
+    {
+      "name": "Laurel Cole",
+      "first": "Laurel",
+      "last": "Cole",
+      "role": "Member"
+    },
+    {
+      "name": "Jaime Dufresne",
+      "first": "Jaime",
+      "last": "Dufresne",
+      "role": "Member"
+    },
+    {
+      "name": "Alan Halpern",
+      "first": "Alan",
+      "last": "Halpern",
+      "role": "Member"
+    },
+    {
+      "name": "Heather Wiegand",
+      "first": "Heather",
+      "last": "Wiegand",
+      "role": "Member"
+    },
+    {
+      "name": "Cheryl Lynn Achterberg",
+      "first": "Cheryl",
+      "last": "Achterberg",
+      "role": "Primary Superior representative"
+    },
+    {
+      "name": "Carol Burkett",
+      "first": "Carol",
+      "last": "Burkett",
+      "role": "Alternate Superior representative"
+    }
+  ]
+}

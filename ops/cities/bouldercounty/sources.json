@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "escribe:bouldercounty",
+      "kind": "escribe",
+      "tenant": "bouldercounty",
+      "bodies": [
+        "Board of County Commissioners",
+        "Planning Commission",
+        "Parks and Open Space Advisory Committee"
+      ]
+    }
+  ]
+}

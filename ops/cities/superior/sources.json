@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "civicclerk:superiorco",
+      "kind": "civicclerk",
+      "tenant": "superiorco",
+      "bodies": [
+        "Town Council"
+      ]
+    },
+    {
+      "id": "youtube:UCCJOCWkhQvQAZ-Oq4OJKEyg",
+      "kind": "youtube",
+      "channel_id": "UCCJOCWkhQvQAZ-Oq4OJKEyg",
+      "bodies": [
+        "Planning Commission",
+        "Town Council"
+      ]
+    },
+    {
+      "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "kind": "youtube",
+      "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "bodies": [
+        "Board of Education"
+      ]
+    }
+  ]
+}

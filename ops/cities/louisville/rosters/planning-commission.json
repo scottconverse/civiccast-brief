@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Planning Commission",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/planning-commission/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "David Bangs",
+      "first": "David",
+      "last": "Bangs",
+      "role": "Member"
+    },
+    {
+      "name": "Debra Basket",
+      "first": "Debra",
+      "last": "Basket",
+      "role": "Member"
+    },
+    {
+      "name": "Steve Brauneis",
+      "first": "Steve",
+      "last": "Brauneis",
+      "role": "Member"
+    },
+    {
+      "name": "Cullen Choi",
+      "first": "Cullen",
+      "last": "Choi",
+      "role": "Member"
+    },
+    {
+      "name": "Jennifer Hunt",
+      "first": "Jennifer",
+      "last": "Hunt",
+      "role": "Member"
+    },
+    {
+      "name": "Jonathan Mihaly",
+      "first": "Jonathan",
+      "last": "Mihaly",
+      "role": "Member"
+    },
+    {
+      "name": "Lisa Ritchie",
+      "first": "Lisa",
+      "last": "Ritchie",
+      "role": "Member"
+    }
+  ]
+}

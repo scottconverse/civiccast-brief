@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Cultural Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/cultural-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Leah Frank",
+      "first": "Leah",
+      "last": "Frank",
+      "role": "Member"
+    },
+    {
+      "name": "Jeffrey Gaillard",
+      "first": "Jeffrey",
+      "last": "Gaillard",
+      "role": "Member"
+    },
+    {
+      "name": "Mohamed Ghali",
+      "first": "Mohamed",
+      "last": "Ghali",
+      "role": "Member"
+    },
+    {
+      "name": "JR Ketelsen",
+      "first": "JR",
+      "last": "Ketelsen",
+      "role": "Member"
+    },
+    {
+      "name": "Alexander Phillips-Messner",
+      "first": "Alexander",
+      "last": "Phillips-Messner",
+      "role": "Member"
+    },
+    {
+      "name": "Reina Pomeroy",
+      "first": "Reina",
+      "last": "Pomeroy",
+      "role": "Member"
+    },
+    {
+      "name": "Sarah Staunton",
+      "first": "Sarah",
+      "last": "Staunton",
+      "role": "Member"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "city": "Erie",
+  "state": "CO",
+  "body": "Urban Renewal Authority",
+  "retrieved": "2026-11-16",
+  "sources": [
+    "https://www.erieco.gov/2090/Urban-Renewal-Authority"
+  ],
+  "note": "Names and titles as the town page prints them, copied on 2026-11-16 from the page in sources. The page prints a term for some members and the district or body they represent beside their name; the term is not stored, and the district is kept inside the name exactly as the page prints it. The page prints an email link for each member; the email addresses are never stored. The page spells one name John Moretellaro; the Town Council page spells it John Mortellaro. Stored as Mortellaro on 2026-11-20: the Town Council page and the council packets of 2026-10-13, 10-21, 10-27 and 11-10 (29 prints) spell it Mortellaro.",
+  "members": [
+    {
+      "name": "Andrew J. Moore",
+      "first": "Andrew",
+      "last": "Moore",
+      "role": "Chairperson"
+    },
+    {
+      "name": "Anil Pesaramelli",
+      "first": "Anil",
+      "last": "Pesaramelli",
+      "role": "Commissioner"
+    },
+    {
+      "name": "John Mortellaro",
+      "first": "John",
+      "last": "Mortellaro",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Brandon Bell",
+      "first": "Brandon",
+      "last": "Bell",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Dan Hoback",
+      "first": "Dan",
+      "last": "Hoback",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Emily Baer",
+      "first": "Emily",
+      "last": "Baer",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Brian O'Connor",
+      "first": "Brian",
+      "last": "O'Connor",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Ashraf Shaikh",
+      "first": "Ashraf",
+      "last": "Shaikh",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Jon Lee (Special District - 232 Metro District)",
+      "first": "Jon",
+      "last": "Lee",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Meosha Babbs (SVVSD)",
+      "first": "Meosha",
+      "last": "Babbs",
+      "role": "Commissioner"
+    },
+    {
+      "name": "Scott James (Weld County)",
+      "first": "Scott",
+      "last": "James",
+      "role": "Commissioner"
+    }
+  ]
+}

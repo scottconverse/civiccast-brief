@@ -1,0 +1,94 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "youtube:UCro5PeODE-MCnNzuWyxRJ6A",
+      "kind": "youtube",
+      "channel_id": "UCro5PeODE-MCnNzuWyxRJ6A",
+      "bodies": [
+        "City Council",
+        "Planning Commission"
+      ]
+    },
+    {
+      "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "kind": "youtube",
+      "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "bodies": [
+        "Board of Education"
+      ]
+    },
+    {
+      "id": "civicclerk:louisvilleco",
+      "kind": "civicclerk",
+      "tenant": "louisvilleco",
+      "bodies": [
+        "City Council",
+        "Cultural Advisory Board",
+        "Historic Preservation Commission",
+        "Local Licensing Authority",
+        "Parks & Public Landscaping Advisory Board",
+        "Recreation Advisory Board",
+        "Revitalization Commission",
+        "Youth Advisory Board",
+        "Bee City Subcommittee"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8973&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8973&dbid=0&repo=Louisville",
+      "bodies": [
+        "Board of Adjustment"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8974&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8974&dbid=0&repo=Louisville",
+      "bodies": [
+        "Building Code Board of Appeals"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8979&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8979&dbid=0&repo=Louisville",
+      "bodies": [
+        "Historical Museum Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8983&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8983&dbid=0&repo=Louisville",
+      "bodies": [
+        "Library Board of Trustees"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8985&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8985&dbid=0&repo=Louisville",
+      "bodies": [
+        "Open Space Advisory Board"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=8986&dbid=0&repo=Louisville",
+      "bodies": [
+        "Planning Commission"
+      ]
+    },
+    {
+      "id": "laserfiche:https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=89486&dbid=0&repo=Louisville",
+      "kind": "laserfiche",
+      "url": "https://laserfiche.louisvilleco.gov/WebLink/Browse.aspx?id=89486&dbid=0&repo=Louisville",
+      "bodies": [
+        "Sustainability Advisory Board"
+      ]
+    }
+  ]
+}

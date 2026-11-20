@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Transportation Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Taylor Scott Wicklund",
+      "first": "Taylor",
+      "last": "Wicklund",
+      "role": "Board Member"
+    },
+    {
+      "name": "Arlene Zortman",
+      "first": "Arlene",
+      "last": "Zortman",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jim A Paulmeno",
+      "first": "Jim",
+      "last": "Paulmeno",
+      "role": "Board Member"
+    },
+    {
+      "name": "David McInerney",
+      "first": "David",
+      "last": "McInerney",
+      "role": "Board Member"
+    },
+    {
+      "name": "Gina A Burrows",
+      "first": "Gina",
+      "last": "Burrows",
+      "role": "Board Member"
+    },
+    {
+      "name": "Ross Starritt",
+      "first": "Ross",
+      "last": "Starritt",
+      "role": "Board Member"
+    },
+    {
+      "name": "Amy C Wilkins",
+      "first": "Amy",
+      "last": "Wilkins",
+      "role": "Board Member"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "city": "Boulder",
+  "state": "CO",
+  "body": "Board of Education",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.bvsd.org/about/board-of-education/meet-the-board"
+  ],
+  "note": "Names and offices as the board's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Nicole Rajpal",
+      "first": "Nicole",
+      "last": "Rajpal",
+      "role": "President, District B"
+    },
+    {
+      "name": "Alex Medler",
+      "first": "Alex",
+      "last": "Medler",
+      "role": "Vice President, District C"
+    },
+    {
+      "name": "Jason Unger",
+      "first": "Jason",
+      "last": "Unger",
+      "role": "Treasurer, District A"
+    },
+    {
+      "name": "Lalenia Quinlan Aweida",
+      "first": "Lalenia",
+      "last": "Quinlan Aweida",
+      "role": "Board Member, District D"
+    },
+    {
+      "name": "Deann Bucher",
+      "first": "Deann",
+      "last": "Bucher",
+      "role": "Board Member, District E"
+    },
+    {
+      "name": "Ana Temu Otting",
+      "first": "Ana",
+      "last": "Temu Otting",
+      "role": "Board Member, District F"
+    },
+    {
+      "name": "Jorge Chávez",
+      "first": "Jorge",
+      "last": "Chávez",
+      "role": "Board Member, District G"
+    }
+  ]
+}

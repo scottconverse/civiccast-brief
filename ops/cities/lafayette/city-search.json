@@ -1,0 +1,86 @@
+{
+  "name": "Lafayette",
+  "state": "CO",
+  "website": "https://www.lafayetteco.gov/",
+  "sources": [
+    {
+      "source": {
+        "id": "youtube:UCzXTiAhy0KlgfaFrdmkWLLg",
+        "kind": "youtube",
+        "channel_id": "UCzXTiAhy0KlgfaFrdmkWLLg",
+        "bodies": [
+          "City Council",
+          "Planning Commission"
+        ]
+      },
+      "how": "channel UCzXTiAhy0KlgfaFrdmkWLLg; its newest video titles name these bodies"
+    },
+    {
+      "source": {
+        "id": "civicplus:www.lafayetteco.gov",
+        "kind": "civicplus",
+        "site": "www.lafayetteco.gov",
+        "bodies": [
+          "City Council",
+          "Cultural Arts Board",
+          "Energy Sustainability Committee",
+          "Historic Preservation Commission",
+          "IDEA Board",
+          "Lafayette Cemetery Subcommittee",
+          "Lafayette Downtown Development Authority Board",
+          "Lafayette Youth Advisory Board",
+          "Library Board",
+          "Local Liquor Licensing Authority",
+          "Mental Health and Human Services Advisory Committee",
+          "Older Adults Advisory Board",
+          "Open Space Advisory Board",
+          "Planning Commission",
+          "Prairie Dog Advisory Working Group",
+          "Public Art Committee",
+          "Sustainability and Resilience Advisory Committee",
+          "Urban Renewal Authority",
+          "Waste Reduction Advisory Committee",
+          "Zoning Board of Adjustment"
+        ]
+      },
+      "how": "linked from the city site; the Archive Center list 20 bodies"
+    },
+    {
+      "source": {
+        "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "kind": "youtube",
+        "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "bodies": [
+          "Board of Education"
+        ]
+      },
+      "how": "channel UCbIqNnmnUXr1bWfNvYRyaAQ; its newest video titles name these bodies"
+    }
+  ],
+  "bodies": [
+    "City Council",
+    "Planning Commission",
+    "Cultural Arts Board",
+    "Energy Sustainability Committee",
+    "Historic Preservation Commission",
+    "IDEA Board",
+    "Lafayette Cemetery Subcommittee",
+    "Lafayette Downtown Development Authority Board",
+    "Lafayette Youth Advisory Board",
+    "Library Board",
+    "Local Liquor Licensing Authority",
+    "Mental Health and Human Services Advisory Committee",
+    "Older Adults Advisory Board",
+    "Open Space Advisory Board",
+    "Prairie Dog Advisory Working Group",
+    "Public Art Committee",
+    "Sustainability and Resilience Advisory Committee",
+    "Urban Renewal Authority",
+    "Waste Reduction Advisory Committee",
+    "Zoning Board of Adjustment",
+    "Board of Education"
+  ],
+  "found_not_read": [],
+  "notes": [],
+  "requests": 14
+}

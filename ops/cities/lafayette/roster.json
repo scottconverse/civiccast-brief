@@ -1,0 +1,70 @@
+{
+  "city": "Lafayette",
+  "state": "CO",
+  "body": "City Council",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.lafayetteco.gov/27/Government",
+    "https://www.lafayetteco.gov/ArchiveCenter/ViewFile/Item/8182"
+  ],
+  "note": "Names as the city's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Saul Tapia Vega",
+      "first": "Saul",
+      "last": "Tapia Vega",
+      "role": "Mayor"
+    },
+    {
+      "name": "Tim Barnes",
+      "first": "Tim",
+      "last": "Barnes",
+      "role": "Mayor Pro Tem"
+    },
+    {
+      "name": "Kyle Beaulieu",
+      "first": "Kyle",
+      "last": "Beaulieu",
+      "role": "Councilor"
+    },
+    {
+      "name": "David Fridland",
+      "first": "David",
+      "last": "Fridland",
+      "role": "Councilor",
+      "records": [
+        {
+          "date": "2026-10-20",
+          "status": "absent",
+          "title": "Director",
+          "document": "agenda",
+          "url": "https://www.lafayetteco.gov/ArchiveCenter/ViewFile/Item/8182#page=19",
+          "page": 19,
+          "line": 9,
+          "text": "Director David Fridland was absent."
+        }
+      ],
+      "seen": [
+        "2026-10-20"
+      ]
+    },
+    {
+      "name": "Crystal Gallegos",
+      "first": "Crystal",
+      "last": "Gallegos",
+      "role": "Councilor"
+    },
+    {
+      "name": "Adam Gianola",
+      "first": "Adam",
+      "last": "Gianola",
+      "role": "Councilor"
+    },
+    {
+      "name": "Annmarie Jensen",
+      "first": "Annmarie",
+      "last": "Jensen",
+      "role": "Councilor"
+    }
+  ]
+}

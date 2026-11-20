@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Longmont Housing Authority Board of Commissioners",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Susie Hidalgo-Fahring",
+      "first": "Susie",
+      "last": "Hidalgo-Fahring",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Sean McCoy",
+      "first": "Sean",
+      "last": "McCoy",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Diane Crist",
+      "first": "Diane",
+      "last": "Crist",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Jake Marsing",
+      "first": "Jake",
+      "last": "Marsing",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Crystal Prieto",
+      "first": "Crystal",
+      "last": "Prieto",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Matthew Popkin",
+      "first": "Matthew",
+      "last": "Popkin",
+      "role": "Commission Member"
+    },
+    {
+      "name": "Alex Kalkhofer",
+      "first": "Alex",
+      "last": "Kalkhofer",
+      "role": "Commission Member"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "youtube:UC7yotiy0f24wbZk5lBfbnIQ",
+      "kind": "youtube",
+      "channel_id": "UC7yotiy0f24wbZk5lBfbnIQ",
+      "bodies": [
+        "Board of Trustees",
+        "Planning & Community Development Commission",
+        "Lyons Urban Renewal Authority"
+      ]
+    },
+    {
+      "id": "civicplus:www.townoflyons.com",
+      "kind": "civicplus",
+      "site": "www.townoflyons.com",
+      "bodies": [
+        "Board of Trustees",
+        "Arts & Humanities Commission",
+        "Board of Adjustments",
+        "Ecology Advisory Board",
+        "Economic Vitality Commission",
+        "Historic Preservation Commission",
+        "Housing & Human Services Commission",
+        "IGA Taskforce Committee",
+        "Lyons Urban Renewal Authority",
+        "Parks and Recreation Commission",
+        "Planning & Community Development Commission",
+        "Student Advisory Commission",
+        "Sundance Film Festival Task Force",
+        "Sustainable Futures Commission",
+        "Utilities & Engineering Board"
+      ]
+    }
+  ]
+}

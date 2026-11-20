@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "youtube:UCknLzh_H3jXUCHNN2r-H37w",
+      "kind": "youtube",
+      "channel_id": "UCknLzh_H3jXUCHNN2r-H37w",
+      "bodies": [
+        "Board of Trustees",
+        "Planning Commission",
+        "Downtown Development Authority"
+      ]
+    },
+    {
+      "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "kind": "youtube",
+      "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "bodies": [
+        "Board of Education"
+      ]
+    }
+  ]
+}

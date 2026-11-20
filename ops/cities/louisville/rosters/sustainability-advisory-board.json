@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Sustainability Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/sustainability-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Alex Bentz",
+      "first": "Alex",
+      "last": "Bentz",
+      "role": "Member"
+    },
+    {
+      "name": "Tiffany Boyd",
+      "first": "Tiffany",
+      "last": "Boyd",
+      "role": "Member"
+    },
+    {
+      "name": "Nisa Bradley",
+      "first": "Nisa",
+      "last": "Bradley",
+      "role": "Member"
+    },
+    {
+      "name": "Greg Dimedio",
+      "first": "Greg",
+      "last": "Dimedio",
+      "role": "Member"
+    },
+    {
+      "name": "Eliza Greene",
+      "first": "Eliza",
+      "last": "Greene",
+      "role": "Member"
+    },
+    {
+      "name": "Allison Kay",
+      "first": "Allison",
+      "last": "Kay",
+      "role": "Member"
+    },
+    {
+      "name": "Aubrey Suber",
+      "first": "Aubrey",
+      "last": "Suber",
+      "role": "Member"
+    }
+  ]
+}

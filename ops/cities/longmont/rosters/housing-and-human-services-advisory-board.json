@@ -1,0 +1,66 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Housing and Human Services Advisory Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Jeffrey Boring",
+      "first": "Jeffrey",
+      "last": "Boring",
+      "role": "Board Member"
+    },
+    {
+      "name": "Catherine Lau",
+      "first": "Catherine",
+      "last": "Lau",
+      "role": "Board Member"
+    },
+    {
+      "name": "Martha R Wilson",
+      "first": "Martha",
+      "last": "Wilson",
+      "role": "Board Member"
+    },
+    {
+      "name": "Kevin Javier Benitez",
+      "first": "Kevin",
+      "last": "Benitez",
+      "role": "Board Member"
+    },
+    {
+      "name": "Marc Sisler",
+      "first": "Marc",
+      "last": "Sisler",
+      "role": "Board Member"
+    },
+    {
+      "name": "Breton Hayes McNamara",
+      "first": "Breton",
+      "last": "McNamara",
+      "role": "Board Member"
+    },
+    {
+      "name": "Sangay Mingyur",
+      "first": "Sangay",
+      "last": "Mingyur",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jennika O'Brien",
+      "first": "Jennika",
+      "last": "O'Brien",
+      "role": "Board Member"
+    },
+    {
+      "name": "Jake Marsing",
+      "first": "Jake",
+      "last": "Marsing",
+      "role": "Council Liaison"
+    }
+  ]
+}

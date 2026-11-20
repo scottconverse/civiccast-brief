@@ -1,0 +1,29 @@
+{
+  "slug": "longmont",
+  "name": "Longmont",
+  "site_title": "CivicCast Brief: Longmont",
+  "tagline": "What did our local government just do?",
+  "publisher": "CivicCast Brief",
+  "contact_email": "corrections@civiccastbrief.org",
+  "hosts": {
+    "S1": "Maya",
+    "S2": "Theo"
+  },
+  "about": [
+    "Short recaps of Longmont public meetings, written from the meeting captions and read by two AI voices. Every fact links to the moment in the meeting where it was said. A person approves each episode before it is published."
+  ],
+  "capture": {
+    "platform": "youtube"
+  },
+  "podcast": {
+    "name": "CivicCast Brief: Longmont",
+    "author": "CivicCast Brief",
+    "owner_name": "CivicCast Brief",
+    "owner_email": "podcast@civiccastbrief.org",
+    "description": "Short, cited recaps of Longmont public meetings, read by two AI hosts.",
+    "category": "Government",
+    "subcategory": "",
+    "language": "en-us",
+    "explicit": false
+  }
+}

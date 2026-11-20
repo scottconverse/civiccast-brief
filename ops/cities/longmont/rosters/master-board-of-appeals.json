@@ -1,0 +1,36 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Master Board of Appeals",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Noah Huber",
+      "first": "Noah",
+      "last": "Huber",
+      "role": "Board Member"
+    },
+    {
+      "name": "Adam Goldstone",
+      "first": "Adam",
+      "last": "Goldstone",
+      "role": "Board Member"
+    },
+    {
+      "name": "JOHN LENNON",
+      "first": "JOHN",
+      "last": "LENNON",
+      "role": "Board Member"
+    },
+    {
+      "name": "Andy Ulmer",
+      "first": "Andy",
+      "last": "Ulmer",
+      "role": "Board Member"
+    }
+  ]
+}

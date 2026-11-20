@@ -1,0 +1,54 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Revitalization Commission",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/revitalization-commission/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Alexis Adler",
+      "first": "Alexis",
+      "last": "Adler",
+      "role": "Member"
+    },
+    {
+      "name": "Clif Harald",
+      "first": "Clif",
+      "last": "Harald",
+      "role": "Member"
+    },
+    {
+      "name": "Barbie Iglesias",
+      "first": "Barbie",
+      "last": "Iglesias",
+      "role": "Member"
+    },
+    {
+      "name": "Jeff Lipton",
+      "first": "Jeff",
+      "last": "Lipton",
+      "role": "Member"
+    },
+    {
+      "name": "Robert Tofte",
+      "first": "Robert",
+      "last": "Tofte",
+      "role": "Member"
+    },
+    {
+      "name": "Corrie Williams",
+      "first": "Corrie",
+      "last": "Williams",
+      "role": "Member"
+    },
+    {
+      "name": "Caleb Dickinson",
+      "first": "Caleb",
+      "last": "Dickinson",
+      "role": "City Council Representative"
+    }
+  ]
+}

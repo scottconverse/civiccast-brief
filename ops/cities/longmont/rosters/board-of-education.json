@@ -1,0 +1,54 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Board of Education",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://www.svvsd.org/about/board-of-education/"
+  ],
+  "note": "Names and offices as the board's page prints them, read by rule (no model) on 2026-11-11 from the page in sources.",
+  "members": [
+    {
+      "name": "Jocelyn Gilligan",
+      "first": "Jocelyn",
+      "last": "Gilligan",
+      "role": "President, District E"
+    },
+    {
+      "name": "Jim Berthold",
+      "first": "Jim",
+      "last": "Berthold",
+      "role": "Vice President, District C"
+    },
+    {
+      "name": "Sarah Hurianek",
+      "first": "Sarah",
+      "last": "Hurianek",
+      "role": "Secretary, District F"
+    },
+    {
+      "name": "Jacqueline Weiss",
+      "first": "Jacqueline",
+      "last": "Weiss",
+      "role": "Treasurer, District A"
+    },
+    {
+      "name": "Geno Lechuga",
+      "first": "Geno",
+      "last": "Lechuga",
+      "role": "Assistant Secretary, District G"
+    },
+    {
+      "name": "Meosha Babbs",
+      "first": "Meosha",
+      "last": "Babbs",
+      "role": "Board Member, District D"
+    },
+    {
+      "name": "Hadley Solomon",
+      "first": "Hadley",
+      "last": "Solomon",
+      "role": "Board Member, District B"
+    }
+  ]
+}

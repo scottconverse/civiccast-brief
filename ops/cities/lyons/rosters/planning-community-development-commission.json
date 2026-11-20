@@ -1,0 +1,66 @@
+{
+  "city": "Lyons",
+  "state": "CO",
+  "body": "Planning & Community Development Commission",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.lyonscolorado.com/200/Planning-Community-Development-Commissio"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Neal Evers",
+      "first": "Neal",
+      "last": "Evers",
+      "role": "Vice Chair"
+    },
+    {
+      "name": "John Hunter",
+      "first": "John",
+      "last": "Hunter",
+      "role": "Member"
+    },
+    {
+      "name": "Molly Schmidt",
+      "first": "Molly",
+      "last": "Schmidt",
+      "role": "Member"
+    },
+    {
+      "name": "Lynne Johann",
+      "first": "Lynne",
+      "last": "Johann",
+      "role": "Member"
+    },
+    {
+      "name": "Doug Matthews",
+      "first": "Doug",
+      "last": "Matthews",
+      "role": "Member"
+    },
+    {
+      "name": "Joycelyn Fankhouser",
+      "first": "Joycelyn",
+      "last": "Fankhouser",
+      "role": "Member"
+    },
+    {
+      "name": "Julie Karavas",
+      "first": "Julie",
+      "last": "Karavas",
+      "role": "Member"
+    },
+    {
+      "name": "Amy Schwartz",
+      "first": "Amy",
+      "last": "Schwartz",
+      "role": "Board of Trustees Liaison"
+    },
+    {
+      "name": "Lisa Ritchie",
+      "first": "Lisa",
+      "last": "Ritchie",
+      "role": "Staff Liaison"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Water Board",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Daniel S Wolford",
+      "first": "Daniel",
+      "last": "Wolford",
+      "role": "Board Member"
+    },
+    {
+      "name": "Roger Lange",
+      "first": "Roger",
+      "last": "Lange",
+      "role": "Board Member"
+    },
+    {
+      "name": "Scott Holwick",
+      "first": "Scott",
+      "last": "Holwick",
+      "role": "Board Member"
+    },
+    {
+      "name": "Renee Davis",
+      "first": "Renee",
+      "last": "Davis",
+      "role": "Board Member"
+    },
+    {
+      "name": "Thomas A Duster",
+      "first": "Thomas",
+      "last": "Duster",
+      "role": "Board Member"
+    }
+  ]
+}

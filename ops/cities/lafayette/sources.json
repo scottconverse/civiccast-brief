@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "id": "youtube:UCzXTiAhy0KlgfaFrdmkWLLg",
+      "kind": "youtube",
+      "channel_id": "UCzXTiAhy0KlgfaFrdmkWLLg",
+      "bodies": [
+        "City Council",
+        "Planning Commission"
+      ]
+    },
+    {
+      "id": "civicplus:www.lafayetteco.gov",
+      "kind": "civicplus",
+      "site": "www.lafayetteco.gov",
+      "bodies": [
+        "City Council",
+        "Cultural Arts Board",
+        "Energy Sustainability Committee",
+        "Historic Preservation Commission",
+        "IDEA Board",
+        "Lafayette Cemetery Subcommittee",
+        "Lafayette Downtown Development Authority Board",
+        "Lafayette Youth Advisory Board",
+        "Library Board",
+        "Local Liquor Licensing Authority",
+        "Mental Health and Human Services Advisory Committee",
+        "Older Adults Advisory Board",
+        "Open Space Advisory Board",
+        "Planning Commission",
+        "Public Art Committee",
+        "Sustainability and Resilience Advisory Committee",
+        "Urban Renewal Authority",
+        "Zoning Board of Adjustment"
+      ]
+    },
+    {
+      "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "kind": "youtube",
+      "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+      "bodies": [
+        "Board of Education"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "city": "Superior",
+  "state": "CO",
+  "body": "Planning Commission",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://townofsuperior.granicus.com/boards/w/b879e033d15cc01e"
+  ],
+  "note": "Names and roles as the Town of Superior boards page (Granicus, embedded at superiorcolorado.gov Planning Commission) prints them, copied on 2026-11-15.",
+  "members": [
+    {
+      "name": "Michael Barnes",
+      "first": "Michael",
+      "last": "Barnes",
+      "role": "Member"
+    },
+    {
+      "name": "Anne L Shanahan",
+      "first": "Anne",
+      "last": "Shanahan",
+      "role": "Member"
+    },
+    {
+      "name": "Steve Witte",
+      "first": "Steve",
+      "last": "Witte",
+      "role": "Member"
+    },
+    {
+      "name": "Tim Peterson",
+      "first": "Tim",
+      "last": "Peterson",
+      "role": "Member"
+    },
+    {
+      "name": "Amanda Vaughan",
+      "first": "Amanda",
+      "last": "Vaughan",
+      "role": "Member"
+    },
+    {
+      "name": "David Gross",
+      "first": "David",
+      "last": "Gross",
+      "role": "Member"
+    },
+    {
+      "name": "David Harper",
+      "first": "David",
+      "last": "Harper",
+      "role": "Chair"
+    },
+    {
+      "name": "Ryan C Mojo",
+      "first": "Ryan",
+      "last": "Mojo",
+      "role": "Vice Chair"
+    },
+    {
+      "name": "Ryan Welch",
+      "first": "Ryan",
+      "last": "Welch",
+      "role": "Member"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "name": "Superior",
+  "state": "CO",
+  "website": "https://www.superiorcolorado.gov/Home",
+  "sources": [
+    {
+      "source": {
+        "id": "granicus:townofsuperior.granicus.com/13",
+        "kind": "granicus",
+        "host": "townofsuperior.granicus.com",
+        "view_id": "13",
+        "bodies": [
+          "Planning Commission"
+        ]
+      },
+      "how": "linked from the city site; the archive page names these bodies"
+    },
+    {
+      "source": {
+        "id": "youtube:UCCJOCWkhQvQAZ-Oq4OJKEyg",
+        "kind": "youtube",
+        "channel_id": "UCCJOCWkhQvQAZ-Oq4OJKEyg",
+        "bodies": [
+          "Planning Commission",
+          "Town Council"
+        ]
+      },
+      "how": "channel UCCJOCWkhQvQAZ-Oq4OJKEyg; its newest video titles name these bodies"
+    },
+    {
+      "source": {
+        "id": "youtube:UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "kind": "youtube",
+        "channel_id": "UCbIqNnmnUXr1bWfNvYRyaAQ",
+        "bodies": [
+          "Board of Education"
+        ]
+      },
+      "how": "channel UCbIqNnmnUXr1bWfNvYRyaAQ; its newest video titles name these bodies"
+    }
+  ],
+  "bodies": [
+    "Planning Commission",
+    "Town Council",
+    "Board of Education"
+  ],
+  "found_not_read": [
+    {
+      "platform": "Granicus",
+      "url": "https://townofsuperior.granicus.com/ViewPublisher.php?view_id=9",
+      "note": "the archive names none of the bodies"
+    },
+    {
+      "platform": "Granicus",
+      "url": "https://townofsuperior.granicus.com/boards/w/33b2f987d8aa9eda",
+      "note": "no view_id in the link"
+    },
+    {
+      "platform": "Granicus",
+      "url": "https://townofsuperior.granicus.com/ViewPublisher.php?view_id=7",
+      "note": "the archive names none of the bodies"
+    }
+  ],
+  "notes": [],
+  "requests": 13
+}

@@ -1,0 +1,42 @@
+{
+  "city": "Louisville",
+  "state": "CO",
+  "body": "Parks & Public Landscaping Advisory Board",
+  "retrieved": "2026-11-15",
+  "sources": [
+    "https://www.louisvilleco.gov/departments/city-clerks-office/boards-commissions/parks-public-landscaping-advisory-board/"
+  ],
+  "note": "Names and roles as the city's page prints them, copied on 2026-11-15 from the page in sources.",
+  "members": [
+    {
+      "name": "Kathy Kelsey",
+      "first": "Kathy",
+      "last": "Kelsey",
+      "role": "Member"
+    },
+    {
+      "name": "Jean Keil",
+      "first": "Jean",
+      "last": "Keil",
+      "role": "Member"
+    },
+    {
+      "name": "David Pomeroy",
+      "first": "David",
+      "last": "Pomeroy",
+      "role": "Member"
+    },
+    {
+      "name": "John Webb",
+      "first": "John",
+      "last": "Webb",
+      "role": "Member"
+    },
+    {
+      "name": "Kelli Zimmerman",
+      "first": "Kelli",
+      "last": "Zimmerman",
+      "role": "Member"
+    }
+  ]
+}

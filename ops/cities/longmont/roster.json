@@ -1,0 +1,145 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "City Council",
+  "retrieved": "2026-11-05",
+  "sources": [
+    "https://longmontcolorado.gov/government/mayor-city-council-members/wards-and-representatives/",
+    "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1"
+  ],
+  "note": "Names as the city prints them. The roster page's metadata date is 2024-07-30; the names were checked against the page on 2026-11-05. Sean McCoy's Mayor Pro Tem title is in the March 2026 City Line newsletter but not on the roster page, so no Pro Tem title is used.",
+  "members": [
+    {
+      "name": "Susie Hidalgo-Fahring",
+      "first": "Susie",
+      "last": "Hidalgo-Fahring",
+      "role": "Mayor",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Mayor",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Diane Crist",
+      "first": "Diane",
+      "last": "Crist",
+      "role": "Ward 1 Representative",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Council Member",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Matthew Popkin",
+      "first": "Matthew",
+      "last": "Popkin",
+      "role": "Ward 2 Representative",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Council Member",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Alex Kalkhofer",
+      "first": "Alex",
+      "last": "Kalkhofer",
+      "role": "Ward 3 Representative",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Council Member",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Sean McCoy",
+      "first": "Sean",
+      "last": "McCoy",
+      "role": "At Large Representative",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Council Member",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Jake Marsing",
+      "first": "Jake",
+      "last": "Marsing",
+      "role": "At Large Representative",
+      "records": [
+        {
+          "date": "2026-11-03",
+          "status": "present",
+          "title": "Council Member",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=16865&compileOutputType=1#page=6",
+          "page": 6,
+          "line": 35,
+          "text": "Those present were Mayor Susie Hidalgo-Fahring and Council Members Diane Crist, Alex Kalkhofer, Jake Marsing, Sean McCoy, and Matthew Popkin."
+        }
+      ],
+      "seen": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "name": "Crystal Prieto",
+      "first": "Crystal",
+      "last": "Prieto",
+      "role": "At Large Representative"
+    }
+  ]
+}

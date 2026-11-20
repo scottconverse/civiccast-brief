@@ -1,0 +1,169 @@
+{
+  "city": "Longmont",
+  "state": "Colorado",
+  "body": "Planning and Zoning Commission",
+  "retrieved": "2026-11-11",
+  "sources": [
+    "https://longmont.primegov.com/public/committees",
+    "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1"
+  ],
+  "note": "Current members (term not ended, seat not vacated) as the city's PrimeGov portal lists them, read by rule (no model) on 2026-11-11.",
+  "members": [
+    {
+      "name": "Amy Saunders",
+      "first": "Amy",
+      "last": "Saunders",
+      "role": "Board Member"
+    },
+    {
+      "name": "Tom Lange",
+      "first": "Tom",
+      "last": "Lange",
+      "role": "Board Member",
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    },
+    {
+      "name": "Geri Boone",
+      "first": "Geri",
+      "last": "Boone",
+      "role": "Board Member",
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    },
+    {
+      "name": "Harrison Earl",
+      "first": "Harrison",
+      "last": "Earl",
+      "role": "Vice Chair"
+    },
+    {
+      "name": "Devin Edgley-Wells",
+      "first": "Devin",
+      "last": "Edgley-Wells",
+      "role": "Board Member",
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    },
+    {
+      "name": "Michael Polan",
+      "first": "Michael",
+      "last": "Polan",
+      "role": "Chair"
+    },
+    {
+      "name": "Andrew H Jordan",
+      "first": "Andrew",
+      "last": "Jordan",
+      "role": "Board Member"
+    },
+    {
+      "name": "Ryan Forbes",
+      "first": "Ryan",
+      "last": "Forbes",
+      "role": "Alternate Board Member",
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    },
+    {
+      "name": "Jacob I Arment",
+      "first": "Jacob",
+      "last": "Arment",
+      "role": "Alternate Board Member",
+      "printed_as": [
+        "Jacob Arment"
+      ],
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    },
+    {
+      "name": "Liang \"Warren\" Wang",
+      "first": "Liang \"Warren\"",
+      "last": "Wang",
+      "role": "Alternate Board Member",
+      "printed_as": [
+        "Warren Wang"
+      ],
+      "records": [
+        {
+          "date": "2026-10-21",
+          "status": "present",
+          "title": "Commissioner",
+          "document": "packet",
+          "url": "https://longmont.primegov.com/Public/CompiledDocument?meetingTemplateId=15876&compileOutputType=1#page=3",
+          "page": 3,
+          "line": 14,
+          "text": "Present on the Commission were Devin Edgley-Wells, Tom Lange, Warren Wang, Ryan Forbes, Geri Boone, and Jacob Arment."
+        }
+      ],
+      "seen": [
+        "2026-10-21"
+      ]
+    }
+  ]
+}
