@@ -361,6 +361,11 @@ MIN_HOME_SHARE = 0.5
 #: "Front Street not be completed?" ended council members' questions in the voice of the staff
 #: member who answered and were given her name.
 MIN_MINOR_RUN_LINES = 2
+#: A name a voice gave itself (see introductions) labels only turns where that voice speaks at
+#: least this many lines. A self-introduction is one piece of evidence, and the diarizer puts some
+#: short questions in the presenter's voice: on Lafayette's Nov 17, 2026 meeting, "Water in storage
+#: evaporating higher than just like stream flow?" was a two-line turn in the water manager's voice.
+MIN_INTRODUCED_TURN_LINES = 3
 _GLUED_PRO_TEM = re.compile(r"^(?:prom|port|pro)(?=[a-z]{3,})", re.IGNORECASE)
 
 
@@ -960,6 +965,7 @@ def introductions(
         segment = segments[position]
         spoken = " ".join(words)
         entry: dict[str, Any] = {
+            "line": position,
             "start": hms(segment.start),
             "voice": segment.voice,
             "spoken": spoken,
@@ -1036,7 +1042,8 @@ def label_voices(
     - a line in the chair's voice stays unknown (the chair's words are not the member's);
     - a line in a named voice gets that voice's name;
     - a line in a voice that introduced itself by a name the documents print (see introductions)
-      gets that name;
+      gets that name, in the turn of the introduction and in turns where that voice is on at
+      least MIN_INTRODUCED_TURN_LINES lines;
     - a line of a named turn in the turn's own voice, or with no voice, keeps the turn's name,
       when that voice is on MIN_OWN_SHARE of the turn's voiced lines and, if the voice has no
       name, MIN_HOME_SHARE of the voice's lines are in turns named that person;
@@ -1086,7 +1093,14 @@ def label_voices(
                 home_lines[key] = home_lines.get(key, 0) + 1
     by_voice = 0
     stray_lines = 0
-    for turn in turns:
+    short_introduced = 0
+    intro_lines = {e["line"] for e in intros if e["status"] == "named"}
+    intro_turns = {
+        index
+        for index, turn in enumerate(turns)
+        if any(turn.first <= line <= turn.last for line in intro_lines)
+    }
+    for index, turn in enumerate(turns):
         counts = _voice_counts(segments, turn, chair)
         own = _own_voice(segments, turn, chair)
         if own is not None and counts[own] / sum(counts.values()) < MIN_OWN_SHARE:
@@ -1113,9 +1127,14 @@ def label_voices(
                 label = named[voice]
                 if label != turn.speaker:
                     by_voice += 1
-            elif voice in introduced:
+            elif voice in introduced and (
+                index in intro_turns or counts.get(voice, 0) >= MIN_INTRODUCED_TURN_LINES
+            ):
                 label, where = introduced[voice]
                 segment.basis = f"introduced:{where}"
+            elif voice in introduced:
+                label = None
+                short_introduced += 1
             elif turn.speaker is not None and (voice is None or voice == own):
                 label = turn.speaker
             else:
@@ -1132,4 +1151,5 @@ def label_voices(
         "voices": voices,
         "lines_named_by_voice": by_voice,
         "stray_voice_lines": stray_lines,
+        "short_introduced_lines": short_introduced,
     }

@@ -225,14 +225,15 @@ def test_one_stray_line_in_another_turn_does_not_take_the_introduced_name():
         ("how much the city uses", False, "voice 08"),
         ("for programming?", False, "voice 10"),
         ("Absolutely. We use about 20% of the", True, "voice 10"),
-        ("remaining 40% for our arts grants.", False, "voice 10"),
+        ("remaining 40% for our arts grants and", False, "voice 10"),
+        ("the city's own programs.", False, "voice 10"),
     )
     _turns, report = label(segments, printed(CUMMINGS_PACKET))
     assert report["introduced_voices"] == {"voice 10": "Brandi Cummings"}
     assert [s.speaker for s in segments] == [
         "Brandi Cummings", "Brandi Cummings", "Brandi Cummings",
         "unknown", "unknown", "unknown",
-        "Brandi Cummings", "Brandi Cummings",
+        "Brandi Cummings", "Brandi Cummings", "Brandi Cummings",
     ]  # fmt: skip
     assert report["stray_voice_lines"] == 1
 
@@ -246,8 +247,25 @@ def test_two_lines_in_a_row_in_another_voice_keep_that_voice_name():
         ("that use the center today?", False, "voice 08"),
         ("in the first year of the pilot?", False, "voice 08"),
         ("No, there is no fee for the", False, "voice 10"),
-        ("granted hours in the pilot.", False, "voice 10"),
+        ("granted hours in the pilot, and", False, "voice 10"),
+        ("none in the second year.", False, "voice 10"),
     )
     _turns, report = label(segments, printed(CUMMINGS_PACKET))
-    assert [s.speaker for s in segments][-2:] == ["Brandi Cummings", "Brandi Cummings"]
+    assert [s.speaker for s in segments][-3:] == ["Brandi Cummings"] * 3
     assert report["stray_voice_lines"] == 0
+
+
+def test_a_short_turn_in_the_introduced_voice_stays_unknown():
+    # Lafayette, Nov 17, 2026: a council question the diarizer put in the water manager's voice.
+    segments = lines(
+        ("Good evening. I'm Cari Bischoff, Water", True, "voice 24"),
+        ("Resources Manager here at the city.", False, "voice 24"),
+        ("Tonight I'll give the water supply update.", False, "voice 24"),
+        ("Water in storage evaporating higher", True, "voice 24"),
+        ("than just like stream flow?", False, "voice 24"),
+    )
+    pages = ("packet", 97, "Water Supply Update\nCari Bischoff, Water Resources Manager")
+    _turns, report = label(segments, printed(pages))
+    assert report["introduced_voices"] == {"voice 24": "Cari Bischoff"}
+    assert [s.speaker for s in segments] == ["Cari Bischoff"] * 3 + ["unknown"] * 2
+    assert report["short_introduced_lines"] == 2
