@@ -275,6 +275,58 @@ def test_an_agenda_packet_source_cites_the_packet_pages() -> None:
     assert skill._source_pages([source], pages) == ("d2p53", "d2p54")
 
 
+@pytest.mark.parametrize(
+    ("ref", "wanted"),
+    [
+        ("page 41", ("pk41",)),
+        ("pages 41 to 42", ("pk41", "pk42")),
+        ("pages 41 through 42", ("pk41", "pk42")),
+        ("pages 41-42", ("pk41", "pk42")),
+        ("pages 41–42", ("pk41", "pk42")),
+        ("p. 41", ("pk41",)),
+        ("p.41", ("pk41",)),
+        ("pp. 41-42", ("pk41", "pk42")),
+        ("p. 41 and 42", ("pk41", "pk42")),
+        ("pages 41, 42 and 45", ("pk41", "pk42", "pk45")),
+    ],
+)
+def test_each_page_reference_the_skill_writes_names_its_packet_pages(
+    ref: str, wanted: tuple[str, ...]
+) -> None:
+    pages = {f"pk{n}": _DocPage("packet", n) for n in range(32, 46)}
+    source = f"City of Boulder agenda packet, Nov. 12, 2026, staff report, {ref}."
+    assert skill._source_pages([source], pages) == wanted
+
+
+def test_and_lists_separate_pages_not_a_range() -> None:
+    """The reference "p. 32 and 38" means 32 and 38; 33 to 37 are not cited."""
+    pages = {f"pk{n}": _DocPage("packet", n) for n in range(32, 46)}
+    source = "City of Boulder agenda packet, Nov. 12, 2026, packet p. 32 and 38."
+    found = skill._source_pages([source], pages)
+    assert found == ("pk32", "pk38")
+    assert not {f"pk{n}" for n in range(33, 38)} & set(found)
+
+
+@pytest.mark.parametrize("ref", ["7 p.m.", "p.m. 5", "step 41"])
+def test_a_time_or_ordinary_number_is_not_a_page_reference(ref: str) -> None:
+    pages = {f"pk{n}": _DocPage("packet", n) for n in range(1, 60)}
+    source = f"City of Boulder agenda packet, Nov. 12, 2026, {ref}."
+    assert skill._source_pages([source], pages) == ()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Meeting packet p. 41, 1:10:24",
+        "Meeting packet, page 41, 5:02:11 to 5:03:00",
+    ],
+)
+def test_a_timestamp_after_a_page_list_names_no_page(source: str) -> None:
+    """A number followed by ":" is a video time, never the next page in the list."""
+    pages = {f"pk{n}": _DocPage("packet", n) for n in range(1, 60)}
+    assert skill._source_pages([source], pages) == ("pk41",)
+
+
 # ---------------------------------------------------------------- evidence that is there
 
 BUDGET = Recap(

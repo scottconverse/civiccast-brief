@@ -585,7 +585,19 @@ def _claim_paragraphs(
 
 
 _KIND_WORD = re.compile(r"\b(packet|minutes|agenda)\b", re.IGNORECASE)
-_PAGES_REF = re.compile(r"\bpages?\s+(\d+)(?:\s*(?:to|through|and|-|–)\s*(\d+))?", re.IGNORECASE)
+# "page 41", "pages 41 to 42", "p. 41", "p.41", "pp. 41-42", "p. 41 and 42",
+# "pages 41, 42 and 45". Only to/through/hyphen/en dash make a range; "and" and
+# commas list separate pages. The label needs a word boundary, so "7 p.m." and
+# "step 41" name no page. A number followed by ":" is a video timestamp ("page 41,
+# 1:10:24"), never a page, so it ends the list.
+_PAGES_REF = re.compile(
+    r"\b(?:pages?|pp?\.)\s*"
+    r"(\d+(?!\d*\s*:)(?:\s*(?:to|through|[-–])\s*\d+(?!\d*\s*:))?"
+    r"(?:\s*(?:,|and)\s*\d+(?!\d*\s*:)(?:\s*(?:to|through|[-–])\s*\d+(?!\d*\s*:))?)*)",
+    re.IGNORECASE,
+)
+_PAGE_TERM = re.compile(r"\s*(?:,|and)\s*", re.IGNORECASE)
+_PAGE_RANGE = re.compile(r"(\d+)\s*(?:to|through|[-–])\s*(\d+)", re.IGNORECASE)
 
 
 def _source_pages(sources: Sequence[str], pages: dict[str, Any] | None) -> tuple[str, ...]:
@@ -602,14 +614,19 @@ def _source_pages(sources: Sequence[str], pages: dict[str, Any] | None) -> tuple
         kind = next(k for k in ("packet", "minutes", "agenda") if k in kinds)
         wanted = [pid for pid, page in pages.items() if str(page.kind).lower() == kind]
         for match in _PAGES_REF.finditer(source):
-            first = int(match.group(1))
-            last = int(match.group(2) or first)
-            # A source can name a long range ("pages 112 to 118"); keep the pages the
-            # documents actually hold.
-            for number in range(first, min(last, first + 30) + 1):
-                for pid in wanted:
-                    if pages[pid].page == number:
-                        found.append(pid)
+            for term in _PAGE_TERM.split(match.group(1)):
+                span = _PAGE_RANGE.fullmatch(term.strip())
+                if span:
+                    first, last = int(span.group(1)), int(span.group(2))
+                else:
+                    first = int(term)
+                    last = first
+                # A source can name a long range ("pages 112 to 118"); keep the pages the
+                # documents actually hold.
+                for number in range(first, min(last, first + 30) + 1):
+                    for pid in wanted:
+                        if pages[pid].page == number:
+                            found.append(pid)
     return tuple(dict.fromkeys(found))
 
 

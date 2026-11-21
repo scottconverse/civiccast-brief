@@ -184,6 +184,9 @@ def test_a_claim_with_no_video_moment_gets_no_citation() -> None:
     markdown = render_markdown(recap, article(paragraph))
     assert "0:00:00" not in markdown
     assert "t=0s" not in markdown
+    # No video moment and no document page: the record is the meeting, not the video.
+    assert "(The meeting record)" in markdown
+    assert "The meeting video" not in markdown
 
 
 def test_a_genuine_moment_near_the_start_keeps_its_link() -> None:
