@@ -94,6 +94,7 @@ class Site:
     media_base_url: str
     slug: str
     audio_engine: str = ""
+    audio_fallback_engine: str = ""
 
 
 @dataclass(frozen=True)
@@ -721,6 +722,8 @@ def publish(
                     continue
             if not (audio / "episode.mp3").is_file():
                 engine = ["--engine", site.audio_engine] if site.audio_engine else []
+                if site.audio_fallback_engine:
+                    engine += ["--fallback-engine", site.audio_fallback_engine]
                 _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
             out = folder / "episode.json"
             argv = [

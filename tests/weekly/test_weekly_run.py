@@ -968,3 +968,59 @@ def test_a_recap_with_no_facts_makes_no_podcast_but_the_story_runs_and_the_recap
     assert ("script", "write") in names
     assert ("episode", "stage") in names
     assert ("article", "skill") not in names
+
+
+def test_the_local_audio_step_gets_the_fallback_engine(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+        audio_engine="gemini",
+        audio_fallback_engine="dia2",
+    )
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {
+            "kind": "episode",
+            "status": "published",
+            "meeting_id": "oWZpzjzjwnE",
+            "content_hash": "a" * 64,
+            "script": "[S1] hi\n",
+        }
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00")
+
+    audio = next(argv for step, argv in fake.calls if step == "audio")
+    assert _opt(audio, "--engine") == "gemini"
+    assert _opt(audio, "--fallback-engine") == "dia2"
+
+
+def test_no_fallback_engine_means_no_flag_on_the_audio_step(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+        audio_engine="gemini",
+    )
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {
+            "kind": "episode",
+            "status": "published",
+            "meeting_id": "oWZpzjzjwnE",
+            "content_hash": "a" * 64,
+            "script": "[S1] hi\n",
+        }
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00")
+
+    audio = next(argv for step, argv in fake.calls if step == "audio")
+    assert "--fallback-engine" not in audio

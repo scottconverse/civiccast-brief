@@ -125,6 +125,7 @@ def _site(args: argparse.Namespace, slug: str) -> Site | None:
         media_base_url=args.media_base_url,
         slug=slug,
         audio_engine=args.audio_engine or "",
+        audio_fallback_engine=args.audio_fallback_engine or "",
     )
 
 
@@ -227,6 +228,10 @@ def _site_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--base-url", help="public address of the site")
     parser.add_argument("--media-base-url", help="where the media files will be served")
     parser.add_argument("--audio-engine", help="voice engine (default: the audio command's)")
+    parser.add_argument(
+        "--audio-fallback-engine",
+        help="voice engine to retry with if the audio engine fails (default: none)",
+    )
     parser.add_argument(
         "--worker",
         type=Path,

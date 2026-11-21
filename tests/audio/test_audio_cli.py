@@ -1,10 +1,14 @@
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from civiccast_brief.audio import cli
 from civiccast_brief.audio.cli import build_parser, main
+from civiccast_brief.audio.engines import RenderResult
+from civiccast_brief.audio.errors import ConfigError, EngineError, FinishError
 from civiccast_brief.audio.ffmpeg import tools_available
 
 needs_ffmpeg = pytest.mark.skipif(not tools_available(), reason="ffmpeg/ffprobe not on PATH")
@@ -112,3 +116,172 @@ def test_fake_engine_run_writes_all_four_outputs(tmp_path: Path, capsys) -> None
     summary = capsys.readouterr().out
     assert "engine: fake (timing: exact)" in summary
     assert "chapters: 2" in summary and "(3 cues)" in summary
+
+
+# --- --fallback-engine -------------------------------------------------------------------
+
+
+class RecordingEngine:
+    """A stand-in engine: records each render, and fails before writing when given an error."""
+
+    def __init__(self, name: str, error: Exception | None = None) -> None:
+        self.name = name
+        self.error = error
+        self.renders: list[Path] = []
+
+    def render(self, lines, out_wav: Path) -> RenderResult:
+        self.renders.append(out_wav)
+        if self.error is not None:
+            out_wav.parent.mkdir(parents=True, exist_ok=True)
+            out_wav.write_bytes(b"partial")  # a half-written WAV the fallback must replace
+            raise self.error
+        return RenderResult(wav=out_wav, engine=self.name, timing="exact", lines=(), duration=1.0)
+
+
+def _patch_engines(monkeypatch, engines) -> None:
+    """Make ``make_engine`` build the stand-in engines; an exception value is raised instead."""
+
+    def make_engine(name, config):
+        value = engines[name]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.setattr(cli, "make_engine", make_engine)
+
+
+def _patch_finish(monkeypatch, error: Exception | None = None) -> None:
+    def finish_episode(render, script, out, *, intro=None, outro=None):
+        if error is not None:
+            raise error
+        return SimpleNamespace(
+            loudness=SimpleNamespace(integrated_lufs=-16.0, true_peak_dbtp=-1.0),
+            chapters={},
+            chapters_json=out / "chapters.json",
+            mp3=out / "episode.mp3",
+            duration=1.0,
+            transcript_vtt=out / "transcript.vtt",
+            cues=[],
+        )
+
+    monkeypatch.setattr(cli, "finish_episode", finish_episode)
+
+
+def _script(tmp_path: Path) -> Path:
+    script = tmp_path / "s.txt"
+    script.write_text(SCRIPT_TEXT, encoding="utf-8")
+    return script
+
+
+def test_a_failed_engine_renders_with_the_fallback(tmp_path: Path, capsys, monkeypatch) -> None:
+    primary = RecordingEngine("gemini", EngineError("daily quota spent"))
+    fallback = RecordingEngine("dia2")
+    _patch_engines(monkeypatch, {"gemini": primary, "dia2": fallback})
+    _patch_finish(monkeypatch)
+    out = tmp_path / "out"
+
+    code = main(
+        [
+            str(_script(tmp_path)),
+            "--engine",
+            "gemini",
+            "--fallback-engine",
+            "dia2",
+            "--out",
+            str(out),
+        ]
+    )
+
+    assert code == 0
+    assert primary.renders and fallback.renders
+    captured = capsys.readouterr()
+    assert "warning: gemini engine failed (daily quota spent); rendering with dia2" in captured.err
+    assert "engine: dia2 (timing: exact)" in captured.out
+    assert not (out / "work" / "voice.wav").exists(), "the partial WAV must be removed"
+
+
+def test_a_config_error_making_the_engine_uses_the_fallback(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    fallback = RecordingEngine("dia2")
+    _patch_engines(monkeypatch, {"gemini": ConfigError("no API key"), "dia2": fallback})
+    _patch_finish(monkeypatch)
+
+    code = main(
+        [
+            str(_script(tmp_path)),
+            "--engine",
+            "gemini",
+            "--fallback-engine",
+            "dia2",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert code == 0
+    assert fallback.renders
+    err = capsys.readouterr().err
+    assert "warning: gemini engine failed (no API key); rendering with dia2" in err
+
+
+def test_both_engines_failing_exits_one_with_both_messages(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    _patch_engines(
+        monkeypatch,
+        {"gemini": EngineError("gemini down"), "dia2": EngineError("box asleep")},
+    )
+    _patch_finish(monkeypatch)
+
+    code = main(
+        [
+            str(_script(tmp_path)),
+            "--engine",
+            "gemini",
+            "--fallback-engine",
+            "dia2",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "error: gemini down" in err and "error: box asleep" in err
+
+
+def test_no_fallback_engine_still_fails_as_before(tmp_path: Path, capsys, monkeypatch) -> None:
+    primary = RecordingEngine("gemini", EngineError("gemini down"))
+    _patch_engines(monkeypatch, {"gemini": primary, "dia2": RecordingEngine("dia2")})
+    _patch_finish(monkeypatch)
+
+    code = main([str(_script(tmp_path)), "--engine", "gemini", "--out", str(tmp_path / "out")])
+
+    assert code == 1
+    assert "error: gemini down" in capsys.readouterr().err
+
+
+def test_a_finish_failure_does_not_trigger_the_fallback(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    primary = RecordingEngine("gemini")
+    fallback = RecordingEngine("dia2")
+    _patch_engines(monkeypatch, {"gemini": primary, "dia2": fallback})
+    _patch_finish(monkeypatch, FinishError("loudness could not be measured"))
+
+    code = main(
+        [
+            str(_script(tmp_path)),
+            "--engine",
+            "gemini",
+            "--fallback-engine",
+            "dia2",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert code == 1
+    assert primary.renders and not fallback.renders
+    assert "error: loudness could not be measured" in capsys.readouterr().err
