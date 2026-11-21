@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from civiccast_brief.script.numbers import NUMBER_WORDS, number_atoms
-from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap
+from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap, named_place
 from civiccast_brief.script.writer import DISCLAIMER, SPEAKERS, ScriptLine
 
 MAX_LINE_WORDS = 45
@@ -436,7 +436,22 @@ def _is_reaction(text: str) -> bool:
 def header_text(recap: Recap) -> str:
     """The recap header: city, body and date. They come from the roster and the video title,
     not from the model, so the intro and outro may say them without citing a claim."""
-    return f"{recap.city} {recap.body} meeting, {recap.meeting_date}"
+    return f"{named_place(recap)} meeting, {recap.meeting_date}"
+
+
+def misnamed_bodies(recap: Recap) -> list[str]:
+    """A carried board named with the site's city: "Louisville Board of Education" for a
+    roundup whose label says "Boulder Valley Board of Education". Empty when every body is
+    the site's own (or a body's label is missing, which is reported elsewhere)."""
+    if not recap.body_label:
+        return []
+    label = recap.body_label.casefold()
+    out = []
+    for body in recap.body.split(" and "):
+        wrong = f"{recap.city} {body}"
+        if wrong.casefold() not in label:
+            out.append(wrong)
+    return out
 
 
 def _check_line(
@@ -452,6 +467,16 @@ def _check_line(
         return
     if line.text.strip() == DISCLAIMER:
         return
+    for wrong in misnamed_bodies(recap):
+        if re.search(rf"(?<!\w){re.escape(wrong)}(?!\w)", line.text, re.IGNORECASE):
+            issues.append(
+                Issue(
+                    number,
+                    "error",
+                    "body_place",
+                    f"{wrong!r} is not a board: {recap.body_label!r}",
+                )
+            )
     # A chapter title is shown on screen and never spoken, so it may use digits.
     if not line.is_chapter and _DIGIT_RE.search(line.text):
         issues.append(

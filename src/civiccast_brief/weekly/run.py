@@ -409,7 +409,7 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
     entry["folder"] = str(folder)
     try:
         if "recap" not in done:
-            argv = ["roundup", "--out", str(folder / "recap.json")]
+            argv = ["roundup", "--out", str(folder / "recap.json"), "--city", str(settings.city)]
             for m in sorted(meetings, key=lambda m: m["day"]):
                 argv += ["--recap", str(Path(m["folder"]) / "recap.json")]
             _call(steps.script, argv, "script roundup")

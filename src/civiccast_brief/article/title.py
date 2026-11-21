@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from civiccast_brief.article.writer import Issue, _check_text, headline_issues
-from civiccast_brief.script.recap import Recap
+from civiccast_brief.script.recap import Recap, named_meeting
 
 MAX_WORDS = 14
 
@@ -48,7 +48,7 @@ def build_prompt(recap: Recap, feedback: str = "") -> str:
     claims = [{"id": c.id, "text": c.text} for c in recap.claims]
     parts = [
         PROMPT,
-        f"Meetings (from the header): {recap.body} of {recap.city}, {recap.meeting_date}.",
+        f"Meetings (from the header): {named_meeting(recap)}, {recap.meeting_date}.",
     ]
     if feedback.strip():
         parts.append(

@@ -584,21 +584,44 @@ def meeting_name(title: str, city: str = "") -> str:
     return " ".join(words)
 
 
+def _meeting_words(title: str, city: str) -> list[str]:
+    """The name's core words with "regular" taken out: "Regular" is the default sitting, not
+    a second kind of meeting, so "Town Council Meeting" and "Town Council Regular Meeting
+    10/26/26" are one meeting. A title that names another kind as well ("Regular Session",
+    "Study Session", "Special Meeting") keeps that word, so the sessions stay apart."""
+    words = _core(meeting_name(title, city), city)
+    return [w for w in words if w != "regular"]
+
+
+def _channel_upload(meeting: Found) -> bool:
+    """A channel's own upload, with no portal's media, agenda or archive behind it."""
+    return not (
+        meeting.media_url or meeting.agenda or meeting.granicus_host or meeting.cablecast_host
+    )
+
+
 def _one_video_per_meeting(by_key: dict[str, Found], city: str) -> None:
     """Two videos of one meeting (the portal's link and the channel's upload, or two uploads)
-    would make two episodes of it. The first one found runs: a portal meeting, with its
-    agenda, before a channel video."""
+    would make two episodes of it. The portal meeting runs before a channel video, whatever
+    order the sources were read in."""
     kept: dict[tuple[str, date, str], Found] = {}
     for key, meeting in list(by_key.items()):
         if meeting.reason or not meeting.body or not meeting.video:
             continue
         # By the name's core words, so "Arts in Public Places Commission - October 15" and
         # "Art in Public Places Board Meeting, Oct. 15" are one meeting.
-        same = (meeting.body, meeting.day, " ".join(_core(meeting_name(meeting.title, city), city)))
+        same = (meeting.body, meeting.day, " ".join(_meeting_words(meeting.title, city)))
         first = kept.setdefault(same, meeting)
-        if first is not meeting:
-            reason = f"another video of this meeting runs ({first.video})"
-            by_key[key] = replace(meeting, reason=reason)
+        if first is meeting:
+            continue
+        if _channel_upload(first) and not _channel_upload(meeting):
+            kept[same] = meeting
+            by_key[first.key] = replace(
+                first, reason=f"another video of this meeting runs ({meeting.video})"
+            )
+            continue
+        reason = f"another video of this meeting runs ({first.video})"
+        by_key[key] = replace(meeting, reason=reason)
 
 
 def find_meetings(

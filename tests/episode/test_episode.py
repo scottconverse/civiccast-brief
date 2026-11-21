@@ -521,6 +521,32 @@ def test_a_dated_headline_does_not_name_the_city_twice(tmp_path):
     assert headline("City Council") == "Longmont City Council, November 10, 2026"
 
 
+def test_the_dated_headline_names_the_place_the_boards_channel_names(tmp_path):
+    """Louisville, 17 November 2026: the school board's episode went out as "Boulder Board of
+    Education" because the shared roster heads its city "Boulder"; the district's own channel
+    names Boulder Valley."""
+    from types import SimpleNamespace as NS
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "dfQ44_yL_ac.info.json").write_text(
+        json.dumps({"channel": "Boulder Valley School District Board of Education"}),
+        encoding="utf-8",
+    )
+    (raw / "council.info.json").write_text(
+        json.dumps({"channel": "Louisville City Council"}), encoding="utf-8"
+    )
+    board = NS(city="Boulder", body="Board of Education", meeting_date="November 17, 2026")
+    assert B._headline(board, tmp_path, roundup=False) == (
+        "Boulder Valley Board of Education, November 17, 2026"
+    )
+    # A city's own channel names only the header's city before the body: its headline as before.
+    council = NS(city="Louisville", body="City Council", meeting_date="November 17, 2026")
+    assert B._headline(council, tmp_path, roundup=False) == (
+        "Louisville City Council, November 17, 2026"
+    )
+
+
 def test_a_script_with_no_facts_is_held_not_published(tmp_path, meeting):
     # Boulder, Nov 15 2026: a recap with no claims gave a 24-second welcome and sign-off that
     # published by itself.

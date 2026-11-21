@@ -65,7 +65,7 @@ from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.review.desk import stage_item
 from civiccast_brief.review.store import ReviewError
-from civiccast_brief.script.recap import load_recap, save_recap
+from civiccast_brief.script.recap import load_recap, named_bodies, save_recap
 from civiccast_brief.script.writer import ROUNDUP_ID
 
 #: The note for a story that passes the check but is thinner than the facts support.
@@ -684,6 +684,7 @@ def _from_stories(args: argparse.Namespace) -> int:
         merged,
         city=base.city,
         body=base.body,
+        body_label=base.body_label,
         meeting_date=base.meeting_date,
         video_id=ROUNDUP_ID,
         media_url=None,
@@ -803,7 +804,7 @@ def _stage(args: argparse.Namespace) -> int:
             meeting_id=meeting_id,
             title=article.headline,
             meeting_date=recap.meeting_date,
-            body=recap.body,
+            body=named_bodies(recap),
             checks_passed=report.passed,
             checks_note=report.render(),
             article=article_to_dict(article),

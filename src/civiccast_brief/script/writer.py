@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from civiccast_brief.script.recap import Recap
+from civiccast_brief.script.recap import Recap, named_meeting
 
 DISCLAIMER = (
     "This episode is AI-generated from the public meeting video; check the official record."
@@ -87,7 +87,7 @@ def build_prompt(recap: Recap, feedback: str = "", editor: tuple[str, str] | Non
     claims = [{"id": c.id, "topic": c.topic, "text": c.text} for c in recap.claims]
     parts = [
         PROMPT_HEAD.replace("{video_place}", recap.video_place),
-        f"Meeting (from the recap header): {recap.body} of {recap.city}, {recap.meeting_date}.",
+        f"Meeting (from the recap header): {named_meeting(recap)}, {recap.meeting_date}.",
     ]
     if recap.video_id == ROUNDUP_ID:
         parts.insert(1, ROUNDUP_NOTE.replace("{video_place}", recap.video_place))

@@ -46,6 +46,11 @@ class Recap:
     #: The meeting's own media address for a meeting that is not on YouTube (PR #99's source
     #: data). Its presence means the video is not on YouTube, so no youtube.com link is made.
     media_url: str | None = None
+    #: A weekly roundup's bodies each named with the place it serves, when they are not all the
+    #: site's city's boards: "Boulder Valley Board of Education and Louisville City Council".
+    #: Empty for one meeting and for a roundup of one city's own bodies, whose labels are
+    #: ``body`` with the city, exactly as before.
+    body_label: str = ""
 
     def claim(self, claim_id: str) -> Claim | None:
         for claim in self.claims:
@@ -62,6 +67,7 @@ def recap_to_dict(recap: Recap) -> dict[str, Any]:
     return {
         "city": recap.city,
         "body": recap.body,
+        **({"body_label": recap.body_label} if recap.body_label else {}),
         "meeting_date": recap.meeting_date,
         "video_id": recap.video_id,
         "video_place": recap.video_place,
@@ -99,6 +105,7 @@ def recap_from_dict(data: dict[str, Any]) -> Recap:
             claims=claims,
             video_place=str(data.get("video_place") or DEFAULT_VIDEO_PLACE),
             media_url=str(data["media_url"]) if data.get("media_url") else None,
+            body_label=str(data.get("body_label") or ""),
         )
     except (KeyError, TypeError) as exc:
         raise RecapFormatError(f"recap is missing a field: {exc}") from exc
@@ -126,6 +133,59 @@ def save_recap(recap: Recap, path: Path) -> None:
     Path(path).write_text(
         json.dumps(recap_to_dict(recap), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+
+
+def named_bodies(recap: Recap) -> str:
+    """The bodies as a label names them: a roundup's ``body_label`` when it has one, else
+    ``body``. "Board of Education and City Council" becomes "Boulder Valley Board of Education
+    and Louisville City Council" for a roundup that carries another city's board."""
+    return recap.body_label or recap.body
+
+
+def named_place(recap: Recap) -> str:
+    """The bodies with the city first: "Louisville City Council", or a roundup's label, whose
+    bodies each carry their own place and so need no city put in front."""
+    return recap.body_label or f"{recap.city} {recap.body}"
+
+
+def named_meeting(recap: Recap) -> str:
+    """The bodies with their place, for a heading or a prompt: "City Council of Longmont".
+    A roundup whose bodies are not all the site's city's keeps each body's own place from its
+    label, so a school board is never given the site's city."""
+    return recap.body_label or f"{recap.body} of {recap.city}"
+
+
+#: Words that name what a board is, not the place it serves. A channel's "Boulder Valley
+#: School District Board of Education" names the place "Boulder Valley" for a board whose
+#: shared roster is headed "Boulder".
+_PLACE_TAIL = frozenset({"school", "district", "county", "city", "town", "village", "of", "the"})
+
+
+def channel_place(recap: Recap, meeting_dir: Path) -> str:
+    """The place the video's channel names before the body, when it is not the header's city.
+
+    From the meeting's own record (``raw/<id>.info.json``): the Boulder Valley School District
+    board's channel says "Boulder Valley School District Board of Education", while the roster
+    Louisville carries for the board heads its city "Boulder"."""
+    body = " ".join(recap.body.split())
+    raw = Path(meeting_dir) / "raw"
+    if not body or not raw.is_dir():
+        return ""
+    for info in sorted(raw.glob("*.info.json")):
+        try:
+            data = json.loads(info.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        channel = " ".join(str(data.get("channel") or "").split())
+        if not channel.casefold().endswith(f" {body.casefold()}"):
+            continue
+        words = channel[: -len(body)].split()
+        while words and words[-1].strip(",.").casefold() in _PLACE_TAIL:
+            words.pop()
+        place = " ".join(word.strip(",") for word in words).strip()
+        if place and place.casefold() != recap.city.casefold():
+            return place
+    return ""
 
 
 def seconds_of(timestamp: str) -> int:

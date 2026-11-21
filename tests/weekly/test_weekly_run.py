@@ -325,6 +325,8 @@ def test_two_meetings_make_a_roundup_with_their_recaps_in_date_order(tmp_path):
         ("episode", "stage"),
     ]
     assert _opt(fake.calls[-1][1], "--meeting") == str(settings.work / "2026-11-10-roundup")
+    # The site's city goes with the recaps, so a board it shares from another city counts.
+    assert _opt(roundup, "--city") == str(settings.city)
 
 
 def test_publish_builds_each_published_episode_once_with_its_story(tmp_path):
