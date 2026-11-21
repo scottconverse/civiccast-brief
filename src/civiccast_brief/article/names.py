@@ -791,6 +791,33 @@ _PLACE_WORDS = frozenset(
 )
 
 
+#: The last word of a company, partnership or firm: a run that ends in one of these names no
+#: person, even beside a lead like "the applicant," (Boulder, Nov 2026: "Conscience Bay Company").
+_COMPANY_WORDS = frozenset(
+    {
+        "company",
+        "companies",
+        "inc",
+        "incorporated",
+        "llc",
+        "corp",
+        "corporation",
+        "partners",
+        "partnership",
+        "group",
+        "holdings",
+        "enterprises",
+        "associates",
+        "ventures",
+        "industries",
+        "ltd",
+        "limited",
+        "plc",
+        "gmbh",
+    }
+)
+
+
 #: The last word of a plan, body, agency, district or place: a run that ends in one of these
 #: names no one ("Boulder Valley Comprehensive Plan", "Federal Emergency Management Agency").
 _NON_PERSON_TAIL = (
@@ -877,8 +904,13 @@ def _is_person_like(name: str, role: str) -> bool:
     tokens = _tokens(name)
     if not tokens:
         return False
+    # A printed title says a person is meant, even when the name ends in a company word:
+    # "Mayor Ann Co" and "Council Member Jo Group" are people. A titleless run that ends in a
+    # company word ("Conscience Bay Company") names no one.
     if role:
         return True
+    if tokens[-1].casefold() in _COMPANY_WORDS:
+        return False
     if tokens[-1] in _PLACE_WORDS:
         return False
     return len(tokens) >= 2
@@ -898,6 +930,27 @@ _PERSON_VERB_RE = re.compile(
 _PERSON_LEAD_RE = re.compile(
     r"\b(?:resident|speaker|named|commenter|applicant)\s*,?\s*$", re.IGNORECASE
 )
+#: The party words a name may be "of the ..." of ("Daniel Eisenman of the applicant"). A closed,
+#: case-sensitive list: only a party to a land-use matter is a person's role. Any other "of the
+#: <word>" is ordinary text ("Front Range of the state", "Winter Festival of the arts") and gives
+#: no person cue at all, so it stays exactly as written.
+_OF_ROLE_WORDS = ("applicant", "appellant", "petitioner", "developer")
+_OF_ROLE_RE = re.compile(r"\s+of\s+the\s+(?P<role>" + "|".join(_OF_ROLE_WORDS) + r")\b")
+
+
+def _of_role(text: str, span: Span) -> str:
+    """The party role a printed name is "of the ..." of ("the applicant"), or ""."""
+    if span.role:
+        return ""
+    tokens = _tokens(span.name)
+    if not tokens or tokens[-1].casefold() in _NON_PERSON_TAIL | _COMPANY_WORDS:
+        return ""
+    match = _OF_ROLE_RE.match(text, span.end)
+    if match is None:
+        return ""
+    return f"the {match.group('role')}"
+
+
 #: A job named right after a run, which says a person is meant: "Jo Smith started July 1 as the
 #: district's new director of gifted education". A project or an event has no job title, so
 #: this is the one non-speech cue a titleless run may use.
@@ -1156,6 +1209,7 @@ def _unmatched_person(text: str, span: Span) -> bool:
     return bool(
         _PERSON_VERB_RE.match(text, span.end)
         or _PERSON_ROLE_AFTER_RE.match(text, span.end)
+        or _of_role(text, span)
         or _PERSON_LEAD_RE.search(text[max(0, span.lead_start - 40) : span.lead_start])
     )
 
@@ -1528,6 +1582,10 @@ def _story_labels(texts: Iterable[str], people: People) -> _Story:
             title = _printed_title(text, span)
             if title:
                 titles[surname] = _more_specific(titles.get(surname), title)
+            elif of_role := _of_role(text, span):
+                # "Daniel Eisenman of the applicant" prints as "the applicant": the role is the
+                # label, and a later bare "Eisenman" takes the same one.
+                plain.setdefault(surname, of_role)
             elif surname not in plain:
                 context = text[max(0, span.start - 60) : span.end + 60]
                 plain[surname] = _role_phrase("", context, False)
@@ -1602,6 +1660,15 @@ def _label_range(text: str, span: Span, label: str) -> tuple[int, int]:
         # The same title is printed after the name ("Neil Anderson, assistant superintendent of
         # schools, said"): the label stands in for the whole phrase, commas and all.
         return span.start, after[1]
+    of_role = _of_role(text, span)
+    # "Daniel Eisenman of the applicant" -> "The applicant": the "of the applicant" is the
+    # printed role, so the label takes its place rather than reading "a speaker of the ...".
+    if (
+        of_role
+        and _tokens(of_role)[-1:] == _tokens(label)[-1:]
+        and (match := _OF_ROLE_RE.match(text, span.end)) is not None
+    ):
+        return span.start, match.end()
     return span.start, span.end
 
 

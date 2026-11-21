@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.meeting.roster import Roster
 from civiccast_brief.script.recap import Recap, named_meeting
 
 #: A sentence older saved scripts carry as line 2. It is no longer written, spoken or shown;
@@ -153,16 +154,126 @@ def _line_from_dict(obj: dict[str, Any], bad: list[str], raw: str) -> ScriptLine
     return ScriptLine(speaker=speaker, text=text, claim_ids=tuple(str(c) for c in claim_ids))
 
 
+#: Speech and vote verbs a bare first name may be directly followed by at the start of a
+#: sentence: "Rob said", "Rob voted". A sentence opener that only looks like a first name
+#: ("Will the board act?") is left alone.
+_SPEECH_OR_VOTE_VERBS = frozenset(
+    {
+        "said",
+        "says",
+        "asked",
+        "asks",
+        "told",
+        "tells",
+        "spoke",
+        "speaks",
+        "added",
+        "noted",
+        "moved",
+        "seconded",
+        "explained",
+        "argued",
+        "urged",
+        "presented",
+        "reported",
+        "answered",
+        "replied",
+        "responded",
+        "agreed",
+        "voted",
+        "votes",
+        "voting",
+        "testified",
+        "thanked",
+        "commented",
+        "questioned",
+        "recalled",
+        "warned",
+        "wrote",
+        "called",
+    }
+)
+_SENTENCE_START_RE = re.compile(r"(^|[.!?:][\"'”’)]?\s*)$")
+_WORD_AFTER_RE = re.compile(r"\s+(\S+)")
+_WORD_EDGES = "\"'“”’.,;:!?"
+
+
+def _at_sentence_start(text: str, start: int) -> bool:
+    return bool(_SENTENCE_START_RE.search(text[:start]))
+
+
+def _first_name_replacement(text: str, match: re.Match[str], member: Any) -> str:
+    """The full record name for a bare first name, or the name as printed.
+
+    A first name followed by another capitalised word ("Rob Smith") is a different person's
+    name, not this member's: it stays. At the start of a sentence, only a possessive ("Rob's
+    proposal") or a speech or vote verb directly after it ("Rob said") expands; any other
+    capitalised sentence opener ("Will the board act?") stays. Lower-case words never change.
+    """
+    end = match.end()
+    if text[end : end + 2] in {"'s", "’s"}:
+        return member.name
+    after = _WORD_AFTER_RE.match(text, end)
+    if after is not None:
+        word = after.group(1).strip(_WORD_EDGES)
+        if word[:1].isupper():
+            return match.group(0)
+        if _at_sentence_start(text, match.start()) and word.lower() not in _SPEECH_OR_VOTE_VERBS:
+            return match.group(0)
+    elif _at_sentence_start(text, match.start()):
+        return match.group(0)
+    return member.name
+
+
+def expand_first_names(lines: list[ScriptLine], roster: Roster | None) -> list[ScriptLine]:
+    """A roster member's bare first name prints as the full record name.
+
+    The claims may carry only a first name ("the item came from Rob", "Rob's proposal"); the
+    roster holds the record's full name, so the script says "Rob Kaplan". A first name two
+    members share is ambiguous and left alone, as is a host's own name.
+    """
+    if roster is None:
+        return lines
+    hosts = {name.casefold() for name in SPEAKERS.values()}
+    by_first: dict[str, list[Any]] = {}
+    for member in roster.members:
+        first = member.first.strip()
+        if first and first.casefold() not in hosts:
+            by_first.setdefault(first, []).append(member)
+    unique = {first: members[0] for first, members in by_first.items() if len(members) == 1}
+    if not unique:
+        return lines
+    expanded: list[ScriptLine] = []
+    for line in lines:
+        text = line.text
+        for first, member in unique.items():
+            pattern = re.compile(rf"\b{re.escape(first)}\b")
+            text = pattern.sub(
+                lambda match, member=member, text=text: _first_name_replacement(
+                    text, match, member
+                ),
+                text,
+            )
+        expanded.append(replace_line(line, text))
+    return expanded
+
+
+def replace_line(line: ScriptLine, text: str) -> ScriptLine:
+    return ScriptLine(line.speaker, text, line.claim_ids)
+
+
 def write_script(
     recap: Recap,
     complete: Callable[[str], str],
     *,
     feedback: str = "",
     editor: tuple[str, str] | None = None,
+    roster: Roster | None = None,
 ) -> list[ScriptLine]:
     """Ask the model for the script and parse it. ``complete`` takes the prompt and returns
-    the model's answer text. ``editor`` is (the editor's note, the script it is about)."""
-    return parse_script(complete(build_prompt(recap, feedback, editor)))
+    the model's answer text. ``editor`` is (the editor's note, the script it is about). With a
+    ``roster``, a member's bare first name is printed as the record's full name."""
+    return expand_first_names(parse_script(complete(build_prompt(recap, feedback, editor))), roster)
 
 
 def render_txt(lines: list[ScriptLine]) -> str:

@@ -1523,3 +1523,62 @@ def test_a_surname_that_ends_in_s_is_not_taken_for_a_plural_title() -> None:
         ("Jo Chiefs spoke.", "Jo Chiefs"),
     ):
         assert [(span.name, span.role) for span in spans(text)] == [(name, "")], text
+
+
+def test_a_name_of_the_applicant_loses_the_name_and_the_bare_surname_follows():
+    """ "Daniel Eisenman of the applicant" is no record name: the applicant is the label, and a
+    later bare "Eisenman" takes the same label (Boulder, Nov 12 2026)."""
+    text = (
+        "Daniel Eisenman of the applicant, Conscience Bay Company, described the venue. "
+        "Eisenman said it would take years."
+    )
+    out, changes = repair_text(text, PEOPLE)
+    assert out == (
+        "The applicant, Conscience Bay Company, described the venue. "
+        "The applicant said it would take years."
+    )
+    assert "Eisenman" not in out
+    assert changes and "no record match" in changes[0]
+
+
+def test_a_company_is_not_a_person_even_after_the_applicant():
+    text = "Daniel Eisenman of the applicant, Conscience Bay Company, described the venue."
+    out, _ = repair_text(text, PEOPLE)
+    assert out == "The applicant, Conscience Bay Company, described the venue."
+    assert "a speaker" not in out
+
+
+def test_a_bill_a_program_or_a_body_is_not_made_a_person_by_of_the():
+    text = "Senate Bill of the county passed. The Dream Lab of the city opened."
+    out, changes = repair_text(text, PEOPLE)
+    assert out == text
+    assert changes == []
+
+
+def test_only_a_party_word_after_of_the_is_a_person_cue():
+    """ "of the <anything>" once read every capitalised run as a person and the word as the
+    label, so places, streets and events lost their names. Only a closed list of party words
+    is a role; every other "of the ..." stays exactly as written."""
+    for text in (
+        "Front Range of the state",
+        "Main Street of the city",
+        "Winter Festival of the arts",
+        "Jo Smith of the county said",
+    ):
+        out, changes = repair_text(text, PEOPLE)
+        assert out == text, text
+        assert changes == [], text
+
+
+def test_a_print_role_beats_a_company_word_but_a_titleless_run_does_not():
+    """A company word makes a titleless run a company ("Conscience Bay Company"), never a
+    person. A printed role says a person is meant: "Mayor Ann Co" and "Council Member Jo
+    Group" are people and stay name-checked."""
+    from civiccast_brief.article.names import _COMPANY_WORDS, _is_person_like
+
+    assert _is_person_like("Ann Co", "Mayor")
+    assert _is_person_like("Jo Group", "Council Member")
+    assert not _is_person_like("Conscience Bay Company", "")
+    # "Co" is a surname too, so it is not a company word.
+    assert "co" not in _COMPANY_WORDS
+    assert "l l c" not in _COMPANY_WORDS

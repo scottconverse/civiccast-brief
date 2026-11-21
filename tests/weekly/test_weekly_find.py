@@ -671,3 +671,199 @@ def test_two_videos_of_one_meeting_titled_two_ways_make_one_episode():
     assert [m.reason for m in found if m.reason] == [
         "another video of this meeting runs (MMMMMMMMMMM)"
     ]
+
+
+NO_PORTAL_VIDEO = "the portal lists no video for this meeting"
+
+
+def _boulder_portal():
+    return Source(kind="primegov", bodies=(COUNCIL,), url="https://boulder.primegov.com")
+
+
+def _special_portal(
+    video=None, title="City Council Special Meeting", date_=datetime(2026, 11, 5, 18, 0)
+):
+    return _meeting(title, date_, video)
+
+
+def _special_video(video_id="n8OxJlE_2ME", title="November 5, 2026 City Council Special Meeting"):
+    return NS(video_id=video_id, title=title, published="2026-11-06T01:00:00Z")
+
+
+def test_a_portal_meeting_with_no_video_gives_its_agenda_and_documents_to_the_same_days_video():
+    """Boulder's 12 Nov 2026 PrimeGov entry had the agenda and packet but no video link; the
+    channel carried the same meeting. They must be one meeting, with the records."""
+    agenda = Agenda("https://boulder.primegov.com/agenda/1", ("1. Call to order",))
+    portal = _special_portal()
+    video = _special_video()
+
+    def documents(url, meeting, body):
+        return {"format": 1, "documents": [{"url": "https://boulder.test/packet"}]}, [
+            "packet: 323 pages"
+        ]
+
+    listers = Listers(
+        primegov=lambda url, first, last: [portal],
+        primegov_agenda=lambda url, m: agenda,
+        primegov_documents=documents,
+        youtube=lambda cid: [video],
+    )
+    found, problems = find_meetings([_boulder_portal(), CHANNEL], FIRST, LAST, listers)
+
+    assert problems == []
+    assert len(found) == 1
+    (meeting,) = found
+    assert meeting.video == "n8OxJlE_2ME"
+    assert meeting.reason == ""
+    assert meeting.agenda == agenda
+    assert meeting.documents() == (
+        {"format": 1, "documents": [{"url": "https://boulder.test/packet"}]},
+        ["packet: 323 pages"],
+    )
+    assert all(m.reason != NO_PORTAL_VIDEO for m in found)
+
+
+def test_same_day_different_sessions_stay_apart_when_a_portal_meeting_has_no_video():
+    sessions = [
+        ("City Council Study Session", "City Council Regular Session"),
+        ("City Council Special Meeting", "City Council Regular Session"),
+        ("City Council Meeting Part 1", "City Council Meeting Part 2"),
+    ]
+    for portal_title, video_title in sessions:
+        portal = _special_portal(title=portal_title)
+        video = _special_video(title=f"November 5, 2026 {video_title}")
+        found, _ = find_meetings(
+            [_boulder_portal(), CHANNEL],
+            FIRST,
+            LAST,
+            Listers(
+                primegov=lambda url, f, l, portal=portal: [portal],
+                youtube=lambda cid, video=video: [video],
+            ),
+        )
+        assert [m.reason for m in found if m.reason] == [NO_PORTAL_VIDEO], (portal_title, found)
+        assert [m.video for m in found if not m.reason] == ["n8OxJlE_2ME"]
+
+
+def test_two_videos_that_could_match_keep_the_portal_meeting_unrun():
+    """Two uploads of one title: the portal's records are not guessed onto either."""
+    portal = _special_portal()
+    videos = [
+        _special_video("n8OxJlE_2ME"),
+        _special_video("AAAAAAAAAAA"),
+    ]
+    listers = Listers(
+        primegov=lambda url, first, last: [portal],
+        primegov_documents=lambda url, m, body: ({"format": 1, "documents": []}, []),
+        youtube=lambda cid: videos,
+    )
+    found, _ = find_meetings([_boulder_portal(), CHANNEL], FIRST, LAST, listers)
+
+    assert NO_PORTAL_VIDEO in {m.reason for m in found}
+    assert all(not m.documents for m in found if not m.reason)
+
+
+def test_a_cancelled_portal_meeting_gives_nothing_to_a_video():
+    portal = _special_portal(title="CANCELLED: City Council Special Meeting")
+    video = _special_video()
+    listers = Listers(
+        primegov=lambda url, first, last: [portal],
+        primegov_documents=lambda url, m, body: ({"format": 1, "documents": []}, []),
+        youtube=lambda cid: [video],
+    )
+    found, _ = find_meetings([_boulder_portal(), CHANNEL], FIRST, LAST, listers)
+
+    assert {(m.video, m.reason) for m in found} == {
+        ("n8OxJlE_2ME", ""),
+        ("", "the meeting was cancelled"),
+    }
+    video_entry = next(m for m in found if m.video)
+    assert video_entry.documents is None
+    assert all(m.reason != NO_PORTAL_VIDEO for m in found)
+
+
+def test_a_video_that_already_has_documents_keeps_them_beside_the_portals():
+    portal = _special_portal()
+    own = _special_portal(video="https://www.youtube.com/watch?v=n8OxJlE_2ME")
+    asked = {}
+
+    def documents(url, meeting, body):
+        asked[meeting.title] = True
+        if meeting is portal:
+            return {"format": 1, "documents": [{"url": "https://boulder.test/packet"}]}, ["packet"]
+        return {"format": 1, "documents": [{"url": "https://boulder.test/minutes"}]}, ["minutes"]
+
+    listers = Listers(
+        primegov=lambda url, first, last: [own, portal],
+        primegov_documents=documents,
+    )
+    found, _ = find_meetings([_boulder_portal()], FIRST, LAST, listers)
+
+    assert len(found) == 1
+    data, lines = found[0].documents()
+    assert [d["url"] for d in data["documents"]] == [
+        "https://boulder.test/minutes",
+        "https://boulder.test/packet",
+    ]
+    assert lines == ["minutes", "packet"]
+
+
+def test_two_portal_entries_for_one_video_keep_both_sets_of_records():
+    """Two portal entries can match one video. The second join must chain onto the records the
+    first added, not onto the snapshot taken before the loop."""
+    first = _special_portal(title="City Council Special Meeting")
+    second = _special_portal(title="City Council Special")
+    video = _special_video()
+
+    def documents(url, meeting, body):
+        if meeting is first:
+            return {"format": 1, "documents": [{"url": "https://boulder.test/one"}]}, ["one"]
+        return {"format": 1, "documents": [{"url": "https://boulder.test/two"}]}, ["two"]
+
+    listers = Listers(
+        primegov=lambda url, f, last: [first, second],
+        primegov_documents=documents,
+        youtube=lambda cid: [video],
+    )
+    found, _ = find_meetings([_boulder_portal(), CHANNEL], FIRST, LAST, listers)
+
+    assert len(found) == 1
+    data, lines = found[0].documents()
+    assert [d["url"] for d in data["documents"]] == [
+        "https://boulder.test/one",
+        "https://boulder.test/two",
+    ]
+    assert lines == ["one", "two"]
+
+
+def test_chain_of_no_fetch_and_one_fetch_is_the_one_fetch():
+    """A join with nothing on one side must not wrap the other side's fetch."""
+    from civiccast_brief.weekly.find import _chain
+
+    def fetch():
+        return {"format": 1, "documents": [{"url": "x"}]}, ["x"]
+
+    assert _chain(None, fetch) is fetch
+    assert _chain(fetch, None) is fetch
+    assert _chain(None, None) is None
+
+
+def test_a_portal_meeting_with_no_video_joins_the_same_video_in_any_source_order():
+    portal = _special_portal()
+    video = _special_video()
+    listers = Listers(
+        primegov=lambda url, first, last: [portal],
+        primegov_agenda=lambda url, m: Agenda("https://boulder.test/agenda", ("1. Call to order",)),
+        primegov_documents=lambda url, m, body: ({"format": 1, "documents": [{"url": "p"}]}, []),
+        youtube=lambda cid: [video],
+    )
+    results = []
+    for sources in ([_boulder_portal(), CHANNEL], [CHANNEL, _boulder_portal()]):
+        found, _ = find_meetings(sources, FIRST, LAST, listers)
+        results.append(
+            [
+                (m.key, m.reason, m.agenda is not None, m.documents() if m.documents else None)
+                for m in found
+            ]
+        )
+    assert results[0] == results[1]

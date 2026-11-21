@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from civiccast_brief import models
+from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.script import llm
 from civiccast_brief.script.checker import (
     check_script,
@@ -68,16 +69,17 @@ def _writer(args: argparse.Namespace, recap) -> Callable[[str], str]:
 def _write(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     feedback = args.feedback.read_text(encoding="utf-8") if args.feedback else ""
+    roster = load_roster(args.roster) if args.roster else None
     try:
         try:
-            lines = write_script(recap, _writer(args, recap), feedback=feedback)
+            lines = write_script(recap, _writer(args, recap), feedback=feedback, roster=roster)
         except llm.ModelError as exc:
             # The model sometimes answers with nothing at all. One more ask is worth it: an
             # empty answer is not the story failing a check, it is no answer.
             if "empty" not in str(exc):
                 raise
             print("the model answered nothing; asking once more", file=sys.stderr)
-            lines = write_script(recap, _writer(args, recap), feedback=feedback)
+            lines = write_script(recap, _writer(args, recap), feedback=feedback, roster=roster)
     except (
         llm.ModelError,
         models.ModelCallError,
@@ -91,7 +93,7 @@ def _write(args: argparse.Namespace) -> int:
         print(f"dropped empty chapter: {mark.text}")
     json_path = args.out.with_suffix(".json")
     save_script(lines, args.out, json_path)
-    report = check_script(recap, lines)
+    report = check_script(recap, lines, roster=roster)
     print(f"wrote {args.out} and {json_path}")
     print(report.render())
     return 0 if report.passed else 1
@@ -100,7 +102,8 @@ def _write(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     lines = load_script(args.script)
-    report = check_script(recap, lines)
+    roster = load_roster(args.roster) if args.roster else None
+    report = check_script(recap, lines, roster=roster)
     if args.model_check:
         report = model_check(report, recap, _model_call(args.model))
     text = report.render()
@@ -163,12 +166,13 @@ def _roundup(args: argparse.Namespace) -> int:
 def _repair(args: argparse.Namespace) -> int:
     recap = load_recap(args.recap)
     lines = load_script(args.script)
-    kept, dropped = drop_unsupported(recap, lines)
+    roster = load_roster(args.roster) if args.roster else None
+    kept, dropped = drop_unsupported(recap, lines, roster)
     json_path = args.out.with_suffix(".json")
     save_script(kept, args.out, json_path)
     for line in dropped:
         print(f"dropped {line.speaker}: {line.text}")
-    report = check_script(recap, kept)
+    report = check_script(recap, kept, roster=roster)
     print(f"wrote {args.out} and {json_path}")
     print(report.render())
     return 0 if report.passed else 1
@@ -189,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
         help=f"an Ollama model (default: the --city pick in models.json, or {llm.DEFAULT_MODEL})",
     )
     write.add_argument("--city", type=Path, help="city folder (models.json)")
+    write.add_argument(
+        "--roster",
+        type=Path,
+        help="the body's roster file: a member's bare first name prints as the record's full name",
+    )
     write.set_defaults(run=_write)
 
     check = commands.add_parser("check", help="check a script (script.json) against a recap")
@@ -197,12 +206,22 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--model-check", action="store_true", help="also ask the model per line")
     check.add_argument("--model", default=llm.DEFAULT_MODEL)
     check.add_argument("--report", type=Path, help="also write the report to this file")
+    check.add_argument(
+        "--roster",
+        type=Path,
+        help="the body's roster file: a member's full name is allowed where a claim prints the first",
+    )
     check.set_defaults(run=_check)
 
     repair = commands.add_parser("repair", help="drop lines that add facts, then re-check")
     repair.add_argument("--recap", type=Path, required=True)
     repair.add_argument("--script", type=Path, required=True, help="script.json to repair")
     repair.add_argument("--out", type=Path, required=True, help="the repaired script (.txt)")
+    repair.add_argument(
+        "--roster",
+        type=Path,
+        help="the body's roster file: a member's full name is allowed where a claim prints the first",
+    )
     repair.set_defaults(run=_repair)
 
     roundup = commands.add_parser("roundup", help="combine meeting recaps into one roundup recap")

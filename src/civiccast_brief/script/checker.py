@@ -21,6 +21,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from civiccast_brief.meeting.roster import Roster
 from civiccast_brief.script.numbers import NUMBER_WORDS, number_atoms
 from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap, named_place
 from civiccast_brief.script.writer import SPEAKERS, ScriptLine, strip_old_disclaimer
@@ -455,8 +456,292 @@ def misnamed_bodies(recap: Recap) -> list[str]:
     return out
 
 
+#: A claim that names one person's vote: "Schuchard voted yes.", "Council Member Adams voted no."
+#: A name must be capitalised; a lowercase "council voted yes" names nobody. The side words
+#: stay case-insensitive.
+_INDIVIDUAL_VOTE_RE = re.compile(
+    r"(?<![\w'’-])(?P<name>[A-Z][A-Za-z'’-]*(?:\s+[A-Z][A-Za-z'’-]*)*)\s+"
+    r"(?:voted|votes|voting)\s+(?P<side>(?i:yes|no|aye|nay))\b"
+)
+#: A body is not a person: "The Council voted yes", "Commission voted no" name no voter.
+#: "Council Member Adams voted no" still counts, because its last word is a surname.
+_BODY_WORDS = frozenset(
+    {
+        "aldermen",
+        "board",
+        "city",
+        "commission",
+        "commissioner",
+        "commissioners",
+        "committee",
+        "council",
+        "county",
+        "district",
+        "mayor",
+        "member",
+        "members",
+        "staff",
+        "supervisors",
+        "town",
+        "trustees",
+        "village",
+    }
+)
+#: A vote tally in a claim: "a vote of 5 to three", "approved six to one".
+_TALLY_RE = re.compile(r"\b(?P<first>\d{1,3}|[A-Za-z]+)\s+to\s+(?P<second>\d{1,3}|[A-Za-z]+)\b")
+_YES_SIDE_RE = re.compile(r"\b(?:yes|aye)\b|\bin favor\b|\bsupport(?:ed|ing)?\b", re.IGNORECASE)
+_NO_SIDE_RE = re.compile(r"\b(?:no|nay)\b|\bagainst\b|\bopposed\b", re.IGNORECASE)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _number_value(word: str) -> int | None:
+    atoms = number_atoms(word)
+    if len(atoms) == 1:
+        only = next(iter(atoms))
+        if only.isdigit():
+            return int(only)
+    return None
+
+
+#: A claim is read for a tally only when it also states a vote: a rate that rose "from 3 to 5
+#: percent" is a number range, not a vote count.
+_VOTE_CLAIM_RE = re.compile(r"\b(?:vote|votes|voted|voting|roll[\s-]?call|motion)\b", re.IGNORECASE)
+#: Only a sentence that says a vote can be partial: "Adams and Kaplan raised no objection" is
+#: a statement of no opposition, not a list of no voters.
+_SENTENCE_VOTE_RE = re.compile(r"\b(?:vote|votes|voted|voting)\b", re.IGNORECASE)
+
+
+def _vote_tallies(texts: list[str]) -> list[tuple[int, int]]:
+    """The distinct (yes, no) tallies the cited vote claims state. A failed vote reverses the
+    order. More than one tally means the tallies cannot be tied to one vote."""
+    tallies: list[tuple[int, int]] = []
+    for text in texts:
+        if not _VOTE_CLAIM_RE.search(text):
+            continue
+        for match in _TALLY_RE.finditer(text):
+            first, second = (
+                _number_value(match.group("first")),
+                _number_value(match.group("second")),
+            )
+            if first is None or second is None:
+                continue
+            if re.search(
+                r"\b(?:failed|fails|rejected|rejects|lost|loses|denied)\b", text, re.IGNORECASE
+            ):
+                tally = (second, first)
+            else:
+                tally = (first, second)
+            if tally not in tallies:
+                tallies.append(tally)
+    return tallies
+
+
+def _named_voters(texts: list[str]) -> dict[str, set[str]]:
+    """The surnames a cited vote claim names voting yes or no."""
+    voters: dict[str, set[str]] = {"yes": set(), "no": set()}
+    for text in texts:
+        if not _VOTE_CLAIM_RE.search(text):
+            continue
+        for match in _INDIVIDUAL_VOTE_RE.finditer(text):
+            surname = match.group("name").split()[-1]
+            if _POSSESSIVE_RE.sub("", surname.lower()) in _BODY_WORDS:
+                continue  # "The Council voted yes" names a body, not a voter
+            side = "yes" if match.group("side").lower() in {"yes", "aye"} else "no"
+            voters[side].add(surname)
+    return voters
+
+
+def _partial_details(text: str, cited_texts: list[str]) -> list[tuple[str, str, int]]:
+    """(sentence, side, target) for each sentence that names only some voters on one side.
+
+    Returns nothing unless the cited vote claims support a single reading: one or no tally, and
+    named voters that fit inside that tally. Two different tallies mean the claims hold more
+    than one vote, so no sentence can be judged against them.
+    """
+    voters = _named_voters(cited_texts)
+    if not voters["yes"] and not voters["no"]:
+        return []
+    tallies = _vote_tallies(cited_texts)
+    if len(tallies) > 1:
+        return []
+    tally = tallies[0] if tallies else None
+    if tally is not None and (len(voters["yes"]) > tally[0] or len(voters["no"]) > tally[1]):
+        # The claims name more voters than the tally allows: they are not one vote.
+        return []
+    targets = {
+        "yes": tally[0] if tally else len(voters["yes"]),
+        "no": tally[1] if tally else len(voters["no"]),
+    }
+    out: list[tuple[str, str, int]] = []
+    for sentence in _SENTENCE_SPLIT_RE.split(text):
+        if not _SENTENCE_VOTE_RE.search(sentence):
+            continue
+        yes_here = _YES_SIDE_RE.search(sentence) is not None
+        no_here = _NO_SIDE_RE.search(sentence) is not None
+        if yes_here == no_here:
+            # No side, or both: the names cannot be assigned to a side.
+            continue
+        side = "yes" if yes_here else "no"
+        named = {
+            surname
+            for surname in voters[side]
+            if re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", sentence)
+        }
+        if not named or len(named) >= targets[side]:
+            continue
+        out.append((sentence, side, targets[side]))
+    return out
+
+
+def _partial_vote(text: str, cited_texts: list[str]) -> list[str]:
+    """Why a line names only some voters on a side of a vote, or [].
+
+    The writer may name every voter on a side or give only the count. A line that names some
+    of them, beside a tally or beside cited claims that name more, is misleading: Boulder,
+    Nov 12 2026 printed "Schuchard, Speer, Benjamin and Mayor Brockett were among the yes
+    votes. Adams and Kaplan voted no." when the 5 to 3 vote also had Marquis yes and Winer no.
+    """
+    voters = _named_voters(cited_texts)
+    out: list[str] = []
+    for sentence, side, target in _partial_details(text, cited_texts):
+        named = sum(
+            1
+            for surname in voters[side]
+            if re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", sentence)
+        )
+        out.append(
+            f"names {named} of the {target} {side} voters; "
+            "name every voter on that side or give only the count"
+        )
+    return out
+
+
+_NUMBER_UNITS = (
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+)
+_NUMBER_TENS = (
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+)
+
+
+def _number_words(value: int) -> str:
+    if 0 <= value < 20:
+        return _NUMBER_UNITS[value]
+    if value < 100:
+        tens, ones = divmod(value, 10)
+        return f"{_NUMBER_TENS[tens]}-{_NUMBER_UNITS[ones]}" if ones else _NUMBER_TENS[tens]
+    return str(value)
+
+
+def _count_sentence(tally: tuple[int, int] | None) -> str:
+    """A count-only sentence a partial-vote line can stand in, never a name.
+
+    The count comes from the cited claims' tally, so it adds no fact. Without a tally (or with
+    one too large to spell), the sentence says only that a vote was recorded.
+    """
+    if tally is not None and tally[0] < 100 and tally[1] < 100:
+        return f"The vote was {_number_words(tally[0])} to {_number_words(tally[1])}."
+    return "The vote was recorded."
+
+
+def repair_partial_votes(
+    recap: Recap, lines: list[ScriptLine], roster: Roster | None = None
+) -> list[ScriptLine]:
+    """Reduce each sentence that names only some voters to its count, never inventing a name.
+
+    A partial-vote error must not cost a meeting its script. This is safe to run with no model:
+    it only takes names out of the offending sentence and replaces them with the cited claims'
+    own tally, so the result states no fact the claims lack.
+    """
+    report = check_script(recap, lines, roster=roster)
+    bad = {issue.line for issue in report.errors if issue.code == "partial_vote"}
+    if not bad:
+        return list(lines)
+    known = {claim.id: claim for claim in recap.claims}
+    out: list[ScriptLine] = []
+    for number, line in enumerate(lines, 1):
+        if number not in bad or line.is_chapter:
+            out.append(line)
+            continue
+        cited = [known[cid].text for cid in line.claim_ids if cid in known]
+        details = _partial_details(line.text, cited)
+        if not details:
+            out.append(line)
+            continue
+        tallies = _vote_tallies(cited)
+        tally = tallies[0] if len(tallies) == 1 else None
+        partial = {sentence for sentence, _side, _target in details}
+        replacement = _count_sentence(tally)
+        sentences: list[str] = []
+        for sentence in _SENTENCE_SPLIT_RE.split(line.text):
+            if sentence in partial:
+                if not sentences or sentences[-1] != replacement:
+                    sentences.append(replacement)
+            else:
+                sentences.append(sentence)
+        out.append(ScriptLine(line.speaker, " ".join(sentences), line.claim_ids))
+    return out
+
+
+def _roster_name_words(roster: Roster | None, cited_texts: list[str]) -> set[str]:
+    """The full name of a roster member whose unique first name a cited claim prints.
+
+    The writer expands a bare first name ("Rob") to the record's full name ("Rob Kaplan"). The
+    surname is not in the claim, but it is the record's own spelling for that one member, so it
+    is allowed there and nowhere else.
+    """
+    if roster is None:
+        return set()
+    cited = _claim_words(cited_texts)
+    counts: dict[str, int] = {}
+    for member in roster.members:
+        first = member.first.strip().lower()
+        if first and " " not in first:
+            counts[first] = counts.get(first, 0) + 1
+    out: set[str] = set()
+    for member in roster.members:
+        first = member.first.strip().lower()
+        if first and counts.get(first) == 1 and first in cited:
+            out.update(_WORD_RE.findall(member.name.lower()))
+    return out
+
+
 def _check_line(
-    number: int, line: ScriptLine, recap: Recap, issues: list[Issue], *, frame: bool = False
+    number: int,
+    line: ScriptLine,
+    recap: Recap,
+    issues: list[Issue],
+    *,
+    frame: bool = False,
+    roster: Roster | None = None,
 ) -> None:
     """Check one line. ``frame`` marks the intro and the outro: they may use the recap header
     and need no claim id."""
@@ -500,7 +785,7 @@ def _check_line(
         issues.append(
             Issue(number, "error", "number", f"number {missing} is not in the cited claim(s)")
         )
-    allowed_words = _claim_words(cited_texts) | SHOW_NAMES
+    allowed_words = _claim_words(cited_texts) | SHOW_NAMES | _roster_name_words(roster, cited_texts)
     for name in _proper_nouns(line.text):
         word = name.lower()
         # "Boulder's" is the place "Boulder" the claim or the header names.
@@ -508,6 +793,8 @@ def _check_line(
             issues.append(
                 Issue(number, "error", "name", f"name {name!r} is not in the cited claim(s)")
             )
+    for message in _partial_vote(line.text, cited_texts):
+        issues.append(Issue(number, "error", "partial_vote", message))
 
 
 def _check_structure(
@@ -570,19 +857,22 @@ def drop_empty_chapters(lines: list[ScriptLine]) -> tuple[list[ScriptLine], list
 
 
 def drop_unsupported(
-    recap: Recap, lines: list[ScriptLine]
+    recap: Recap, lines: list[ScriptLine], roster: Roster | None = None
 ) -> tuple[list[ScriptLine], list[ScriptLine]]:
     """Remove lines that add a fact the recap lacks, then chapters left with no speech.
 
     A dropped line can only take facts out, never add them, so this is safe to run
-    without a model. The intro (line 1) and the outro (last line) are never dropped: if
-    they fail, the script still fails and goes back to the writer or a human. Returns
-    (kept lines, dropped lines).
+    without a model. Before dropping, a line that names only some voters on a side is reduced
+    to the count from its cited claims: a partial-vote error must not cost a meeting its
+    script. The intro (line 1) and the outro (last line) are never dropped: if they fail, the
+    script still fails and goes back to the writer or a human. Returns (kept lines, dropped
+    lines).
     """
-    kept = list(lines)
+    repaired = repair_partial_votes(recap, lines, roster)
+    kept = list(repaired)
     dropped: list[ScriptLine] = []
     while True:
-        report = check_script(recap, kept)
+        report = check_script(recap, kept, roster=roster)
         protected = {1, len(kept)}
         bad = {
             issue.line
@@ -625,15 +915,19 @@ def _orphan(lines: list[ScriptLine]) -> int | None:
     return None
 
 
-def check_script(recap: Recap, lines: list[ScriptLine]) -> CheckReport:
+def check_script(
+    recap: Recap, lines: list[ScriptLine], roster: Roster | None = None
+) -> CheckReport:
     """Run the deterministic rules over a script. A saved script's old on-air disclaimer line
-    is dropped first, so a script written before the label was removed still checks."""
+    is dropped first, so a script written before the label was removed still checks. With a
+    ``roster``, a member's full name is allowed where a cited claim prints that member's
+    unique first name (the writer's first-name expansion)."""
     lines = strip_old_disclaimer(lines)
     report = CheckReport(lines=list(lines))
     _check_structure(lines, report.issues, recap.video_place)
     for number, line in enumerate(lines, 1):
         frame = number in (1, len(lines)) and not line.is_chapter
-        _check_line(number, line, recap, report.issues, frame=frame)
+        _check_line(number, line, recap, report.issues, frame=frame, roster=roster)
     return report
 
 

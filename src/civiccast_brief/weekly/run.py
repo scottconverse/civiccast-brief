@@ -185,26 +185,34 @@ def _call(main: Main, argv: list[str], what: str) -> None:
         raise StepFailed(f"{what} failed")
 
 
-def _script(steps: Steps, settings: Settings, folder: Path) -> tuple[Path, Path]:
+def _script(steps: Steps, settings: Settings, folder: Path, body: str = "") -> tuple[Path, Path]:
     """Write the script; on a failed check, write once more with the report, then repair.
 
     Returns the spoken script and its JSON."""
     recap = str(folder / "recap.json")
     txt, js = folder / "script.txt", folder / "script.json"
     city = ["--city", str(settings.city)]
-    if steps.script(["write", "--recap", recap, "--out", str(txt), *city]) == 0:
+    roster = roster_for(settings.city, body) if body else None
+    # A bare first name the claims carry ("Rob") prints as the roster's full name.
+    roster_arg = ["--roster", str(roster)] if roster else []
+    if steps.script(["write", "--recap", recap, "--out", str(txt), *city, *roster_arg]) == 0:
         return txt, js
     if not js.exists():
         raise StepFailed("script write failed (no script was written)")
     report = folder / "script-report.txt"
-    steps.script(["check", "--recap", recap, "--script", str(js), "--report", str(report)])
+    steps.script(
+        ["check", "--recap", recap, "--script", str(js), "--report", str(report), *roster_arg]
+    )
     feedback = ["--feedback", str(report)] if report.exists() else []
-    if steps.script(["write", "--recap", recap, "--out", str(txt), *feedback, *city]) == 0:
+    if (
+        steps.script(["write", "--recap", recap, "--out", str(txt), *feedback, *city, *roster_arg])
+        == 0
+    ):
         return txt, js
     final = folder / "script-final.txt"
     _call(
         steps.script,
-        ["repair", "--recap", recap, "--script", str(js), "--out", str(final)],
+        ["repair", "--recap", recap, "--script", str(js), "--out", str(final), *roster_arg],
         "script repair",
     )
     return final, final.with_suffix(".json")
@@ -391,7 +399,8 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             "the recap has no facts from the meeting; no podcast yet, recap retried next run"
         )
     if "script" not in done:
-        txt, js = _script(steps, settings, folder)
+        # The meeting's own roster lets a bare first name in the claims print in full.
+        txt, js = _script(steps, settings, folder, meeting.body)
         entry.update(script_txt=str(txt), script_json=str(js))
         done.append("script")
     if "episode" not in done:
@@ -443,6 +452,7 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
             _call(steps.script, argv, "script roundup")
             done.append("recap")
         if "script" not in done:
+            # A roundup carries several bodies, so no single roster applies to its names.
             txt, js = _script(steps, settings, folder)
             entry.update(script_txt=str(txt), script_json=str(js))
             done.append("script")

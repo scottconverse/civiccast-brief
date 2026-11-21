@@ -1,4 +1,4 @@
-from civiccast_brief.script.checker import check_script, model_check
+from civiccast_brief.script.checker import _named_voters, _partial_vote, check_script, model_check
 from civiccast_brief.script.recap import Claim, Recap
 from civiccast_brief.script.writer import ScriptLine
 
@@ -291,3 +291,141 @@ def test_a_one_the_claim_says_may_be_spoken():
     assert check_script(phase, lines).passed
     lines[1] = ScriptLine("S1", "It is built in phase two, a speaker said.", ("c1",))
     assert any(i.code == "number" for i in check_script(phase, lines).errors)
+
+
+VOTE_RECAP = Recap(
+    city="Boulder",
+    body="City Council",
+    meeting_date="November 12, 2026",
+    video_id="n8OxJlE_2ME",
+    claims=(
+        Claim("c01", "Meeting", "The Boulder City Council met November 12, 2026.", "0:00:00", "x"),
+        Claim("c02", "Use review", "Schuchard voted yes.", "0:20:00", "Schuchard voted yes"),
+        Claim("c03", "Use review", "Speer voted yes.", "0:20:00", "Speer voted yes"),
+        Claim("c04", "Use review", "Benjamin voted yes.", "0:20:00", "Benjamin voted yes"),
+        Claim("c05", "Use review", "Marquis voted yes.", "0:20:00", "Marquis voted yes"),
+        Claim("c06", "Use review", "Brockett voted yes.", "0:20:00", "Brockett voted yes"),
+        Claim("c07", "Use review", "Adams voted no.", "0:20:00", "Adams voted no"),
+        Claim("c08", "Use review", "Kaplan voted no.", "0:20:00", "Kaplan voted no"),
+        Claim("c09", "Use review", "Winer voted no.", "0:20:00", "Winer voted no"),
+        Claim("c10", "Use review", "The motion passed five to three.", "0:20:00", "five to three"),
+        Claim("c11", "Video", "The video is on the city's YouTube channel.", "0:00:00", "YouTube"),
+    ),
+)
+VOTE_IDS = ("c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10")
+
+
+def _vote_errors(lines):
+    report = check_script(VOTE_RECAP, lines)
+    return {(i.line, i.code) for i in report.errors}
+
+
+def _vote_script(text: str) -> list[ScriptLine]:
+    return [
+        ScriptLine(
+            "S1", "CivicCast Brief, Boulder, November twelfth, twenty twenty-six.", ("c01",)
+        ),
+        ScriptLine("S2", text, VOTE_IDS),
+        ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c11",)),
+    ]
+
+
+def test_a_partial_list_of_voters_beside_the_count_fails():
+    lines = _vote_script(
+        "The motion passed five to three. Schuchard, Speer, Benjamin and Brockett voted yes. "
+        "Adams and Kaplan voted no."
+    )
+    assert (2, "partial_vote") in _vote_errors(lines)
+
+
+def test_the_count_alone_passes():
+    lines = _vote_script("The motion passed five to three.")
+    assert all(code != "partial_vote" for _line, code in _vote_errors(lines))
+
+
+def test_naming_every_voter_on_each_side_passes():
+    lines = _vote_script(
+        "The motion passed five to three. Marquis, Schuchard, Speer, Benjamin and Brockett "
+        "voted yes. Winer, Adams and Kaplan voted no."
+    )
+    assert all(code != "partial_vote" for _line, code in _vote_errors(lines))
+
+
+def test_a_sentence_with_no_vote_word_is_not_a_partial_vote():
+    """ "Adams and Kaplan raised no objection" says there was no opposition; it does not name
+    two of the three no voters."""
+    lines = _vote_script("Adams and Kaplan raised no objection.")
+    assert all(code != "partial_vote" for _line, code in _vote_errors(lines))
+
+
+def test_a_rate_range_is_not_read_as_a_vote_tally():
+    """ "from 3 to 5 percent" is a number range, not a tally: a claim's numbers become a vote
+    count only when the claim also says vote, voted, roll call or motion."""
+    recap = Recap(
+        city="Boulder",
+        body="City Council",
+        meeting_date="November 12, 2026",
+        video_id="n8OxJlE_2ME",
+        claims=(
+            Claim("c01", "Fees", "The fee rose from 3 to 5 percent.", "0:10:00", "x"),
+            Claim("c02", "Vote", "Adams voted yes.", "0:20:00", "Adams voted yes"),
+            Claim("c03", "Vote", "Kaplan voted yes.", "0:20:00", "Kaplan voted yes"),
+            Claim("c04", "Video", "The video is on the city's YouTube channel.", "0:00:00", "x"),
+        ),
+    )
+    lines = [
+        ScriptLine("S1", "CivicCast Brief, Boulder."),
+        ScriptLine("S2", "Adams and Kaplan voted yes.", ("c01", "c02", "c03")),
+        ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c04",)),
+    ]
+    assert all(i.code != "partial_vote" for i in check_script(recap, lines).errors)
+
+
+def test_two_different_tallies_leave_the_voters_untied_and_skip_the_check():
+    recap = Recap(
+        city="Boulder",
+        body="City Council",
+        meeting_date="November 12, 2026",
+        video_id="n8OxJlE_2ME",
+        claims=(
+            Claim("c01", "Vote", "The motion passed five to three.", "0:20:00", "x"),
+            Claim("c02", "Vote", "The other vote passed four to two.", "0:30:00", "x"),
+            Claim("c03", "Vote", "Adams voted yes.", "0:20:00", "Adams voted yes"),
+            Claim("c04", "Vote", "Kaplan voted yes.", "0:20:00", "Kaplan voted yes"),
+            Claim("c05", "Video", "The video is on the city's YouTube channel.", "0:00:00", "x"),
+        ),
+    )
+    lines = [
+        ScriptLine("S1", "CivicCast Brief, Boulder."),
+        ScriptLine("S2", "Adams voted yes.", ("c01", "c02", "c03")),
+        ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c05",)),
+    ]
+    assert all(i.code != "partial_vote" for i in check_script(recap, lines).errors)
+
+
+def test_a_lowercase_body_is_not_a_voter():
+    """Confirmed bug: IGNORECASE let "council" match a [A-Z] name, so a body counted as a
+    voter and a named sentence looked partial."""
+    voters = _named_voters(["The council voted yes on the plan.", "Adams voted yes."])
+    assert voters == {"yes": {"Adams"}, "no": set()}
+
+
+def test_a_capitalised_body_is_not_a_voter():
+    voters = _named_voters(
+        [
+            "The Council voted yes.",
+            "The Board voted no.",
+            "Council voted yes",
+            "Commission voted no",
+        ]
+    )
+    assert voters == {"yes": set(), "no": set()}
+
+
+def test_a_council_member_surname_still_counts_as_a_voter():
+    voters = _named_voters(["Council Member Adams voted no."])
+    assert voters == {"yes": set(), "no": {"Adams"}}
+
+
+def test_a_body_beside_a_named_voter_is_not_a_partial_vote():
+    assert _partial_vote("Adams voted yes.", ["The council voted yes.", "Adams voted yes."]) == []

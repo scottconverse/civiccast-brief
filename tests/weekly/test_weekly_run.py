@@ -196,6 +196,18 @@ def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_pat
     assert entry["done"] == ["roster", "recap", "script", "episode", "article"]
 
 
+def test_a_regular_meeting_script_is_written_with_its_body_roster(tmp_path):
+    """The meeting path passes its body, so a bare first name the claims carry can print in
+    full. The roundup path has no single body and stays without a roster."""
+    fake = Fake()
+    settings = _settings(tmp_path)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+
+    assert report.failed == 0
+    write_argv = next(argv for step, argv in fake.calls if step == "script" and argv[0] == "write")
+    assert _opt(write_argv, "--roster") == str(settings.city / "roster.json")
+
+
 def test_a_leading_dash_video_id_is_passed_after_the_option_terminator(tmp_path):
     fake = Fake()
     settings = _settings(tmp_path)
