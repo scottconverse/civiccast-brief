@@ -12,12 +12,20 @@ from desk_signin import signed_in
 
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.station.app import load_config, make_station_app
-from civiccast_brief.station.runner import PUBLISH_DELAY_SECONDS, Schedule, Station, StationError
+from civiccast_brief.station.runner import (
+    PUBLISH_DELAY_SECONDS,
+    PUBLISH_RETRIES_MAX,
+    PUBLISH_RETRY_SECONDS,
+    Schedule,
+    Station,
+    StationError,
+)
 
 DENVER = ZoneInfo("America/Denver")
 MONDAY_6 = Schedule.parse("monday", "06:00", "America/Denver")
 WED_NOON = datetime(2026, 11, 11, 12, 0, tzinfo=DENVER)
 DELAY = timedelta(seconds=PUBLISH_DELAY_SECONDS)
+RETRY = timedelta(seconds=PUBLISH_RETRY_SECONDS)
 
 
 class Clock:
@@ -144,6 +152,157 @@ def test_a_queued_publish_waits_for_a_going_run_and_survives_a_restart(tmp_path)
     assert again.status().publish_at == clock.now + DELAY
 
 
+def test_a_failed_publish_keeps_the_request_queued_and_is_retried_after_thirty_minutes(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps, publish=(["build"], ["deploy"]))
+    s.request_publish()
+    clock.now += DELAY
+    steps.codes = {"deploy": 1}
+    first = s.tick()
+    assert first is not None
+    assert (s.run(first).status, s.run(first).exit_code) == ("failed", 1)
+    # The failed run did not drop the desk's click, but it is not retried at once either.
+    assert s.status().publish_at == clock.now + RETRY
+
+    steps.ran.clear()
+    steps.codes = {}
+    clock.now += RETRY - timedelta(seconds=1)
+    assert s.tick() is None  # not before the 30 minutes
+
+    clock.now += timedelta(seconds=1)
+    retry = s.tick()
+    assert retry is not None
+    assert steps.ran == ["build", "deploy"]
+    assert s.status().publish_at is None  # a publish that went through covers it
+
+
+def test_a_publish_that_keeps_failing_is_dropped_after_three_retries(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps, publish=(["build"], ["deploy"]))
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    attempts = 0
+    while True:
+        clock.now += DELAY if attempts == 0 else RETRY
+        run_id = s.tick()
+        if run_id is None:
+            break
+        attempts += 1
+        assert s.run(run_id).status == "failed"
+
+    # The click's first try and three retries, then the request is gone.
+    assert attempts == 1 + PUBLISH_RETRIES_MAX
+    assert s.status().publish_at is None
+    assert "dropping the request" in s.runs()[0].log
+
+
+def test_a_scheduled_run_that_publishes_covers_a_future_dated_retry(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps)
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    clock.now += DELAY
+    s.tick()  # the desk's try fails, so a retry waits thirty minutes out
+    assert s.status().publish_at == clock.now + RETRY
+    assert s._retry_count() == 1
+
+    # A scheduled run reaches the publish steps before the retry is due. Its publish covers the
+    # queued request, so nothing is left to publish again.
+    steps.codes = {}
+    s.run_once("schedule")
+    assert s.status().publish_at is None
+    assert s._retry_count() == 0
+
+
+def test_scheduled_runs_that_keep_failing_count_and_drop_a_future_dated_retry(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps)
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    clock.now += DELAY
+    s.tick()  # the desk's try fails: one retry queued, one failure counted
+    assert s._retry_count() == 1
+    assert s.status().publish_at is not None
+
+    # Each scheduled run that fails counts as a failed try of the queued request, rather than
+    # looking like a fresh desk click that resets the count.
+    s.run_once("schedule")
+    assert s._retry_count() == 2
+    s.run_once("schedule")
+    assert s._retry_count() == 3
+    s.run_once("schedule")  # the third retry fails: at the cap, the request is dropped
+    assert s._retry_count() == 0
+    assert s.status().publish_at is None
+    assert "publish failed 4 times in a row" in s.runs()[0].log
+
+
+def test_a_desk_click_during_a_failing_run_survives_at_the_normal_delay(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps)
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    clock.now += DELAY
+    s.tick()  # fails; a retry waits thirty minutes out
+    assert s.status().publish_at == clock.now + RETRY
+
+    def click_while_deploying() -> None:
+        clock.now += timedelta(seconds=5)
+        s.request_publish()
+
+    steps.during["deploy"] = click_while_deploying
+    s.run_once("schedule")  # fails too, but the click made during it is not part of it
+    steps.during.clear()
+    assert s.status().publish_at == clock.now + DELAY
+    assert s._retry_count() == 0
+
+
+def test_the_drop_message_names_the_true_number_of_failed_tries(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps)
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    clock.now += DELAY
+    s.tick()
+    for _ in range(PUBLISH_RETRIES_MAX):
+        clock.now += RETRY
+        if s.tick() is None:
+            break
+    assert s.status().publish_at is None
+    assert "publish failed 4 times in a row" in s.runs()[0].log
+
+
+def test_a_new_desk_click_after_failures_publishes_at_the_normal_delay(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps, publish=(["build"], ["deploy"]))
+    s.request_publish()
+    steps.codes = {"deploy": 1}
+    clock.now += DELAY
+    s.tick()
+    clock.now += RETRY
+    s.tick()  # one retry has now failed too
+    assert s.status().publish_at == clock.now + RETRY
+
+    # A fresh click resets the count and goes out at the normal delay, not 30 minutes out.
+    steps.ran.clear()
+    steps.codes = {}
+    clock.now += timedelta(seconds=5)
+    s.request_publish()
+    assert s.status().publish_at == clock.now + DELAY
+    assert s.tick() is None
+    clock.now += DELAY
+    run_id = s.tick()
+    assert run_id is not None and s.run(run_id).status == "ok"
+    assert steps.ran == ["build", "deploy"]
+    assert s.status().publish_at is None
+
+
 def test_without_publish_steps_a_request_does_nothing(tmp_path):
     clock = Clock(WED_NOON)
     steps = Steps()
@@ -241,7 +400,7 @@ def test_the_control_room_shows_a_failed_run_and_an_edit_queues_a_publish(desk):
         data={
             "token": token,
             "recap": "Recap, fixed.",
-            "script": "[S1] Script.",
+            "script": "[S1] Script, fixed.",
             "speaker:voice 01": "unknown",
         },
     )

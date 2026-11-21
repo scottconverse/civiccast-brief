@@ -4,15 +4,26 @@ import json
 
 from test_desk_web import city, client_for, store, token  # noqa: F401
 
+from civiccast_brief.site.model import load_site_input
+
 FULL = {
-    "slug": "oldname",
+    # The short web name is fixed once setup has written city.json (it is in every episode id
+    # and feed guid), so the editable-page tests must not change it.
+    "slug": "loveland",
     "name": "Old Name",
     "site_title": "CivicCast Brief: Old Name",
     "hosts": {"S1": "Pat", "S2": "Alex"},
     "about": ["Kept."],
     "contact_email": "old@example.org",
     "capture": {"platform": "granicus", "host": "x.granicus.com", "view_id": 2},
-    "podcast": {"name": "Show", "owner_email": "pod@example.org", "category": "Government"},
+    "podcast": {
+        "name": "Show",
+        "author": "Old Name",
+        "owner_name": "Old Name",
+        "owner_email": "pod@example.org",
+        "description": "The old show.",
+        "category": "Government",
+    },
     "signup_url": "https://example.org/join",
 }
 GOOD = {
@@ -84,3 +95,37 @@ def test_the_city_page_without_a_city_folder_says_so(store):  # noqa: F811
     assert "started without a city folder" in client.get("/city").text
     bad = client.post("/city", data={"token": token(client), **GOOD})
     assert bad.status_code == 400 and "--city" in bad.text
+
+
+def test_a_city_json_with_no_slug_is_saved_with_the_typed_one(
+    store,  # noqa: F811
+    city,  # noqa: F811
+):
+    # A missing or blank saved slug is not a change to refuse: only a non-empty saved slug that
+    # would change is fixed. The typed slug is written so the folder has one.
+    path = city / "city.json"
+    for saved_slug in (None, ""):
+        data = {k: v for k, v in FULL.items() if k != "slug"}
+        if saved_slug is not None:
+            data["slug"] = saved_slug
+        path.write_text(json.dumps(data), encoding="utf-8")
+        client = client_for(store, city)
+        done = client.post("/city", data={"token": token(client), **GOOD})
+        assert done.status_code == 200, saved_slug
+        assert json.loads(path.read_text(encoding="utf-8"))["slug"] == "loveland"
+
+
+def test_changing_the_short_web_name_is_refused_so_later_site_builds_still_read(
+    store,  # noqa: F811
+    city,  # noqa: F811
+):
+    path = city / "city.json"
+    path.write_text(json.dumps(FULL), encoding="utf-8")
+    client = client_for(store, city)
+    response = client.post("/city", data={"token": token(client), **GOOD, "slug": "loveland-town"})
+    assert response.status_code == 400
+    assert "short web name cannot change" in response.text
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["slug"] == "loveland"
+    # The folder still reads as a site input, so every later build keeps working.
+    assert load_site_input(city).city.slug == "loveland"

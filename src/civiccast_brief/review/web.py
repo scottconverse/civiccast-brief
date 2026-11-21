@@ -271,10 +271,12 @@ class DeskApp:
                     label: form.get(f"speaker:{label}", name)
                     for label, name in item.speakers.items()
                 }
+                # The recap is the run's checked facts. The assembler refuses an episode whose
+                # published recap differs from the run folder's, so the desk must not change it.
                 update = self.store.update_content(
                     item.id,
                     speakers=speakers,
-                    recap=form.get("recap", item.recap),
+                    recap=item.recap,
                     script=form.get("script", item.script),
                 )
             if not update.changed:

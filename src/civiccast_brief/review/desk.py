@@ -67,6 +67,10 @@ def redraft(store: ReviewStore, item_id: int, note: str, writer: Writer) -> Cont
     if item is None:
         raise ReviewError(f"no item with id {item_id}")
     result = dict(writer(item, note))
+    if item.kind == "episode":
+        # The assembler refuses an episode whose published recap differs from the run folder's,
+        # so a redraft keeps the run's recap and only changes the script.
+        result.pop("recap", None)
     allowed = (
         {"article", "checks_passed", "checks_note"}
         if item.kind == "article"
