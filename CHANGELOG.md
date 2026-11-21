@@ -77,7 +77,6 @@ run that finds, writes and publishes meetings on its own.
 
 - No Apple Podcasts or Spotify listing and no Brevo sending account yet.
 - `docs/run-on-hostinger.md` has not been run on a Linux server.
-- Episodes are AI-generated. Check the official meeting record before you rely on anything they say.
 
 ## 0.1.0 — 2026-11-07
 
@@ -104,4 +103,3 @@ city site out.
 
 - Hosting the site and audio online, Apple Podcasts and Spotify listings, and email sign-up are not
   built yet.
-- Episodes are AI-generated. Check the official meeting record before you rely on anything they say.

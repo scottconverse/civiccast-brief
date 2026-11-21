@@ -8,7 +8,7 @@ FULL = {
     "slug": "oldname",
     "name": "Old Name",
     "site_title": "CivicCast Brief: Old Name",
-    "hosts": {"S1": "Maya", "S2": "Theo"},
+    "hosts": {"S1": "Pat", "S2": "Alex"},
     "about": ["Kept."],
     "contact_email": "old@example.org",
     "capture": {"platform": "granicus", "host": "x.granicus.com", "view_id": 2},

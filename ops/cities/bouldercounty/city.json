@@ -6,11 +6,11 @@
   "publisher": "CivicCast Brief",
   "contact_email": "contact@civiccastbrief.org",
   "hosts": {
-    "S1": "Maya",
-    "S2": "Theo"
+    "S1": "Pat",
+    "S2": "Alex"
   },
   "about": [
-    "Short recaps of Boulder County public meetings, written from the meeting captions and read by two AI voices. Every fact links to the moment in the meeting where it was said. An episode that passes every check is published; one that fails a check waits for an editor, who can edit, unpublish or kill any episode."
+    "Short recaps of Boulder County public meetings, written from the meeting captions. Every fact links to the moment in the meeting where it was said. An episode that passes every check is published; one that fails a check waits for an editor, who can edit, unpublish or kill any episode."
   ],
   "capture": {
     "platform": "none"
@@ -20,7 +20,7 @@
     "author": "CivicCast Brief",
     "owner_name": "CivicCast Brief",
     "owner_email": "podcast@civiccastbrief.org",
-    "description": "Short, cited recaps of Boulder County public meetings, read by two AI hosts.",
+    "description": "Short, cited recaps of Boulder County public meetings.",
     "category": "Government",
     "subcategory": "",
     "language": "en-us",

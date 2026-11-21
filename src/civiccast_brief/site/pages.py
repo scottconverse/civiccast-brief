@@ -792,10 +792,9 @@ def build_pages(
         urls,
         path=PAGE_HOW,
         title=f"How this is made | {city.site_title}",
-        description="How each story and episode is made, which parts are AI-written and which steps check them.",
+        description="How each story and episode is made, and which steps check them.",
     )
     how["page"]["nav"] = "how"
-    how["disclaimer"] = city.disclaimer
     pages.append(PageSpec(PAGE_HOW, "how.html", how))
 
     about = _base(

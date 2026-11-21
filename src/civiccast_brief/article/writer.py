@@ -53,15 +53,10 @@ from civiccast_brief.script.numbers import number_atoms
 from civiccast_brief.script.recap import Recap, named_bodies, named_meeting, seconds_of
 
 #: Fixed words the story prints itself. The model never writes these.
-NOTE = (
-    "This article was written by AI from the public meeting video. Each paragraph links to the "
-    "moment in the video it comes from. Check the official record."
-)
+NOTE = "Each paragraph links to the moment in the video it comes from."
 #: The note for a story that also cites the meeting documents.
 NOTE_DOCUMENTS = (
-    "This article was written by AI from the public meeting video and the meeting documents. "
-    "Each paragraph links to the moment in the video and the document pages it comes from. "
-    "Check the official record."
+    "Each paragraph links to the moment in the video and the document pages it comes from."
 )
 #: How many document pages the writer is shown, and how much of each.
 PAGE_LIMIT = 12

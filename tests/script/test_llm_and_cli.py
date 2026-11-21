@@ -6,7 +6,7 @@ import pytest
 from civiccast_brief.script import llm
 from civiccast_brief.script.cli import main
 from civiccast_brief.script.recap import Claim, Recap, save_recap
-from civiccast_brief.script.writer import DISCLAIMER, ScriptLine, save_script
+from civiccast_brief.script.writer import ScriptLine, save_script
 
 
 def ndjson(*chunks: dict) -> list[bytes]:
@@ -77,7 +77,6 @@ def test_cli_check_fails_without_the_youtube_outro_and_writes_report(tmp_path, c
         ScriptLine(
             "S1", "CivicCast Brief, Longmont, October twentieth, twenty twenty-six.", ("c01",)
         ),
-        ScriptLine("S2", DISCLAIMER),
         ScriptLine("S1", "The meeting video is on the city's YouTube channel.", ("c02",)),
         ScriptLine("S2", "That's a big number.", ()),
     ]
@@ -108,7 +107,6 @@ def test_cli_check_exit_zero_when_clean(tmp_path, capsys):
         ScriptLine(
             "S1", "CivicCast Brief, Longmont, October twentieth, twenty twenty-six.", ("c01",)
         ),
-        ScriptLine("S2", DISCLAIMER),
         ScriptLine("S1", "The meeting video is on the city's YouTube channel.", ("c02",)),
         ScriptLine("S2", "Watch the video on the city's YouTube channel.", ("c02",)),
     ]
@@ -133,7 +131,6 @@ def test_cli_write_asks_once_more_when_the_model_answers_nothing(tmp_path, monke
         json.dumps(line)
         for line in [
             {"speaker": "S1", "text": "CivicCast Brief, Longmont.", "claim_ids": ["c01"]},
-            {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
             {"speaker": "S1", "text": "The council voted.", "claim_ids": ["c01"]},
             {
                 "speaker": "S2",
@@ -169,7 +166,6 @@ def test_cli_write_drops_a_chapter_mark_with_no_line_in_it(tmp_path, monkeypatch
         json.dumps(line)
         for line in [
             {"speaker": "S1", "text": "CivicCast Brief, Longmont.", "claim_ids": ["c01"]},
-            {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
             {"speaker": "CHAPTER", "text": "October 20 meeting", "claim_ids": ["c01"]},
             {"speaker": "CHAPTER", "text": "Live stream", "claim_ids": ["c02"]},
             {"speaker": "S1", "text": "The meeting video is online.", "claim_ids": ["c02"]},

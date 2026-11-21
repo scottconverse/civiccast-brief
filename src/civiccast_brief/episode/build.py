@@ -39,7 +39,7 @@ from civiccast_brief.script.recap import (
     named_bodies,
     named_place,
 )
-from civiccast_brief.script.writer import ROUNDUP_ID, load_script, render_txt
+from civiccast_brief.script.writer import ROUNDUP_ID, load_script, parse_txt, render_txt
 from civiccast_brief.site.titles import roundup_title
 
 UNKNOWN = "unknown"
@@ -475,7 +475,10 @@ def assemble(
     evidence, _ = _story_recap(meeting_dir, recap)
     script = load_script(script_json)
     _same("recap", (item_dir / "recap.txt").read_text(encoding="utf-8"), recap_text(recap))
-    _same("script", (item_dir / "script.txt").read_text(encoding="utf-8"), render_txt(script))
+    # An export made before the label was removed still carries the old line as its second
+    # line; parse_txt drops it, so the comparison is against the words that would publish.
+    exported = parse_txt((item_dir / "script.txt").read_text(encoding="utf-8"))
+    _same("script", render_txt(exported), render_txt(script))
 
     mp3 = audio_dir / "episode.mp3"
     chapters = json.loads((audio_dir / "chapters.json").read_text(encoding="utf-8"))

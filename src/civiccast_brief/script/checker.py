@@ -6,9 +6,9 @@ Deterministic rules (these decide pass or fail):
 - every capitalised name in a line appears in a cited claim (or is a host name or show name);
 - spoken text holds no digits;
 - uncited lines are allowed only when they are reactions or questions;
-- the disclaimer is Theo's line 2 and appears once; the intro names the show and city; the
-  outro is Theo's last line and points to the city's video place (YouTube channel by default). The intro and outro may also use
-  the recap header (city, body, date) and need no claim id.
+- the intro names the show and city; the outro is Alex's last line and points to the city's
+  video place (YouTube channel by default). The intro and outro may also use the recap header
+  (city, body, date) and need no claim id.
 
 The optional model check asks the writer model, once per line, whether the cited claims support
 the line. Its disagreements are reported as warnings; they do not change pass or fail.
@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from civiccast_brief.script.numbers import NUMBER_WORDS, number_atoms
 from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap, named_place
-from civiccast_brief.script.writer import DISCLAIMER, SPEAKERS, ScriptLine
+from civiccast_brief.script.writer import SPEAKERS, ScriptLine, strip_old_disclaimer
 
 MAX_LINE_WORDS = 45
 _NAME_RE = re.compile(r"\b[A-Z][A-Za-z]+(?:'[A-Za-z]+)?\b")
@@ -31,8 +31,9 @@ _WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
 _DIGIT_RE = re.compile(r"\d")
 _SPOKEN_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?")
 
-# Names the show itself uses. Everything else must come from a cited claim.
-SHOW_NAMES = frozenset({"civiccast", "brief", "maya", "theo", "youtube", "ai"})
+# Names the show itself uses. Everything else must come from a cited claim. The old host
+# names stay allowed so a saved script that still says them passes the check.
+SHOW_NAMES = frozenset({"civiccast", "brief", "pat", "alex", "maya", "theo", "youtube", "ai"})
 
 # Sentence openers that are ordinary words (articles, pronouns, reactions, imperatives), not names.
 _COMMON_OPENERS = frozenset(
@@ -465,8 +466,6 @@ def _check_line(
     if not line.text.strip():
         issues.append(Issue(number, "error", "empty", "line has no text"))
         return
-    if line.text.strip() == DISCLAIMER:
-        return
     for wrong in misnamed_bodies(recap):
         if re.search(rf"(?<!\w){re.escape(wrong)}(?!\w)", line.text, re.IGNORECASE):
             issues.append(
@@ -514,25 +513,11 @@ def _check_line(
 def _check_structure(
     lines: list[ScriptLine], issues: list[Issue], video_place: str = DEFAULT_VIDEO_PLACE
 ) -> None:
-    disclaimers = [i for i, line in enumerate(lines, 1) if line.text.strip() == DISCLAIMER]
-    if len(disclaimers) != 1:
-        issues.append(
-            Issue(
-                disclaimers[1] if len(disclaimers) > 1 else 2,
-                "error",
-                "disclaimer",
-                f"the on-air disclaimer must appear once; found {len(disclaimers)}",
-            )
-        )
-    elif disclaimers[0] != 2 or lines[1].speaker != "S2":
-        issues.append(
-            Issue(disclaimers[0], "error", "disclaimer", "the disclaimer must be Theo's line 2")
-        )
     if lines:
         first = lines[0]
         if first.speaker != "S1" or "civiccast brief" not in first.text.lower():
             issues.append(
-                Issue(1, "error", "intro", "line 1 must be Maya's intro naming CivicCast Brief")
+                Issue(1, "error", "intro", "line 1 must be Pat's intro naming CivicCast Brief")
             )
         last_number = len(lines)
         last = lines[-1]
@@ -543,7 +528,7 @@ def _check_structure(
                     last_number,
                     "error",
                     "outro",
-                    f"the last line must be Theo's closing line pointing to the city's {video_place}",
+                    f"the last line must be Alex's closing line pointing to the city's {video_place}",
                 )
             )
     for number, line in enumerate(lines, 1):
@@ -590,15 +575,15 @@ def drop_unsupported(
     """Remove lines that add a fact the recap lacks, then chapters left with no speech.
 
     A dropped line can only take facts out, never add them, so this is safe to run
-    without a model. The intro (line 1), the disclaimer (line 2) and the outro (last
-    line) are never dropped: if they fail, the script still fails and goes back to the
-    writer or a human. Returns (kept lines, dropped lines).
+    without a model. The intro (line 1) and the outro (last line) are never dropped: if
+    they fail, the script still fails and goes back to the writer or a human. Returns
+    (kept lines, dropped lines).
     """
     kept = list(lines)
     dropped: list[ScriptLine] = []
     while True:
         report = check_script(recap, kept)
-        protected = {1, 2, len(kept)}
+        protected = {1, len(kept)}
         bad = {
             issue.line
             for issue in report.errors
@@ -618,11 +603,11 @@ def _orphan(lines: list[ScriptLine]) -> int | None:
 
     - a chapter with no cited line before the next chapter or the outro;
     - an uncited question whose next line is not a cited answer (or the outro);
-    - an uncited reaction ("Right.") straight after a chapter mark or the disclaimer.
-    The intro, the disclaimer and the outro are never orphans.
+    - an uncited reaction ("Right.") straight after a chapter mark.
+    The intro and the outro are never orphans.
     """
     last = len(lines) - 1
-    for index in range(2, last):
+    for index in range(1, last):
         line = lines[index]
         following = lines[index + 1]
         if line.is_chapter:
@@ -635,13 +620,15 @@ def _orphan(lines: list[ScriptLine]) -> int | None:
                 # A question just before the outro hands over to it, so it stays.
                 if index + 1 < last and (following.is_chapter or not following.claim_ids):
                     return index
-            elif index == 2 or lines[index - 1].is_chapter:
+            elif lines[index - 1].is_chapter:
                 return index
     return None
 
 
 def check_script(recap: Recap, lines: list[ScriptLine]) -> CheckReport:
-    """Run the deterministic rules over a script."""
+    """Run the deterministic rules over a script. A saved script's old on-air disclaimer line
+    is dropped first, so a script written before the label was removed still checks."""
+    lines = strip_old_disclaimer(lines)
     report = CheckReport(lines=list(lines))
     _check_structure(lines, report.issues, recap.video_place)
     for number, line in enumerate(lines, 1):
@@ -692,8 +679,6 @@ def model_check(report: CheckReport, recap: Recap, complete: Callable[[str], str
     known = {c.id: c for c in recap.claims}
     verdicts: list[ModelVerdict] = []
     for number, line in enumerate(report.lines, 1):
-        if line.text.strip() == DISCLAIMER:
-            continue
         cited = [known[cid] for cid in line.claim_ids if cid in known]
         claims_text = (
             "\n".join(f"[{c.id}] {c.text}" for c in cited) if cited else "none (no claim is cited)"

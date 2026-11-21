@@ -53,7 +53,7 @@
 <body class="page-{{ page.nav or 'other' }}">
 <a class="skip-link" href="#main">Skip to content</a>
 {% if today is defined %}
-<div class="topstrip"><p><time>{{ today }}</time><span class="sep" aria-hidden="true">·</span><span>{{ city.name }}</span><span class="note">AI-written from the public meeting video</span></p></div>
+<div class="topstrip"><p><time>{{ today }}</time><span class="sep" aria-hidden="true">·</span><span>{{ city.name }}</span></p></div>
 {% endif %}
 <div class="wrap">
 <header class="s-head">
@@ -103,7 +103,6 @@
     </div>
   </form>
 {% endif %}
-  <p>{{ city.disclaimer }}</p>
   <p>{{ city.site_title }} is published by {{ city.publisher }}. It is independent and is not run by or affiliated with the City of {{ city.name }}. This site uses Cloudflare Web Analytics, which counts visits without cookies. <a href="{{ href('/about/') }}#privacy">Privacy</a>.</p>
   <p class="foot-links"><a href="{{ href('/about/') }}">About</a> <a href="{{ href('/how-this-is-made/') }}">How this is made</a> <a href="{{ href('/archive/') }}">Archive</a> <a href="{{ href('/search/') }}">Search</a> <a href="{{ feed_href }}">Podcast feed</a> <a href="{{ href('/sitemap.xml') }}">Sitemap</a>{% if desk_signin %} <a href="{{ desk_signin }}" rel="nofollow">Editor sign-in</a>{% endif %}</p>
 </footer>

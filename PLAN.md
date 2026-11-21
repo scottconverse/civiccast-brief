@@ -22,7 +22,7 @@ Repo: github.com/scottconverse/civiccast-brief. License: Apache-2.0.
 - Ingest from YouTube, PrimeGov, Granicus; Swagit and EvoGov later.
 - Transcript with timestamps and speaker names.
 - Written recap to a wire-service standard: attributed claims, votes, public comment, every sentence cited to a timestamp or page.
-- Two-host conversational podcast episode with an on-air disclaimer, chapters and a transcript.
+- Two-host conversational podcast episode with chapters and a transcript.
 - Producer review screen: fix speakers, edit, approve or reject.
 - Static city site: front page, board pages, article pages with audio player, transcript pages linked to the source video, search, "how this is made" page, sitemap, structured data, share images. (Corrections page removed 2026-11-08, Scott.)
 - Podcast feed with full tags; one-time submission to Apple and Spotify.
@@ -104,7 +104,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 - Done when: Scott has listened to all five on the same script and a default and a fallback are recorded in `docs/voice-bakeoff.md` with the licence verdicts.
 
 ### Phase 2 — Script writer (M)
-- Input: an approved recap. Output: two-host dialogue with intro, on-air disclaimer, chapter marks, outro.
+- Input: an approved recap. Output: two-host dialogue with intro, chapter marks, outro.
 - Rule: no claim the recap lacks; a checker rejects scripts that add facts.
 - Decide the writer model and the sequential load order (writer then voice).
 - Done when: one real meeting's script reads naturally and passes the no-new-claims check.
@@ -112,7 +112,7 @@ Each phase ends only when its "done when" is shown, not claimed.
 ### Phase 3 — Voice adapter and audio finish (M)
 - One adapter interface; chosen engine behind it; turn stitching with pauses for single-voice engines.
 - Intro/outro, loudness normalisation, MP3, chapters.json, VTT.
-- Done when: one episode plays in a podcast app from a local feed, with chapters, disclaimer and correct loudness, and Scott has heard all of it.
+- Done when: one episode plays in a podcast app from a local feed, with chapters and correct loudness, and Scott has heard all of it.
 
 ### Phase 4 — Transcript, speaker names, recap (M)
 - Capture via TownRecord; transcript via textflowkit with diarization.
@@ -166,8 +166,6 @@ Each phase ends only when its "done when" is shown, not claimed.
 
 ## 7. Open decisions (decide when reached)
 - Mail provider and audio host (Phases 7–8).
-- Whether episodes carry VibeVoice's built-in audible disclaimer if that engine wins (Phase 1).
-- Whether the on-air disclaimer text follows civiccast.ai's wording or your own (Phase 2).
 
 ## 8. Risks and things not checked
 - TownRecord's real state (README says no code; core has ~30,800 lines). Phase 0.

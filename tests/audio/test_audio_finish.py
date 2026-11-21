@@ -33,7 +33,7 @@ needs_ffmpeg = pytest.mark.skipif(not tools_available(), reason="ffmpeg/ffprobe 
 EPISODE_SCRIPT = """\
 [CHAPTER Intro]
 [S1] Welcome to the Longmont council recap for October twentieth.
-[S2] This episode is AI-generated from the public meeting video.
+[S2] The public comment period ran for about ten minutes.
 [CHAPTER Votes]
 [S1] Ordinance 2026-69 passed five to two.
 [S2] The amendments need a fire plan by March first, twenty twenty-seven.
@@ -56,21 +56,21 @@ def test_vtt_timestamp_formats_hours_minutes_seconds_and_milliseconds(
 
 def test_vtt_document_has_header_voice_tags_and_escaped_text() -> None:
     cues = [
-        Cue(0.0, 2.1, "Maya", "Welcome & good evening."),
-        Cue(2.45, 6.05, "Theo", "Under 5 < 10 > 0 is ok."),
+        Cue(0.0, 2.1, "Pat", "Welcome & good evening."),
+        Cue(2.45, 6.05, "Alex", "Under 5 < 10 > 0 is ok."),
     ]
     text = vtt_document(cues)
     assert text.startswith("WEBVTT\n\n")
-    assert "00:00:00.000 --> 00:00:02.100\n<v Maya>Welcome &amp; good evening.</v>" in text
-    assert "00:00:02.450 --> 00:00:06.050\n<v Theo>Under 5 &lt; 10 &gt; 0 is ok.</v>" in text
+    assert "00:00:00.000 --> 00:00:02.100\n<v Pat>Welcome &amp; good evening.</v>" in text
+    assert "00:00:02.450 --> 00:00:06.050\n<v Alex>Under 5 &lt; 10 &gt; 0 is ok.</v>" in text
     assert text.endswith("\n")
 
 
 def test_vtt_document_rejects_overlapping_or_reversed_cues() -> None:
     with pytest.raises(FinishError, match="out of order"):
-        vtt_document([Cue(0.0, 3.0, "Maya", "a"), Cue(2.5, 4.0, "Theo", "b")])
+        vtt_document([Cue(0.0, 3.0, "Pat", "a"), Cue(2.5, 4.0, "Alex", "b")])
     with pytest.raises(FinishError, match="out of order"):
-        vtt_document([Cue(1.0, 1.0, "Maya", "zero length")])
+        vtt_document([Cue(1.0, 1.0, "Pat", "zero length")])
 
 
 def test_chapter_marks_first_chapter_starts_at_zero_and_others_at_their_line() -> None:
@@ -126,7 +126,7 @@ def test_finish_refuses_a_speaker_without_a_display_name(tmp_path: Path) -> None
         duration=1.0,
     )
     with pytest.raises(FinishError, match="no display names"):
-        finish_episode(render, script, tmp_path, speaker_names={"S1": "Maya"})
+        finish_episode(render, script, tmp_path, speaker_names={"S1": "Pat"})
 
 
 def test_ebur128_summary_parser_reads_the_three_values() -> None:
@@ -141,7 +141,7 @@ def test_ebur128_summary_parser_reads_the_three_values() -> None:
 
 
 def test_speaker_names_default_to_maya_and_theo() -> None:
-    assert SPEAKER_NAMES == {"S1": "Maya", "S2": "Theo"}
+    assert SPEAKER_NAMES == {"S1": "Pat", "S2": "Alex"}
 
 
 # --- ffmpeg: a real episode from FakeEngine -------------------------------------------------
@@ -171,7 +171,7 @@ def test_fake_episode_has_consistent_timing_chapters_and_transcript(tmp_path: Pa
     vtt = files.transcript_vtt.read_text(encoding="utf-8")
     assert vtt.startswith("WEBVTT\n")
     assert vtt.count(" --> ") == len(script.lines)
-    assert vtt.count("<v Maya>") == 3 and vtt.count("<v Theo>") == 2
+    assert vtt.count("<v Pat>") == 3 and vtt.count("<v Alex>") == 2
     assert len(files.cues) == len(script.lines)
     for earlier, later in itertools.pairwise(files.cues):
         assert earlier.start < earlier.end <= later.start
