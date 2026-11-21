@@ -41,10 +41,16 @@ class ScriptFormatError(ValueError):
     """The model answer is not a script in the agreed line format."""
 
 
+def is_old_disclaimer(text: str) -> bool:
+    """Whether a line is the retired on-air disclaimer. Every path that checks, shows or
+    speaks a saved script drops it, so it no longer reaches a page or an episode."""
+    return text.strip() == _OLD_DISCLAIMER
+
+
 def strip_old_disclaimer(lines: list[ScriptLine]) -> list[ScriptLine]:
     """Drop the old on-air disclaimer line from a saved script. It is no longer written, so a
     saved script that carries it must still check and play without it."""
-    return [line for line in lines if line.text.strip() != _OLD_DISCLAIMER]
+    return [line for line in lines if not is_old_disclaimer(line.text)]
 
 
 PROMPT_HEAD = """You write the script for a two-host audio episode about one city council meeting. A text-to-speech voice reads the script aloud, so the words must sound right when spoken.

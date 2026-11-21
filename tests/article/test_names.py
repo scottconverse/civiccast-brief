@@ -1412,3 +1412,17 @@ def test_the_non_skill_path_still_names_a_seat_only_voter() -> None:
     )
     fixed, _ = repair_article(article, PEOPLE)
     assert "Mayor Pro Tem Jenn Kaaoush voted yes" in fixed.paragraphs[0].text
+
+
+def test_a_name_before_the_pro_tem_seat_is_never_printed_twice() -> None:
+    # Boulder, 12 Nov 2026: "Tara Winer, the mayor pro tem, and council members" was rewritten
+    # to "Tara Winer, the Mayor Pro Tem Tara Winer". The name already printed before the seat
+    # is the holder, so the seat is left as written, and the tail stops before ", and council".
+    from civiccast_brief.article.names import seat_fixes
+
+    text = "Voting no were Jenn Kaaoush, the mayor pro tem, and council members."
+    assert fill_roll_call_names(text, PEOPLE) == (text, [])
+    assert seat_fixes(text, PEOPLE) == []
+    assert dict(seat_fixes("The mayor pro tem, and the council voted.", PEOPLE)) == {
+        "mayor pro tem": "Mayor Pro Tem Jenn Kaaoush"
+    }

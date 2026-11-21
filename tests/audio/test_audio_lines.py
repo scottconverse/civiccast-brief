@@ -96,3 +96,18 @@ def test_read_script_rejects_text_that_is_not_utf8(tmp_path: Path) -> None:
 def test_read_script_reports_a_missing_file(tmp_path: Path) -> None:
     with pytest.raises(ScriptError, match="cannot read script"):
         read_script(tmp_path / "missing.txt")
+
+
+def test_the_retired_disclaimer_line_is_never_spoken() -> None:
+    # Old saved scripts still carry the retired sentence. The audio parser drops it, as the
+    # checker and every other reader already do, so it reaches no voice engine and no VTT.
+    text = (
+        "[S1] Good evening.\n"
+        "[S2] This episode is AI-generated from the public meeting video; check the official record.\n"
+        "[S1] The council voted 5 to 2.\n"
+    )
+    script = parse_script(text)
+    assert [line.text for line in script.lines] == [
+        "Good evening.",
+        "The council voted 5 to 2.",
+    ]

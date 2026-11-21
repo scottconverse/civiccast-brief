@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from civiccast_brief.audio.errors import ScriptError
+from civiccast_brief.script.writer import is_old_disclaimer
 
 SPEAKERS = ("S1", "S2")
 
@@ -72,6 +73,10 @@ def parse_script(text: str) -> Script:
                 f"line {number}: expected [S1] text, [S2] text or [CHAPTER Title]; "
                 f"got {item[:60]!r}"
             )
+        # The retired disclaimer is no longer spoken. An old script that still carries it
+        # plays without it, exactly as the checker and every other reader drop it.
+        if is_old_disclaimer(spoken.group(2)):
+            continue
         if pending is not None:
             chapters.append(Chapter(pending[0], len(lines)))
             pending = None
