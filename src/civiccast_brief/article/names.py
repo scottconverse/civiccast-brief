@@ -1718,8 +1718,14 @@ _VOTE_CONTEXT_RE = re.compile(r"\b(voted?|votes?|roll[- ]call|aye|yes|nay|no)\b"
 #: "proton, cowish". The optional leading word is the captions' misheard "Mayor".
 _MAYOR_PRO_TEM_RE = re.compile(
     r"\b(?:(?:Mayor|Merry)\s+)?Pro[- ]?(?:[Tt]em|[Tt]on)\b"
-    r"((?:\s*[,\s]\s*[A-Za-z][A-Za-z'’\-]*){0,2})",
+    # After a comma, a clause connector is not a name: ", and council members" ends the tail.
+    r"((?:\s*,\s*(?!(?:and|or|but)\b)[A-Za-z][A-Za-z'’\-]*"
+    r"|\s+[A-Za-z][A-Za-z'’\-]*){0,2})",
     re.IGNORECASE,
+)
+#: A name just before the seat ("Tara Winer, the mayor pro tem"). The name is printed once.
+_NAME_BEFORE_SEAT_RE = re.compile(
+    r"([A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*)?)\s*,?\s*(?:the\s+)?$"
 )
 #: A word after "Mayor Pro Tem" that is a verb or connector, not a person's name.
 _NOT_A_NAME_AFTER_SEAT = frozenset(
@@ -1782,6 +1788,19 @@ def _seat_holder(people: People, role: str) -> Person | None:
     if not holders:
         return None
     return max(holders, key=lambda p: (len(_tokens(p.name)), p.name))
+
+
+def _names_holder_before(text: str, start: int, person: Person) -> bool:
+    """Whether the words just before the seat already name its holder.
+
+    "Tara Winer, the mayor pro tem" prints the name once; naming the seat again would print
+    "Tara Winer, the Mayor Pro Tem Tara Winer". Only the holder's own printed name counts.
+    """
+    match = _NAME_BEFORE_SEAT_RE.search(text[:start])
+    if match is None:
+        return False
+    before = set(_tokens(match.group(1)))
+    return bool(before) and before <= set(_tokens(person.name))
 
 
 def _other_member(word: str, person: Person, people: People) -> bool:
@@ -1852,6 +1871,8 @@ def seat_fixes(text: str, people: People | None) -> list[tuple[str, str]]:
         return []
     out: list[tuple[str, str]] = []
     for match in _MAYOR_PRO_TEM_RE.finditer(text):
+        if _names_holder_before(text, match.start(), person):
+            continue
         tail = match.group(1) or ""
         replacement = _seat_replacement(tail, person, people)
         if replacement != match.group(0):
@@ -1910,6 +1931,8 @@ def fill_roll_call_names(text: str, people: People | None) -> tuple[str, list[st
     if person is not None:
 
         def seat(match: re.Match[str]) -> str:
+            if _names_holder_before(match.string, match.start(), person):
+                return match.group(0)
             tail = match.group(1) or ""
             replacement = _seat_replacement(tail, person, people)
             if replacement != match.group(0):

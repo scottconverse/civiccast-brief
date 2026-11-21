@@ -626,7 +626,7 @@ def _skill(args: argparse.Namespace) -> int:
     for line in shortened:
         print(f"structure: {line}", file=sys.stderr)
     evidence_recap = cited_recap(evidence_recap, article)
-    story_recap_path = args.recap.with_name("story-recap.json")
+    story_recap_path = args.out.with_name("story-recap.json")
     save_recap(evidence_recap, story_recap_path)
     print(f"wrote {story_recap_path}", file=sys.stderr)
     json_path, md_path = save_article(evidence_recap, article, args.out, pages, people)
@@ -743,10 +743,25 @@ def _golden(args: argparse.Namespace) -> int:
     return 0 if score.pass_ else 1
 
 
+def _story_recap_path(args: argparse.Namespace) -> Path | None:
+    """The evidence a skill run saved: beside the story, else in the recap's folder.
+
+    A skill run writes it beside ``--out``, next to the article it describes; the recap's
+    folder is the older layout the weekly run uses, where both paths are the same folder.
+    """
+    for path in (
+        args.article.with_name("story-recap.json"),
+        args.recap.with_name("story-recap.json"),
+    ):
+        if path.is_file():
+            return path
+    return None
+
+
 def _evidence_recap(args: argparse.Namespace, recap):
     """The recap the story's own CLAIMS AND SOURCES adds, when a skill run wrote one."""
-    path = args.recap.with_name("story-recap.json")
-    if not path.is_file():
+    path = _story_recap_path(args)
+    if path is None:
         return recap
     try:
         return load_recap(path)
@@ -755,7 +770,7 @@ def _evidence_recap(args: argparse.Namespace, recap):
 
 
 def _skill_evidence(args: argparse.Namespace) -> bool:
-    return args.recap.with_name("story-recap.json").is_file()
+    return _story_recap_path(args) is not None
 
 
 def _check(args: argparse.Namespace) -> int:
@@ -790,7 +805,8 @@ def _stage(args: argparse.Namespace) -> int:
     record = load_record(_record_pages(args, recap))
     people = _people(args, recap, pages)
     # An older saved story may print a caption's spelling. Staging is the last chance to fix it.
-    article = _repair(article, people, record)
+    # A skill-written story keeps the skill path's rule: the seat is not named from the roster.
+    article = _repair(article, people, record, add_seat_names=not _skill_evidence(args))
     article, moved = merge_announcements(article, recap.video_id == ROUNDUP_ID)
     for line in moved:
         print(f"structure: {line}", file=sys.stderr)

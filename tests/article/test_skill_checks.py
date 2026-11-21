@@ -26,6 +26,7 @@ from civiccast_brief.article.writer import (
     split_sentences,
     top_news,
 )
+from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.recap import Claim, Recap, save_recap
 
 RECAP = Recap(
@@ -428,3 +429,159 @@ def test_a_retry_judges_each_draft_against_its_own_claims(
     editor = out.with_suffix(".editor.txt").read_text(encoding="utf-8")
     assert "Check 1: the audit vote." in editor
     assert "Check 1: the budget report." not in editor
+
+
+SEAT_ONLY_STORY = """Council votes to deny the appeal
+
+The vote was 5 to 2.
+
+The council voted 5 to 2 to deny the appeal, and the Mayor Pro Tem voted no.
+
+CLAIMS AND SOURCES
+
+Claim: The council voted 5 to 2 to deny the appeal, and the Mayor Pro Tem voted no.
+Source (primary record): Town Council captions, Oct. 26, 2026, 1:00:00. Supplied text.
+
+EDITOR FILE: NOT FOR PUBLICATION
+
+CLAIM CHECK
+
+Check 1: the appeal vote.
+Status: primary record.
+"""
+
+
+def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The weekly run writes with `skill`, then stages the same story one call later.
+
+    Stage must not add a roster name a seat-only sentence did not have: the skill path left
+    "the Mayor Pro Tem" unnamed on purpose, and naming it again would print it twice in the
+    "Name, the mayor pro tem" shape the audit found in a published story.
+    """
+    city = tmp_path / "city"
+    city.mkdir()
+    (city / "roster.json").write_text(
+        json.dumps(
+            {
+                "city": "Superior",
+                "body": "Town Council",
+                "state": "CO",
+                "members": [
+                    {"name": "Mark Lacis", "first": "Mark", "last": "Lacis", "role": "Mayor"},
+                    {
+                        "name": "Jenn Kaaoush",
+                        "first": "Jenn",
+                        "last": "Kaaoush",
+                        "role": "Mayor Pro Tem",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    recap_path = tmp_path / "recap.json"
+    save_recap(
+        Recap(
+            city="Superior",
+            body="Town Council",
+            meeting_date="October 26, 2026",
+            video_id="civicclerk-superiorco-43",
+            claims=(
+                Claim(
+                    "c01",
+                    "Appeal",
+                    "The council voted 5 to 2 to deny the appeal, and the Mayor Pro Tem voted no.",
+                    "1:00:00",
+                    "voted no",
+                ),
+            ),
+        ),
+        recap_path,
+    )
+    monkeypatch.setattr(
+        skill,
+        "run_skill",
+        lambda **_kwargs: skill.SkillRun(
+            True, tmp_path / "skill", story=skill.parse_skill_story(SEAT_ONLY_STORY)
+        ),
+    )
+    out = tmp_path / "out" / "article"
+    out.parent.mkdir()
+    assert main(["skill", "--recap", str(recap_path), "--out", str(out), "--city", str(city)]) == 0
+
+    db = tmp_path / "desk.db"
+    staged = main(
+        [
+            "stage",
+            "--db",
+            str(db),
+            "--recap",
+            str(recap_path),
+            "--article",
+            str(out.with_suffix(".json")),
+            "--city",
+            str(city),
+        ]
+    )
+    assert staged == 0
+    with ReviewStore(db) as store:
+        [item] = store.list_items()
+    text = " ".join(
+        paragraph["text"]
+        for section in item.article["sections"]
+        for paragraph in section["paragraphs"]
+    )
+    assert "Mayor Pro Tem" in text
+    assert "Kaaoush" not in text
+
+
+def test_skill_writes_the_evidence_beside_the_story_not_beside_the_recap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`article skill --recap A --out B` must not overwrite A/story-recap.json.
+
+    The evidence belongs with the article it describes; `check` then finds it beside the
+    article, so a re-run into another folder cannot rewrite an older story's evidence.
+    """
+    recap_dir = tmp_path / "recap"
+    recap_dir.mkdir()
+    recap_path = recap_dir / "recap.json"
+    save_recap(
+        Recap(
+            city="Boulder",
+            body="City Council",
+            meeting_date="November 12, 2026",
+            video_id="v",
+            media_url="https://example.test/meeting.mp4",
+            claims=(),
+        ),
+        recap_path,
+    )
+    monkeypatch.setattr(
+        skill,
+        "run_skill",
+        lambda **_kwargs: skill.SkillRun(
+            True, tmp_path / "skill", story=skill.parse_skill_story(RUN_ONE_STORY)
+        ),
+    )
+    out = tmp_path / "out" / "article"
+    out.parent.mkdir()
+    assert main(["skill", "--recap", str(recap_path), "--out", str(out)]) == 0
+
+    assert (out.parent / "story-recap.json").is_file()
+    assert not (recap_dir / "story-recap.json").exists()
+    # The check finds the evidence beside the article it is checking.
+    assert (
+        main(
+            [
+                "check",
+                "--recap",
+                str(recap_path),
+                "--article",
+                str(out.with_suffix(".json")),
+            ]
+        )
+        == 0
+    )
