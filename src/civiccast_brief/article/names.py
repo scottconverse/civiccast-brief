@@ -88,6 +88,16 @@ def _is_role_word(word: str) -> bool:
     return word.lower() in _ROLE_WORD_SET or word.lower() in _PLURAL_TITLES
 
 
+def is_plural_civic_title(word: str) -> bool:
+    """Whether a word is a plural civic title ("Members", "Councilmembers", "Trustees").
+
+    A plural title describes a group and gives no one a specific office, so other checks that
+    treat a capitalised word as a name may skip it. A singular title ("Mayor", "Member") names
+    an office and is never skipped.
+    """
+    return _is_plural_role_word(word)
+
+
 def _is_singular_role_word(word: str) -> bool:
     """Whether a word is a singular printed title ("Member", "Trustee"), not a plural title."""
     return word.lower() in _ROLE_WORD_SET

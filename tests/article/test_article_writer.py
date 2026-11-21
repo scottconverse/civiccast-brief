@@ -164,6 +164,46 @@ def test_each_paragraph_links_to_the_video_moment_of_its_claims() -> None:
     )
 
 
+def test_a_claim_with_no_video_moment_gets_no_citation() -> None:
+    """A fact taken from the packet carries 0:00:00: there is no video moment to link."""
+    recap = replace(
+        RECAP,
+        claims=RECAP.claims
+        + (
+            Claim(
+                id="c03",
+                topic="Packet",
+                text="The packet lists the fee change.",
+                timestamp="0:00:00",
+                quote="the packet lists the fee change",
+            ),
+        ),
+    )
+    paragraph = Paragraph("The packet lists the fee change.", ("c03",))
+    assert citations(recap, paragraph) == []
+    markdown = render_markdown(recap, article(paragraph))
+    assert "0:00:00" not in markdown
+    assert "t=0s" not in markdown
+
+
+def test_a_genuine_moment_near_the_start_keeps_its_link() -> None:
+    recap = replace(
+        RECAP,
+        claims=(
+            Claim(
+                id="c01",
+                topic="Opening",
+                text="The meeting opened at 8 p.m.",
+                timestamp="0:00:05",
+                quote="the meeting opened",
+            ),
+        ),
+    )
+    paragraph = Paragraph("The meeting opened at 8 p.m.", ("c01",))
+    [cite] = citations(recap, paragraph)
+    assert cite["url"].endswith("&t=5s")
+
+
 def test_parse_reads_the_json_object_inside_the_answer() -> None:
     answer = "Here it is:\n" + json.dumps(
         {
