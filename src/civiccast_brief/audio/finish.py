@@ -15,6 +15,11 @@ carries it, and 64 kbps is 8 KB per second: a 90-second episode is about 720 KB,
 would be about 1.4 MB. That is a choice from the arithmetic, not a listening test; 96 kbps is the
 step to try if Scott hears artifacts.
 
+MP3 encoding can overshoot the master's true peak (measured at 1.7 dB on a Gemini TTS episode), so
+the MP3 is measured with ebur128 after encoding. If it is above the target (plus 0.5 dB of slack),
+the master is normalised again with a lower true-peak target, lowered by the overshoot, and
+re-encoded, up to two retries; the lowest-peak attempt is kept.
+
 Chapters use the Podcasting 2.0 JSON chapters format, version 1.2.0. A chapter starts at the first
 spoken line after its [CHAPTER] mark. The first chapter always starts at 0, so it also covers an
 intro and any lines before the first mark.
@@ -26,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +42,8 @@ from civiccast_brief.audio.lines import SPEAKERS, Line, Script
 
 TARGET_LUFS = -16.0
 TARGET_TRUE_PEAK_DBTP = -1.5
+MP3_PEAK_MARGIN_DB = 0.5
+MP3_PEAK_RETRIES = 2
 TARGET_LRA = 11.0
 SAMPLE_RATE = 44100
 MP3_BITRATE = "64k"
@@ -126,11 +134,14 @@ def _loudnorm_measurements(stderr: str) -> dict[str, str]:
     return data
 
 
-def normalize_loudness(program: Path, out_wav: Path) -> None:
-    """Two-pass loudnorm to TARGET_LUFS and TARGET_TRUE_PEAK_DBTP. Writes 16-bit mono WAV."""
-    measure_graph = (
-        f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TRUE_PEAK_DBTP}:LRA={TARGET_LRA}:print_format=json"
-    )
+def normalize_loudness(
+    program: Path, out_wav: Path, *, true_peak: float = TARGET_TRUE_PEAK_DBTP
+) -> None:
+    """Two-pass loudnorm to TARGET_LUFS and true_peak dBTP. Writes 16-bit mono WAV.
+
+    The measure pass and the apply pass use the same true-peak target.
+    """
+    measure_graph = f"loudnorm=I={TARGET_LUFS}:TP={true_peak}:LRA={TARGET_LRA}:print_format=json"
     first = run_ffmpeg(
         ["-nostats", "-i", str(program), "-af", measure_graph, "-f", "null", "-"],
         what="loudness measurement",
@@ -139,7 +150,7 @@ def normalize_loudness(program: Path, out_wav: Path) -> None:
     if measured["input_i"] in ("-inf", "inf"):
         raise FinishError("the program is silent; there is nothing to normalise")
     graph = (
-        f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TRUE_PEAK_DBTP}:LRA={TARGET_LRA}"
+        f"loudnorm=I={TARGET_LUFS}:TP={true_peak}:LRA={TARGET_LRA}"
         f":measured_I={measured['input_i']}:measured_TP={measured['input_tp']}"
         f":measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}"
         f":offset={measured['target_offset']}:linear=true:print_format=summary"
@@ -311,9 +322,29 @@ def finish_episode(
     program = work / "program.wav"
     master = work / "master.wav"
     stitch(render.wav, intro, outro, program)
-    normalize_loudness(program, master)
     mp3 = out_dir / "episode.mp3"
-    encode_mp3(master, mp3)
+    # MP3 encoding can push the true peak over the master's; retry with a lower ceiling if it does.
+    true_peak = TARGET_TRUE_PEAK_DBTP
+    attempts: list[tuple[float, Loudness, Path, Path]] = []
+    for number in range(MP3_PEAK_RETRIES + 1):
+        attempt_master = work / f"master-{number + 1}.wav"
+        attempt_mp3 = work / f"episode-{number + 1}.mp3"
+        normalize_loudness(program, attempt_master, true_peak=true_peak)
+        encode_mp3(attempt_master, attempt_mp3)
+        loudness = measure_loudness(attempt_mp3)
+        attempts.append((loudness.true_peak_dbtp, loudness, attempt_master, attempt_mp3))
+        if loudness.true_peak_dbtp <= TARGET_TRUE_PEAK_DBTP + MP3_PEAK_MARGIN_DB:
+            break
+        # Lower the ceiling by however far the MP3 overshot the target.
+        true_peak -= loudness.true_peak_dbtp - TARGET_TRUE_PEAK_DBTP
+    _, loudness, best_master, best_mp3 = min(attempts, key=lambda attempt: attempt[0])
+    shutil.copyfile(best_master, master)
+    shutil.copyfile(best_mp3, mp3)
+    for _, _, attempt_master, attempt_mp3 in attempts:
+        if attempt_master != best_master:
+            attempt_master.unlink(missing_ok=True)
+        if attempt_mp3 != best_mp3:
+            attempt_mp3.unlink(missing_ok=True)
 
     spans = [(line.start + offset, line.end + offset) for line in render.lines]
     marks = chapter_marks(script, [start for start, _ in spans])
@@ -346,5 +377,5 @@ def finish_episode(
         chapters=tuple(marks),
         cues=tuple(cues),
         duration=probe_duration(mp3),
-        loudness=measure_loudness(mp3),
+        loudness=loudness,
     )
