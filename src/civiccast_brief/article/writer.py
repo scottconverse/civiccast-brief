@@ -1916,7 +1916,7 @@ def render_markdown(
                     for c in page_citations(paragraph, pages)
                 )
                 sources = f"{sources}; Documents: {docs}" if sources else f"Documents: {docs}"
-            out += [f"{paragraph.text} ({sources or 'The meeting video'})", ""]
+            out += [f"{paragraph.text} ({sources or 'The meeting record'})", ""]
     if article.votes:
         out += ["## Votes", ""]
         for vote in article.votes:
