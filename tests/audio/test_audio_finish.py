@@ -1,6 +1,8 @@
+import array
 import itertools
 import json
 import re
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from civiccast_brief.audio.engines import FakeEngine, LineTiming, RenderResult
 from civiccast_brief.audio.errors import FinishError
 from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg, tools_available
 from civiccast_brief.audio.finish import (
+    SAMPLE_RATE,
     SPEAKER_NAMES,
     Cue,
     Loudness,
@@ -218,60 +221,13 @@ def test_silent_program_cannot_be_normalised(tmp_path: Path) -> None:
         normalize_loudness(silent, tmp_path / "out.wav")
 
 
-# --- MP3 true-peak retry (stubbed ffmpeg) ---------------------------------------------------
+# --- true-peak limiter and MP3 headroom (stubbed ffmpeg) ------------------------------------
 
 
 @dataclass
 class _FakeProc:
     stderr: str = ""
     stdout: str = ""
-
-
-_LOUDNORM_MEASUREMENTS = json.dumps(
-    {
-        "input_i": "-18.0",
-        "input_tp": "-2.0",
-        "input_lra": "3.0",
-        "input_thresh": "-28.0",
-        "target_offset": "0.0",
-    }
-)
-
-
-def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch, mp3_peaks: list[float]) -> list[list[str]]:
-    """Stub ffmpeg and the MP3 measurements; each write target holds its own file name."""
-    calls: list[list[str]] = []
-    remaining = list(mp3_peaks)
-
-    def fake_run(args: list[str], what: str = "ffmpeg") -> _FakeProc:
-        calls.append(args)
-        target = Path(args[-1])
-        if str(target) != "-":
-            target.write_text(target.name, encoding="utf-8")
-        return _FakeProc(stderr=_LOUDNORM_MEASUREMENTS)
-
-    def fake_measure(path: Path) -> Loudness:
-        return Loudness(-16.0, remaining.pop(0), 5.0)
-
-    monkeypatch.setattr(finish_module, "run_ffmpeg", fake_run)
-    monkeypatch.setattr(finish_module, "measure_loudness", fake_measure)
-    monkeypatch.setattr(finish_module, "probe_duration", lambda path: 3.0)
-    return calls
-
-
-def _true_peak_targets(calls: list[list[str]]) -> list[float]:
-    targets = []
-    for args in calls:
-        for arg in args:
-            if arg.startswith("loudnorm="):
-                match = re.search(r"TP=(-?[\d.]+)", arg)
-                assert match is not None
-                targets.append(float(match.group(1)))
-    return targets
-
-
-def _encode_count(calls: list[list[str]]) -> int:
-    return sum(1 for args in calls if "libmp3lame" in args)
 
 
 def _one_line_render(tmp_path: Path) -> RenderResult:
@@ -284,48 +240,190 @@ def _one_line_render(tmp_path: Path) -> RenderResult:
     )
 
 
-def test_finish_keeps_the_first_encode_when_the_mp3_peak_is_under_the_limit(
+def test_limiter_filter_gain_ceiling_and_settings() -> None:
+    graph = finish_module.limiter_filter(3.0, -5.5)
+    assert graph.startswith("volume=3.000dB,alimiter=")
+    assert "level=disabled" in graph
+    assert f"attack={finish_module.LIMITER_ATTACK_MS}" in graph
+    assert f"release={finish_module.LIMITER_RELEASE_MS}" in graph
+    # Without delay compensation the limiter shifts the audio by its lookahead (5 ms measured
+    # on real episodes), which would slide chapters and transcripts against the audio.
+    assert "latency=true" in graph
+    # The ceiling is a linear sample-peak limit, so -5.5 dBFS is 10 ** (-5.5 / 20).
+    match = re.search(r"limit=([\d.]+)", graph)
+    assert match is not None
+    assert float(match.group(1)) == pytest.approx(10 ** (-5.5 / 20), abs=1e-5)
+
+
+def _write_click_wav(path: Path, *, position: int = 17640, seconds: float = 1.0) -> None:
+    """A mono 16-bit WAV of silence with a three-sample click at `position`."""
+    frames = array.array("h", [0]) * int(SAMPLE_RATE * seconds)
+    for offset in range(-1, 2):
+        frames[position + offset] = 30000 - abs(offset) * 1000
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SAMPLE_RATE)
+        wav.writeframes(frames.tobytes())
+
+
+def _read_peak_position(path: Path) -> tuple[int, int]:
+    """(sample index of the largest absolute sample, number of samples)."""
+    with wave.open(str(path), "rb") as wav:
+        frames = array.array("h", wav.readframes(wav.getnframes()))
+    peak = max(range(len(frames)), key=lambda index: abs(frames[index]))
+    return peak, len(frames)
+
+
+@needs_ffmpeg
+def test_limiter_keeps_a_click_at_its_sample_and_the_length_unchanged(tmp_path: Path) -> None:
+    source = tmp_path / "click.wav"
+    out = tmp_path / "limited.wav"
+    _write_click_wav(source)
+    # The click is at 0.915 full scale, over the -1.5 dBFS ceiling, so the limiter really works.
+    finish_module.apply_peak_limiter(source, out, gain_db=0.0, ceiling_db=-1.5)
+
+    position, length = _read_peak_position(out)
+    _, source_length = _read_peak_position(source)
+    assert abs(position - 17640) <= 1
+    assert length == source_length
+
+
+@needs_ffmpeg
+def test_limiter_is_a_no_op_when_the_signal_is_under_the_ceiling(tmp_path: Path) -> None:
+    source = tmp_path / "quiet.wav"
+    out = tmp_path / "limited.wav"
+    run_ffmpeg(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=1000:duration=1",
+            "-af",
+            "volume=-10dB",
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(source),
+        ]
+    )
+    finish_module.apply_peak_limiter(source, out, gain_db=0.0, ceiling_db=-1.5)
+
+    with wave.open(str(source), "rb") as original, wave.open(str(out), "rb") as limited:
+        assert limited.readframes(limited.getnframes()) == original.readframes(
+            original.getnframes()
+        )
+
+
+def _stub_mastering(monkeypatch: pytest.MonkeyPatch, measurements: list[Loudness]) -> list[float]:
+    """Stub the ffmpeg stages and record the limiter ceiling each attempt was rendered with."""
+    ceilings: list[float] = []
+    remaining = list(measurements)
+
+    def fake_normalize(program: Path, out_wav: Path, *, true_peak: float = -1.5) -> None:
+        out_wav.write_text("normalised", encoding="utf-8")
+
+    def fake_solve(program: Path, out_wav: Path, *, ceiling_db: float, target_lufs: float) -> float:
+        ceilings.append(ceiling_db)
+        out_wav.write_text(out_wav.name, encoding="utf-8")
+        return 2.0
+
+    def fake_encode(master: Path, out_mp3: Path) -> None:
+        out_mp3.write_text(out_mp3.name, encoding="utf-8")
+
+    def fake_measure(path: Path) -> Loudness:
+        return remaining.pop(0)
+
+    monkeypatch.setattr(finish_module, "normalize_loudness", fake_normalize)
+    monkeypatch.setattr(finish_module, "solve_limiter_gain", fake_solve)
+    monkeypatch.setattr(finish_module, "encode_mp3", fake_encode)
+    monkeypatch.setattr(finish_module, "measure_loudness", fake_measure)
+    monkeypatch.setattr(finish_module, "probe_duration", lambda path: 3.0)
+    return ceilings
+
+
+def test_master_keeps_the_first_attempt_when_it_meets_both_targets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _stub_ffmpeg(monkeypatch, [-1.4])
-    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+    ceilings = _stub_mastering(monkeypatch, [Loudness(-16.1, -1.7, 4.0)])
+    work = tmp_path / "work"
+    work.mkdir()
+    master, mp3, loudness = finish_module.master_for_mp3(
+        tmp_path / "program.wav", work, tmp_path / "episode.mp3"
+    )
 
-    assert _encode_count(calls) == 1
-    assert _true_peak_targets(calls) == [-1.5, -1.5]
-    assert files.loudness == Loudness(-16.0, -1.4, 5.0)
+    assert ceilings == [-1.5]
+    assert loudness == Loudness(-16.1, -1.7, 4.0)
     assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-1.mp3"
+    assert master.read_text(encoding="utf-8") == "master-1.wav"
+    assert mp3 == tmp_path / "episode.mp3"
 
 
-def test_finish_retries_with_a_lower_true_peak_when_the_mp3_overshoots(
+def test_master_lowers_the_ceiling_by_the_mp3_overshoot_and_keeps_the_passing_attempt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _stub_ffmpeg(monkeypatch, [0.2, -1.4])
-    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+    # First attempt overshoots by 2.6 dB above the -1.6 dB peak margin; the retry passes.
+    ceilings = _stub_mastering(monkeypatch, [Loudness(-16.0, 1.0, 5.0), Loudness(-16.2, -1.8, 4.0)])
+    work = tmp_path / "work"
+    work.mkdir()
+    _, _mp3, loudness = finish_module.master_for_mp3(
+        tmp_path / "program.wav", work, tmp_path / "episode.mp3"
+    )
 
-    # Overshoot is 1.7 dB, so the retry targets -1.5 - 1.7 = -3.2 dBTP on both passes.
-    assert _true_peak_targets(calls) == pytest.approx([-1.5, -1.5, -3.2, -3.2])
-    assert _encode_count(calls) == 2
-    assert files.loudness == Loudness(-16.0, -1.4, 5.0)
+    # -1.5 - (1.0 - -1.6) - 0.1 = -4.2 dBFS.
+    assert ceilings == pytest.approx([-1.5, -4.2])
+    assert loudness.true_peak_dbtp == -1.8
     assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-2.mp3"
-    assert (tmp_path / "work" / "master.wav").read_text(encoding="utf-8") == "master-2.wav"
-    assert not (tmp_path / "work" / "master-1.wav").exists()
-    assert not (tmp_path / "work" / "episode-1.mp3").exists()
+    assert (work / "master.wav").read_text(encoding="utf-8") == "master-2.wav"
+    assert not (work / "master-1.wav").exists()
+    assert not (work / "episode-1.mp3").exists()
 
 
-def test_finish_gives_up_after_two_retries_and_keeps_the_lowest_peak(
+def test_master_gives_up_and_the_peak_ceiling_wins(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _stub_ffmpeg(monkeypatch, [0.2, 0.5, 0.3])
-    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+    # None clears -1.5 dBTP, so the lowest peak is kept even though it is not the loudest.
+    _stub_mastering(
+        monkeypatch,
+        [
+            Loudness(-16.0, -1.0, 5.0),
+            Loudness(-16.4, -1.2, 4.5),
+            Loudness(-17.0, -1.4, 4.0),
+            Loudness(-16.8, -1.3, 4.2),
+        ],
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+    _, _, loudness = finish_module.master_for_mp3(
+        tmp_path / "program.wav", work, tmp_path / "episode.mp3"
+    )
+    assert loudness.true_peak_dbtp == -1.4
 
-    # Two retries only: -1.5, then -3.2, then -3.2 - 2.0 (the second overshoot) = -5.2 dBTP.
-    assert _true_peak_targets(calls) == pytest.approx([-1.5, -1.5, -3.2, -3.2, -5.2, -5.2])
-    assert _encode_count(calls) == 3
-    # The first attempt had the lowest peak, so that is the one kept and reported.
-    assert files.loudness == Loudness(-16.0, 0.2, 5.0)
-    assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-1.mp3"
-    assert not (tmp_path / "work" / "master-3.wav").exists()
-    assert not (tmp_path / "work" / "episode-3.mp3").exists()
+
+def test_pick_attempt_prefers_a_peak_under_the_ceiling_then_the_loudest_close_to_target(
+    tmp_path: Path,
+) -> None:
+    attempts = [
+        (tmp_path / "m1", tmp_path / "e1", Loudness(-15.0, -0.5, 5.0)),
+        (tmp_path / "m2", tmp_path / "e2", Loudness(-16.4, -1.8, 4.0)),
+        (tmp_path / "m3", tmp_path / "e3", Loudness(-16.1, -1.6, 4.2)),
+    ]
+    _, mp3, _ = finish_module.pick_attempt(attempts)
+    assert mp3.name == "e3"
+
+
+def test_finish_episode_delivers_an_mp3_within_both_targets(tmp_path: Path) -> None:
+    script = parse_script(EPISODE_SCRIPT)
+    out = tmp_path / "episode"
+    render = FakeEngine().render(list(script.lines), out / "work" / "voice.wav")
+    files = finish_episode(render, script, out)
+
+    measured = measure_loudness(files.mp3)
+    assert abs(measured.integrated_lufs - (-16.0)) <= 0.5
+    assert measured.true_peak_dbtp <= -1.5
 
 
 def test_a_chapter_mark_title_starts_with_a_capital_letter() -> None:
