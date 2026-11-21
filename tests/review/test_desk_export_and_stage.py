@@ -99,7 +99,11 @@ def test_redraft_sends_the_note_to_the_writer_and_returns_to_review(tmp_path, ar
 
     def writer(current, note):
         seen.append((current.id, note))
-        return {"recap": "R, shorter.", "checks_passed": True}
+        return {
+            "recap": "R, shorter.",
+            "script": "S, shorter.",
+            "checks_passed": True,
+        }
 
     with ReviewStore(db) as store:
         store.publish(item.id)
@@ -108,10 +112,33 @@ def test_redraft_sends_the_note_to_the_writer_and_returns_to_review(tmp_path, ar
         desk.redraft(store, item.id, "Make it shorter.", writer)
         after = store.get_item(item.id)
         assert seen == [(item.id, "Make it shorter.")]
-        assert (after.recap, after.status, after.checks_passed) == ("R, shorter.", "review", True)
+        # The recap is the run's checked facts and stays; the script is the editor's to change.
+        assert (after.recap, after.script, after.status, after.checks_passed) == (
+            "R",
+            "S, shorter.",
+            "review",
+            True,
+        )
         assert after.note == "Make it shorter."
         assert store.history(item.id)[0].action == "redrafted"
         with pytest.raises(ReviewError, match="same text"):
             desk.redraft(store, item.id, "Again.", lambda i, n: {"recap": "R, shorter."})
         with pytest.raises(ReviewError, match="fields an episode has not"):
             desk.redraft(store, item.id, "Again.", lambda i, n: {"article": article})
+
+
+def test_an_episode_redraft_keeps_the_recap_so_assemble_can_still_build_it(tmp_path):
+    db = tmp_path / "d.db"
+    item = stage(db)
+
+    def writer(item, note):
+        return {
+            "recap": "a recap that differs from the run's recap.json",
+            "script": "S, redrafted.",
+        }
+
+    with ReviewStore(db) as store:
+        desk.redraft(store, item.id, "Tighten it.", writer)
+        after = store.get_item(item.id)
+    assert after.recap == "R"
+    assert after.script == "S, redrafted."

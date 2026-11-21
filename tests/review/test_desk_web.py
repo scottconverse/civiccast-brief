@@ -101,7 +101,7 @@ def test_redraft_uses_the_injected_writer_and_keeps_an_empty_note_out(store):
 
     def writer(current, note):
         notes.append(note)
-        return {"recap": "Shorter recap."}
+        return {"recap": "Shorter recap.", "script": "[S1] Shorter script."}
 
     client = client_for(store, writer=writer)
     t = token(client)
@@ -109,7 +109,10 @@ def test_redraft_uses_the_injected_writer_and_keeps_an_empty_note_out(store):
     assert empty.status_code == 400 and "write a note" in empty.text
     done = client.post(f"/items/{item.id}/redraft", data={"token": t, "note": "Shorter."})
     assert done.status_code == 200 and "Redrafted with your note" in done.text
-    assert notes == ["Shorter."] and store.get_item(item.id).recap == "Shorter recap."
+    after = store.get_item(item.id)
+    # The recap is the run's checked facts and stays; only the script is redrafted.
+    assert notes == ["Shorter."] and after.recap == "Recap."
+    assert after.script == "[S1] Shorter script."
 
     def broken(current, note):
         raise RuntimeError("model timed out")
@@ -406,16 +409,49 @@ def test_an_edit_to_a_published_item_stays_published_and_unpublish_takes_it_off(
         data={
             "token": t,
             "recap": "Recap, fixed.",
-            "script": "[S1] Script.",
+            "script": "[S1] Script, fixed.",
             "speaker:voice 01": "unknown",
         },
     )
     assert saved.status_code == 200 and "Saved and published again" in saved.text
     after = store.get_item(item.id)
-    assert (after.status, after.recap) == ("published", "Recap, fixed.")
+    # The recap comes from the run and is not edited here; the script is.
+    assert (after.status, after.recap, after.script) == (
+        "published",
+        "Recap.",
+        "[S1] Script, fixed.",
+    )
 
     off = client.post(f"/items/{item.id}/unpublish", data={"token": t})
     assert off.status_code == 200 and "Unpublished." in off.text
     assert store.get_item(item.id).status == "held"
     again = client.post(f"/items/{item.id}/unpublish", data={"token": t})
     assert again.status_code == 400 and "only a published item can be unpublished" in again.text
+
+
+def test_a_recap_change_cannot_be_saved_so_the_export_still_matches_the_run(store, tmp_path):
+    """The assembler refuses an episode whose exported recap differs from the run's; an edit
+    that cannot be saved cannot strand the item, so a save and publish still assemble."""
+    from civiccast_brief.review.export import export_published
+
+    item = add_episode(store)
+    client = client_for(store)
+    store.publish(item.id)
+    page = client.get(f"/items/{item.id}").text
+    assert 'name="recap"' not in page and "readonly" in page  # shown, not editable
+
+    saved = client.post(
+        f"/items/{item.id}/save",
+        data={
+            "token": token(client),
+            "recap": "A recap the run never wrote.",
+            "script": "[S1] Script.",
+            "speaker:voice 01": "unknown",
+        },
+    )
+    assert saved.status_code == 200
+    assert store.get_item(item.id).recap == "Recap."
+    out = tmp_path / "export"
+    exported = export_published(store.path, out)
+    assert len(exported.exported) == 1
+    assert (out / "0001-m1" / "recap.txt").read_text(encoding="utf-8") == "Recap."

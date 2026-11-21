@@ -8,7 +8,8 @@ what the desk already published. A run fails if any step failed.
 Publish is immediate: when an editor publishes, edits or kills a public item on the desk, the
 station queues a publish run (the publish steps only) that starts ``PUBLISH_DELAY_SECONDS``
 later, so a few clicks in a row make one deploy. A full run that reaches its publish steps
-covers every request made before them. The request is kept in the database, so a restart does
+covers the request queued when they begin, even a retry queued for later; a click made during
+the run is not covered. The request is kept in the database, so a restart does
 not lose it. Every run is a row in ``station_runs``
 in the desk's own database, with its output, so the desk can show the last run, the next run
 and each run's log.
@@ -46,6 +47,10 @@ LOG_FLUSH_SECONDS: Final = 2.0
 MAX_WAIT_SECONDS: Final = 60.0
 #: How long a queued publish waits, so several desk actions in a row make one deploy.
 PUBLISH_DELAY_SECONDS: Final = 30.0
+#: How long a failed publish waits before its next try, so a broken deploy is not rerun every tick.
+PUBLISH_RETRY_SECONDS: Final = 30.0 * 60
+#: How many times in a row a failed publish is retried before its request is dropped.
+PUBLISH_RETRIES_MAX: Final = 3
 WEEKDAYS: Final = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 RUN_STATES: Final = ("running", "ok", "failed", "interrupted")
 
@@ -261,24 +266,93 @@ class Station:
         """Queue a publish run (the desk calls this). Later requests join the queued one."""
         if not self.publish_steps:
             return
+        now = self.clock()
+        queued = self._publish_requested()
+        # A fresh click goes at the normal delay, even when a failed publish had queued a retry
+        # 30 minutes out: the earlier of the two wins, so a click never waits for the retry.
+        self._set_publish_requested(now if queued is None else min(queued, now))
+        self._set_retry_count(0)
+        self._wake.set()
+
+    def _set_publish_requested(self, when: datetime) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO station_meta (key, value) VALUES ('publish_requested', ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (when.isoformat(),),
+            )
+
+    def _requeue_publish(self, when: datetime) -> None:
+        """Put a request back, keeping an earlier one that is already queued."""
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO station_meta (key, value) VALUES ('publish_requested', ?)",
-                (self.clock().isoformat(),),
+                (when.isoformat(),),
             )
-        self._wake.set()
 
-    def _publish_covered(self, began: datetime) -> None:
-        """Publish steps that began at ``began`` cover every request made before then."""
+    def _retry_count(self) -> int:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT value FROM station_meta WHERE key = 'publish_requested'"
+                "SELECT value FROM station_meta WHERE key = 'publish_retries'"
             ).fetchone()
-            if row and datetime.fromisoformat(row[0]) <= began:
+        try:
+            return int(row[0]) if row else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def _set_retry_count(self, count: int) -> None:
+        with self._connect() as conn:
+            if count <= 0:
+                conn.execute("DELETE FROM station_meta WHERE key = 'publish_retries'")
+            else:
                 conn.execute(
-                    "DELETE FROM station_meta WHERE key = 'publish_requested' AND value = ?",
-                    (row[0],),
+                    "INSERT INTO station_meta (key, value) VALUES ('publish_retries', ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (str(count),),
                 )
+
+    def _retry_or_drop_publish(self, output: Callable[[str], None]) -> None:
+        """After a failed publish, queue the next try PUBLISH_RETRY_SECONDS out, or drop the
+        request after PUBLISH_RETRIES_MAX tries in a row."""
+        if self._publish_requested() is not None:
+            # A desk click during the failed run already queued a fresh request; that click also
+            # reset the count, so leave it alone.
+            self._set_retry_count(0)
+            return
+        retries = self._retry_count()
+        if retries >= PUBLISH_RETRIES_MAX:
+            self._set_retry_count(0)
+            output(
+                f"publish failed {retries + 1} times in a row; dropping the request. Publish again"
+                " from the desk when the problem is fixed."
+            )
+            return
+        self._set_retry_count(retries + 1)
+        wait = max(PUBLISH_RETRY_SECONDS - PUBLISH_DELAY_SECONDS, 0.0)
+        self._requeue_publish(self.clock() + timedelta(seconds=wait))
+
+    def _take_publish_request(self) -> datetime | None:
+        """Take the request queued now, which the publish steps about to run cover.
+
+        Any request, even a retry queued for later, is covered; a desk click made after this
+        stays queued and goes at the normal delay.
+        """
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute(
+                    "SELECT value FROM station_meta WHERE key = 'publish_requested'"
+                ).fetchone()
+                if row is not None:
+                    conn.execute(
+                        "DELETE FROM station_meta WHERE key = 'publish_requested' AND value = ?",
+                        (row[0],),
+                    )
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        return datetime.fromisoformat(row[0]) if row else None
 
     def publish_due(self) -> bool:
         queued = self._publish_requested()
@@ -323,6 +397,8 @@ class Station:
                 flushed = _time.monotonic()
 
         code = 0
+        covered: datetime | None = None
+        publish_done = False
         try:
             if trigger != "publish":
                 for step in self.steps:
@@ -334,7 +410,7 @@ class Station:
             if self.publish_steps:
                 if code != 0:
                     output("publishing what the desk already published:")
-                self._publish_covered(self.clock())
+                covered = self._take_publish_request()
                 for step in self.publish_steps:
                     output("> " + " ".join(step))
                     step_code = self.runner(step, self.cwd, output)
@@ -342,9 +418,18 @@ class Station:
                         output(f"stopped: that step ended with code {step_code}")
                         code = code or step_code
                         break
+                else:
+                    publish_done = True
         except Exception as exc:  # noqa: BLE001 - a run must end with a record, whatever broke
             output(f"stopped: {type(exc).__name__}: {exc}")
             code = code or 1
+        if publish_done:
+            # A publish that went through covers the desk's requests and resets the retry count.
+            self._set_retry_count(0)
+        elif covered is not None:
+            # A failed publish did not cover the desk's request: queue one retry after
+            # PUBLISH_RETRY_SECONDS, and drop it after PUBLISH_RETRIES_MAX tries in a row.
+            self._retry_or_drop_publish(output)
         with self._connect() as conn:
             conn.execute(
                 "UPDATE station_runs SET status = ?, exit_code = ?, finished_at = ?, log = ?"

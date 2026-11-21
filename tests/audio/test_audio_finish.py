@@ -382,10 +382,10 @@ def test_master_lowers_the_ceiling_by_the_mp3_overshoot_and_keeps_the_passing_at
     assert not (work / "episode-1.mp3").exists()
 
 
-def test_master_gives_up_and_the_peak_ceiling_wins(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_master_gives_up_and_publishes_the_lowest_peak_with_a_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # None clears -1.5 dBTP, so the lowest peak is kept even though it is not the loudest.
+    # None clears the -1.6 dBTP margin, so the lowest peak (-1.4) is published, with a warning.
     _stub_mastering(
         monkeypatch,
         [
@@ -397,10 +397,32 @@ def test_master_gives_up_and_the_peak_ceiling_wins(
     )
     work = tmp_path / "work"
     work.mkdir()
-    _, _, loudness = finish_module.master_for_mp3(
+    _, mp3, loudness = finish_module.master_for_mp3(
         tmp_path / "program.wav", work, tmp_path / "episode.mp3"
     )
     assert loudness.true_peak_dbtp == -1.4
+    assert mp3.read_text(encoding="utf-8") == "episode-3.mp3"
+    assert (work / "master.wav").read_text(encoding="utf-8") == "master-3.wav"
+    warning = capsys.readouterr().err
+    assert "at or under -1.6 dBTP" in warning
+    assert "-1.4 dBTP" in warning and "target -1.5 dBTP" in warning
+
+
+def test_the_peak_margin_is_kept_when_an_attempt_is_chosen(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # -1.5 dBTP meets the public ceiling but not the margin the MP3 needs; the -1.6 one wins.
+    _stub_mastering(
+        monkeypatch,
+        [Loudness(-16.0, -1.5, 5.0), Loudness(-16.4, -1.6, 4.5)],
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+    _, mp3, loudness = finish_module.master_for_mp3(
+        tmp_path / "program.wav", work, tmp_path / "episode.mp3"
+    )
+    assert loudness.true_peak_dbtp == -1.6
+    assert mp3.read_text(encoding="utf-8") == "episode-2.mp3"
 
 
 def test_pick_attempt_prefers_a_peak_under_the_ceiling_then_the_loudest_close_to_target(

@@ -333,6 +333,13 @@ def save_identity(folder: Path, values: dict[str, str]) -> Path:
     path = folder / CITY_FILE
     if path.exists():
         data = _read(path)
+        saved_slug = str(data.get("slug") or "").strip()
+        if saved_slug and clean["slug"] != saved_slug:
+            raise CityFieldError(
+                "The short web name cannot change after setup: it is in every episode's web"
+                " address and feed id.",
+                "slug",
+            )
         data["name"] = clean["name"]
         data["slug"] = clean["slug"]
         data["state"] = clean["state"]

@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -270,13 +271,20 @@ def encode_mp3(master: Path, out_mp3: Path) -> None:
 
 
 def pick_attempt(attempts: list[tuple[Path, Path, Loudness]]) -> tuple[Path, Path, Loudness]:
-    """The peak ceiling wins: prefer attempts at or under the target, then the one nearest -16 LUFS."""
-    under_ceiling = [
-        attempt for attempt in attempts if attempt[2].true_peak_dbtp <= TARGET_TRUE_PEAK_DBTP
-    ]
+    """The peak ceiling wins: prefer attempts at or under the target after the MP3 margin, then
+    the one nearest -16 LUFS. With none under it, publish the lowest peak and warn: the voices are
+    already paid for, and a 0.1 dB miss must not throw a finished episode away."""
+    ceiling = TARGET_TRUE_PEAK_DBTP - MP3_PEAK_MARGIN_DB
+    under_ceiling = [attempt for attempt in attempts if attempt[2].true_peak_dbtp <= ceiling]
     if under_ceiling:
         return min(under_ceiling, key=lambda a: abs(a[2].integrated_lufs - TARGET_LUFS))
-    return min(attempts, key=lambda attempt: attempt[2].true_peak_dbtp)
+    lowest = min(attempts, key=lambda a: a[2].true_peak_dbtp)
+    print(
+        f"warning: no attempt landed at or under {ceiling:.1f} dBTP; publishing the lowest"
+        f" peak, {lowest[2].true_peak_dbtp:.1f} dBTP (target {TARGET_TRUE_PEAK_DBTP:.1f} dBTP)",
+        file=sys.stderr,
+    )
+    return lowest
 
 
 def master_for_mp3(program: Path, work: Path, out_mp3: Path) -> tuple[Path, Path, Loudness]:
