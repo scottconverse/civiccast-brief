@@ -6,8 +6,8 @@ Deterministic rules (these decide pass or fail):
 - every capitalised name in a line appears in a cited claim (or is a host name or show name);
 - spoken text holds no digits;
 - uncited lines are allowed only when they are reactions or questions;
-- the disclaimer is Theo's line 2 and appears once; the intro names the show and city; the
-  outro is Theo's last line and points to the city's video place (YouTube channel by default). The intro and outro may also use
+- the disclaimer is Alex's line 2 and appears once; the intro names the show and city; the
+  outro is Alex's last line and points to the city's video place (YouTube channel by default). The intro and outro may also use
   the recap header (city, body, date) and need no claim id.
 
 The optional model check asks the writer model, once per line, whether the cited claims support
@@ -32,7 +32,7 @@ _DIGIT_RE = re.compile(r"\d")
 _SPOKEN_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?")
 
 # Names the show itself uses. Everything else must come from a cited claim.
-SHOW_NAMES = frozenset({"civiccast", "brief", "maya", "theo", "youtube", "ai"})
+SHOW_NAMES = frozenset({"civiccast", "brief", "pat", "alex", "youtube", "ai"})
 
 # Sentence openers that are ordinary words (articles, pronouns, reactions, imperatives), not names.
 _COMMON_OPENERS = frozenset(
@@ -526,13 +526,13 @@ def _check_structure(
         )
     elif disclaimers[0] != 2 or lines[1].speaker != "S2":
         issues.append(
-            Issue(disclaimers[0], "error", "disclaimer", "the disclaimer must be Theo's line 2")
+            Issue(disclaimers[0], "error", "disclaimer", "the disclaimer must be Alex's line 2")
         )
     if lines:
         first = lines[0]
         if first.speaker != "S1" or "civiccast brief" not in first.text.lower():
             issues.append(
-                Issue(1, "error", "intro", "line 1 must be Maya's intro naming CivicCast Brief")
+                Issue(1, "error", "intro", "line 1 must be Pat's intro naming CivicCast Brief")
             )
         last_number = len(lines)
         last = lines[-1]
@@ -543,7 +543,7 @@ def _check_structure(
                     last_number,
                     "error",
                     "outro",
-                    f"the last line must be Theo's closing line pointing to the city's {video_place}",
+                    f"the last line must be Alex's closing line pointing to the city's {video_place}",
                 )
             )
     for number, line in enumerate(lines, 1):

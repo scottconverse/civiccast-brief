@@ -47,7 +47,7 @@ def test_parse_script_rejects_prose_and_unknown_speakers():
     with pytest.raises(ScriptFormatError):
         parse_script('Here is the script:\n{"speaker": "S1", "text": "Hi.", "claim_ids": []}')
     with pytest.raises(ScriptFormatError):
-        parse_script('{"speaker": "Maya", "text": "Hi.", "claim_ids": []}')
+        parse_script('{"speaker": "Pat", "text": "Hi.", "claim_ids": []}')
     with pytest.raises(ScriptFormatError):
         parse_script("")
 

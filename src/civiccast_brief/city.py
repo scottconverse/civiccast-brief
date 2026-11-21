@@ -132,7 +132,7 @@ def city_settings(
         "tagline": "What did our local government just do?",
         "publisher": publisher,
         "contact_email": contact_email,
-        "hosts": {"S1": "Maya", "S2": "Theo"},
+        "hosts": {"S1": "Pat", "S2": "Alex"},
         "about": [
             (
                 f"Short recaps of {name} public meetings, written from the meeting captions and "

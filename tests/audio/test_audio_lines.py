@@ -82,7 +82,7 @@ def test_script_with_no_spoken_lines_is_rejected() -> None:
 
 def test_read_script_tolerates_a_byte_order_mark(tmp_path: Path) -> None:
     path = tmp_path / "script.txt"
-    path.write_bytes("﻿[S1] Maya speaks.\n[S2] Theo answers.\n".encode())
+    path.write_bytes("﻿[S1] Pat speaks.\n[S2] Alex answers.\n".encode())
     assert [line.speaker for line in read_script(path).lines] == ["S1", "S2"]
 
 

@@ -525,7 +525,7 @@ def test_packet_headings_are_not_people() -> None:
 def test_a_phrase_is_not_swapped_for_a_packet_heading() -> None:
     pages = {"p1": DocPage("p1", "packet", "https://example.test/packet", 1, CALENDAR_PACKET)}
     people = load_people([(ROSTER, "roster.json")], pages, "documents.json")
-    assert fixes("[S2] Theo said Social Security pays it.", people) == []
+    assert fixes("[S2] Alex said Social Security pays it.", people) == []
 
 
 def test_a_different_surname_is_not_swapped() -> None:

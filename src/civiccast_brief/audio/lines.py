@@ -2,8 +2,8 @@
 
 One item per line:
 
-    [S1] spoken text        S1 is Maya (female host).
-    [S2] spoken text        S2 is Theo (male host).
+    [S1] spoken text        S1 is Pat (male host).
+    [S2] spoken text        S2 is Alex (female host).
     [CHAPTER Title]         A chapter mark. Never spoken. It starts the next spoken line.
 
 Blank lines are ignored. Anything else is an error, so a stray stage direction or heading cannot

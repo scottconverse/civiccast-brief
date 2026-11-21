@@ -66,7 +66,7 @@ def test_episode_page_has_player_recap_chapters_and_transcript(
     assert 'href="https://media.example.com/example-council.mp3#t=40"' in page
     assert 'data-start="40"' in page
     # The episode transcript is the script with speaker names, and links the VTT.
-    assert "Maya:" in page
+    assert "Pat:" in page
     assert "Timed transcript (WebVTT)" in page
     # The meeting transcript link appears because the episode has one.
     assert "/episodes/2026-10-20-example-council/transcript/" in page

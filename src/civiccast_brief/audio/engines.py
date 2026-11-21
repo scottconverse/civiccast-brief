@@ -131,7 +131,7 @@ class ChatterboxConfig:
     renderer: str = r"C:\dev\civiccast-brief-bakeoff\chatterbox\render_turbo2.py"
     workdir: str = r"C:\dev\civiccast-brief-bakeoff\chatterbox"
     hf_home: str = r"C:\dev\civiccast-brief-bakeoff\chatterbox\hf-home"
-    # Voice per speaker: "builtin" or a WAV path relative to workdir. S1 is Maya, S2 is Theo.
+    # Voice per speaker: "builtin" or a WAV path relative to workdir. S1 is Pat, S2 is Alex.
     voice_s1: str = "builtin"
     voice_s2: str = r"refs\carter_ref.wav"
     # Must equal GAP_S in render_turbo2.py, which is not a parameter there.

@@ -31,7 +31,7 @@ Chapters use the Podcasting 2.0 JSON chapters format, version 1.2.0. A chapter s
 spoken line after its [CHAPTER] mark. The first chapter always starts at 0, so it also covers an
 intro and any lines before the first mark.
 
-The transcript is WebVTT with a voice tag per cue, for example <v Maya>, using the line timings.
+The transcript is WebVTT with a voice tag per cue, for example <v Pat>, using the line timings.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ MP3_BITRATE = "64k"
 # the master by well under 1 dB instead of the ~3 dB it does at the default effort. Same bitrate.
 MP3_COMPRESSION_LEVEL = 9
 CHAPTERS_VERSION = "1.2.0"
-SPEAKER_NAMES = {"S1": "Maya", "S2": "Theo"}
+SPEAKER_NAMES = {"S1": "Pat", "S2": "Alex"}
 
 _INTEGRATED = re.compile(r"Integrated loudness:\s*I:\s*(-?[\d.]+|-inf)\s*LUFS")
 _LRA = re.compile(r"Loudness range:\s*LRA:\s*(-?[\d.]+)\s*LU")
@@ -89,7 +89,7 @@ class ChapterMark:
 class Cue:
     start: float
     end: float
-    speaker: str  # display name, for example Maya
+    speaker: str  # display name, for example Pat
     text: str
 
 

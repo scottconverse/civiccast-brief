@@ -5,7 +5,7 @@
   "tagline": "What did our local government just do?",
   "publisher": "CivicCast Brief",
   "contact_email": "corrections@example.com",
-  "hosts": {"S1": "Maya", "S2": "Theo"},
+  "hosts": {"S1": "Pat", "S2": "Alex"},
   "about": ["This is a test city used by the automated tests. Its meetings and names are invented."],
   "podcast": {
     "name": "CivicCast Brief: Example City",

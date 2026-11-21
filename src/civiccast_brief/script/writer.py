@@ -19,7 +19,7 @@ from civiccast_brief.script.recap import Recap, named_meeting
 DISCLAIMER = (
     "This episode is AI-generated from the public meeting video; check the official record."
 )
-SPEAKERS = {"S1": "Maya", "S2": "Theo"}
+SPEAKERS = {"S1": "Pat", "S2": "Alex"}
 CHAPTER = "CHAPTER"
 _VALID_SPEAKERS = frozenset({"S1", "S2", CHAPTER})
 
@@ -41,7 +41,7 @@ class ScriptFormatError(ValueError):
 
 PROMPT_HEAD = """You write the script for a two-host audio episode about one city council meeting. A text-to-speech voice reads the script aloud, so the words must sound right when spoken.
 
-Hosts: Maya (speaker S1) opens and leads. Theo (speaker S2) adds context and closes. They trade the points. Keep every line under 45 words.
+Hosts: Pat (speaker S1) opens and leads. Alex (speaker S2) adds context and closes. They trade the points. Keep every line under 45 words.
 
 FACTS: use only the claims listed at the end. Every fact, number, name, vote, date and outcome in the script must come from a claim. Add no facts, causes, reasons, background or outside context. Do not quote the claims.
 
@@ -52,10 +52,10 @@ OUTPUT: one JSON object per line and nothing else. No prose, no code fence, no b
 claim_ids lists every claim the line relies on. Use an empty list only for a short reaction ("Right.") or a question that states no fact.
 
 STRUCTURE, in this order:
-1. Maya (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
-2. Theo (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
+1. Pat (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
+2. Alex (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
 3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name in 45 characters or fewer, such as "Art in Public Places mural", "Setback appeal" or "Ordinance 2026-75 hearing". A chapter title is shown on screen and never spoken: start it with a capital letter and write its numbers in digits. Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
-4. Last line: Theo (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
+4. Last line: Alex (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Main Street", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
 No digits anywhere in the spoken text (S1 and S2 lines). Say an initialism letter by letter with hyphens, such as R-T-D or H-O-A. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.

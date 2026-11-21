@@ -78,6 +78,6 @@ def test_keeps_a_question_that_its_next_line_answers():
 
 def test_keeps_the_question_that_hands_over_to_the_outro():
     lines = good_script()
-    lines.insert(6, ScriptLine("S1", "Theo, where can people watch it?"))
+    lines.insert(6, ScriptLine("S1", "Alex, where can people watch it?"))
     repaired, dropped = drop_unsupported(RECAP, lines)
     assert dropped == [] and repaired == lines

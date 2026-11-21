@@ -53,7 +53,7 @@ def test_fixture_loads_approved_episodes_newest_first_and_excludes_unapproved() 
 def test_city_settings_are_read(episodes_dir: Path) -> None:
     site = load_site_input(episodes_dir)
     assert site.city.slug == "example"
-    assert site.city.hosts == {"S1": "Maya", "S2": "Theo"}
+    assert site.city.hosts == {"S1": "Pat", "S2": "Alex"}
     assert site.city.podcast.category == "Government"
     assert site.city.disclaimer.startswith("This episode is AI-generated")
 
