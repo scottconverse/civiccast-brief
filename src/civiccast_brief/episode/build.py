@@ -32,7 +32,13 @@ from civiccast_brief.meeting import transcript as transcript_mod
 from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.review.desk import stage_item
 from civiccast_brief.script.checker import check_script
-from civiccast_brief.script.recap import Recap, load_recap
+from civiccast_brief.script.recap import (
+    Recap,
+    channel_place,
+    load_recap,
+    named_bodies,
+    named_place,
+)
 from civiccast_brief.script.writer import ROUNDUP_ID, load_script, render_txt
 from civiccast_brief.site.titles import roundup_title
 
@@ -45,7 +51,7 @@ class EpisodeError(ValueError):
 
 def recap_text(recap: Recap) -> str:
     """The recap as the producer reads it: one claim per line, with its id and time."""
-    lines = [f"{recap.city} {recap.body}, {recap.meeting_date}"]
+    lines = [f"{named_place(recap)}, {recap.meeting_date}"]
     lines += [f"{c.id} [{c.timestamp}] {c.topic}: {c.text}" for c in recap.claims]
     return "\n".join(lines) + "\n"
 
@@ -109,9 +115,9 @@ def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
         db,
         kind="episode",
         meeting_id=_meeting_id(recap, data),
-        title=str(data.get("title") or f"{recap.body} {recap.meeting_date}"),
+        title=str(data.get("title") or f"{named_bodies(recap)} {recap.meeting_date}"),
         meeting_date=recap.meeting_date,
-        body=recap.body,
+        body=named_bodies(recap),
         checks_passed=passed,
         checks_note=note,
         speakers=voice_map(meeting_dir),
@@ -151,9 +157,13 @@ def _headline(recap: Recap, meeting_dir: Path, roundup: bool) -> str:
             for d in recap.meeting_date.split(" and ")
         ]
         return roundup_title(recap.city, days)
-    # "Longmont Housing Authority Board" already names the city.
-    named = recap.body.lower().startswith(f"{recap.city.lower()} ")
-    body = recap.body if named else f"{recap.city} {recap.body}"
+    # "Longmont Housing Authority Board" already names the city; so does a body that names
+    # the place its channel names ("Boulder Valley").
+    place = channel_place(recap, meeting_dir)
+    named = recap.body.lower().startswith(f"{recap.city.lower()} ") or (
+        place and recap.body.lower().startswith(f"{place.lower()} ")
+    )
+    body = recap.body if named else f"{place or recap.city} {recap.body}"
     return f"{body}, {recap.meeting_date}"
 
 

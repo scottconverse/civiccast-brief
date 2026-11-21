@@ -50,7 +50,7 @@ from civiccast_brief.script.checker import (
     header_text,
 )
 from civiccast_brief.script.numbers import number_atoms
-from civiccast_brief.script.recap import Recap, seconds_of
+from civiccast_brief.script.recap import Recap, named_bodies, named_meeting, seconds_of
 
 #: Fixed words the story prints itself. The model never writes these.
 NOTE = (
@@ -787,11 +787,10 @@ def build_prompt(
         ROUNDUP_PROMPT if roundup else PROMPT,
         *([DOCUMENTS_PROMPT] if pages else []),
         (
-            f"Week (from the recap header): the {recap.body} of {recap.city}, meetings of "
+            f"Week (from the recap header): the {named_meeting(recap)}, meetings of "
             f"{recap.meeting_date}."
             if roundup
-            else f"Meeting (from the recap header): {recap.body} of {recap.city}, "
-            f"{recap.meeting_date}."
+            else f"Meeting (from the recap header): {named_meeting(recap)}, {recap.meeting_date}."
         ),
         "News value, strongest first (the lead should rest on the first of these that the story "
         "cites): " + ", ".join(order) + ".",
@@ -1875,7 +1874,7 @@ def published_dict(
                 raw_p["documents"] = page_citations(paragraph, pages)
     return {
         "city": recap.city,
-        "body": recap.body,
+        "body": named_bodies(recap),
         "meeting_date": recap.meeting_date,
         "video_id": recap.video_id,
         "note": note_for(article),
@@ -1892,7 +1891,7 @@ def render_markdown(
     out = [f"# {article.headline}", ""]
     if article.dek:
         out += [f"**{article.dek}**", ""]
-    out += [f"*{recap.body} of {recap.city}, {recap.meeting_date}*", ""]
+    out += [f"*{named_meeting(recap)}, {recap.meeting_date}*", ""]
     for section in article.sections:
         if section.heading:
             out += [f"## {section.heading}", ""]

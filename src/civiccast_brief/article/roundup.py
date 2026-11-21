@@ -119,6 +119,7 @@ def build(stories: list[Story]) -> tuple[Article, Recap]:
     merged = Recap(
         city=lead.recap.city,
         body=lead.recap.body,
+        body_label=lead.recap.body_label,
         meeting_date=lead.recap.meeting_date,
         video_id="roundup",
         claims=tuple(claims),

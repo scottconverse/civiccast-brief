@@ -527,6 +527,57 @@ def test_two_videos_of_one_meeting_run_once():
     }
 
 
+def test_regular_alone_is_the_plain_meeting_and_the_portal_one_runs():
+    """Superior, 26 October 2026: the portal's "Town Council Meeting" and the channel's "Town
+    Council Regular Meeting 10/26/26" are one meeting, but were run and published twice."""
+    council = "Town Council"
+    portal = Source(kind="civicclerk", bodies=(council,), tenant="superiorco")
+    channel = Source(
+        kind="youtube", bodies=(council, "Planning Commission"), channel_id="UC" + "e" * 22
+    )
+    meetings = [
+        NS(
+            video_id="43",
+            title="Town Council Meeting",
+            published="2026-10-26T00:00:00Z",
+            channel_id=council,
+            media_url="https://cdn.test/43.mp4",
+            captions_url="https://cdn.test/43.vtt",
+        )
+    ]
+    videos = [
+        NS(video_id="If5njrlpf7M", title="Town Council Regular Meeting 10/26/26", published="2026-10-27T00:00:00Z"),
+        NS(video_id="SPECIAL0001", title="Town Council Special Meeting 10/26/26", published="2026-10-27T00:00:00Z"),
+        NS(video_id="WORK0000001", title="Town Council Work Session 10/26/26", published="2026-10-27T00:00:00Z"),
+        NS(video_id="STUDY000001", title="Town Council Study Session 10/26/26", published="2026-10-27T00:00:00Z"),
+        NS(video_id="EXEC0000001", title="Town Council Executive Session 10/26/26", published="2026-10-27T00:00:00Z"),
+        NS(video_id="PART0000002", title="Town Council Meeting - 10/26/26 Part 2", published="2026-10-27T00:00:00Z"),
+        NS(video_id="NEXTDAY0001", title="Town Council Regular Meeting 10/27/26", published="2026-10-28T00:00:00Z"),
+        NS(video_id="PLANNING001", title="Planning Commission Meeting 10/26/26", published="2026-10-27T00:00:00Z"),
+    ]  # fmt: skip
+    listers = Listers(
+        civicclerk=lambda tenant, first, last: meetings,
+        youtube=lambda cid: videos,
+        city="Superior",
+    )
+    found, _ = find_meetings([channel, portal], date(2026, 10, 19), date(2026, 11, 2), listers)
+    reasons = {m.video: m.reason for m in found}
+    # The channel was read first, but the portal's meeting runs.
+    assert reasons["civicclerk-superiorco-43"] == ""
+    assert reasons["If5njrlpf7M"] == "another video of this meeting runs (civicclerk-superiorco-43)"
+    # Every other kind of sitting, a "Part 2", another body's meeting and another day stay.
+    for video in (
+        "SPECIAL0001",
+        "WORK0000001",
+        "STUDY000001",
+        "EXEC0000001",
+        "PART0000002",
+        "NEXTDAY0001",
+        "PLANNING001",
+    ):
+        assert reasons[video] == ""
+
+
 def test_a_channel_video_that_names_a_listed_body_is_kept_with_no_meeting_keyword():
     """Boulder's channel titles had no meeting keyword, so the Planning Board, the Board of
     Zoning Adjustment and the Landmarks Board were passed over without a word."""

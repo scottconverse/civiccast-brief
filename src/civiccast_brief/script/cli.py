@@ -12,6 +12,7 @@ Exit 0 when the check passes, 1 when it fails or the model call fails.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -24,7 +25,7 @@ from civiccast_brief.script.checker import (
     drop_unsupported,
     model_check,
 )
-from civiccast_brief.script.recap import load_recap, save_recap
+from civiccast_brief.script.recap import Recap, channel_place, load_recap, save_recap
 from civiccast_brief.script.roundup import RoundupError, combine
 from civiccast_brief.script.writer import (
     ROUNDUP_ID,
@@ -109,9 +110,48 @@ def _check(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
-def _roundup(args: argparse.Namespace) -> int:
+def _site(folder: Path) -> tuple[str, list[tuple[str, str]]]:
+    """A city folder's name and the boards it carries from another city: a roster whose own
+    city is not this one (a school district's, copied to every town on its channel)."""
     try:
-        recap = combine([load_recap(path) for path in args.recap])
+        data = json.loads((folder / "city.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "", []
+    site = str(data.get("name") or "")
+    shared: list[tuple[str, str]] = []
+    for path in sorted((folder / "rosters").glob("*.json")):
+        try:
+            rostered = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        name, body = str(rostered.get("city") or ""), str(rostered.get("body") or "")
+        if site and name and body and name.casefold() != site.casefold():
+            shared.append((name, body))
+    return site, shared
+
+
+def _recap_places(paths: list[Path], recaps: list[Recap]) -> dict[tuple[str, str], str]:
+    """The place each recap's video channel names before its body, from the meeting's own
+    record beside the recap. A carried board ("Board of Education") gets its own place
+    ("Boulder Valley"), so the roundup never gives it the site's city."""
+    places: dict[tuple[str, str], str] = {}
+    for path, recap in zip(paths, recaps, strict=True):
+        place = channel_place(recap, path.parent)
+        if place:
+            places[(recap.city.casefold(), recap.body.casefold())] = place
+    return places
+
+
+def _roundup(args: argparse.Namespace) -> int:
+    site, shared = _site(args.city) if args.city else ("", [])
+    recaps = [load_recap(path) for path in args.recap]
+    try:
+        recap = combine(
+            recaps,
+            city=site,
+            shared=shared,
+            places=_recap_places(args.recap, recaps),
+        )
     except RoundupError as exc:
         print(f"roundup failed: {exc}", file=sys.stderr)
         return 1
@@ -168,6 +208,9 @@ def main(argv: list[str] | None = None) -> int:
     roundup = commands.add_parser("roundup", help="combine meeting recaps into one roundup recap")
     roundup.add_argument("--recap", type=Path, action="append", required=True)
     roundup.add_argument("--out", type=Path, required=True, help="the roundup recap.json")
+    roundup.add_argument(
+        "--city", type=Path, help="the city folder: a board it shares from another city counts"
+    )
     roundup.set_defaults(run=_roundup)
 
     args = parser.parse_args(argv)
