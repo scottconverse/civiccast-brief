@@ -415,6 +415,7 @@ def test_pick_attempt_prefers_a_peak_under_the_ceiling_then_the_loudest_close_to
     assert mp3.name == "e3"
 
 
+@needs_ffmpeg
 def test_finish_episode_delivers_an_mp3_within_both_targets(tmp_path: Path) -> None:
     script = parse_script(EPISODE_SCRIPT)
     out = tmp_path / "episode"
