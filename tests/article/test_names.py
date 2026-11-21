@@ -928,6 +928,109 @@ def test_a_lone_word_for_a_member_of_another_body_is_not_fixed() -> None:
     assert all(wrong != "Browing" for wrong, _ in pairs)
 
 
+# Boulder Valley Board of Education, Nov. 17, 2026: the meeting had no documents.json. The
+# skill's story printed staff names it heard only in the captions ("Frank Elmore" for the
+# caption's "Frankie Elmore", and three others). The roster holds none of them, so each name
+# prints as a role; the sentence and its facts stay.
+NO_DOCUMENTS = load_people([(ROSTER, "cities/superior/roster.json")], {}, "")
+
+
+def test_a_caption_only_name_with_no_documents_becomes_a_role() -> None:
+    text = (
+        "District leaders presented a roadmap with no policy for the board to set. Chief "
+        "Information Officer Frank Elmore said a steering committee would set priorities."
+    )
+    out, changes = repair_text(text, NO_DOCUMENTS)
+    assert "Elmore" not in out and "Frank" not in out
+    # The printed title replaces the name, lower-cased and with an article; no doubled role.
+    assert "Chief Information Officer" not in out
+    assert "The chief information officer said a steering committee would set priorities." in out
+    assert changes
+
+
+def test_a_name_already_printed_under_its_role_is_dropped_not_doubled() -> None:
+    text = (
+        "District staff said Title IX compliance officer Liz Lindell is building a similar "
+        "process, and the reviewer, Shelly Billig, is an outside contractor."
+    )
+    out, _ = repair_text(text, NO_DOCUMENTS)
+    assert "Lindell" not in out and "Billig" not in out
+    assert "the Title IX compliance officer is building" in out
+    assert "the reviewer is an outside contractor" in out
+    assert "officer a staff member" not in out and "reviewer a staff member" not in out
+
+
+def test_a_caption_name_with_no_documents_never_makes_a_story_fail() -> None:
+    article = Article(
+        headline="Boulder Valley schools log reports",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "Chief Information Officer Frank Elmore said the committee would meet.",
+                        ("c01",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    recap = Recap(
+        city="Boulder",
+        body="Board of Education",
+        meeting_date="November 17, 2026",
+        video_id="dfQ44_yL_ac",
+        claims=(
+            Claim(
+                "c01",
+                "",
+                "Chief Information Officer Frank Elmore said the committee would meet.",
+                "2:37:47",
+                "Chief Information Officer Frank Elmore said the committee would meet.",
+            ),
+        ),
+    )
+    # The repair runs before the check and replaces the name with a role; the story then
+    # passes with the rest of its facts intact.
+    fixed, changes = repair_article(article, NO_DOCUMENTS)
+    assert changes
+    report = check_article(recap, fixed, people=NO_DOCUMENTS)
+    assert not any(issue.where == "p1" for issue in report.issues), report.render()
+
+
+def test_a_name_the_record_holds_is_kept() -> None:
+    text = "Council Member Stephanie Miller voted yes."
+    assert repair_text(text, PEOPLE) == (text, [])
+
+
+def test_a_misheard_record_name_takes_the_record_spelling() -> None:
+    out, changes = repair_text("Commissioner Barnet moved approval.", LONGMONT)
+    # The roster prints Doug Barnert; the caption's "Barnet" is one letter from it.
+    assert "Doug Barnert" in out and "Barnet" not in out
+    assert changes
+
+
+def test_an_organisation_with_no_record_match_is_left_alone() -> None:
+    text = (
+        "The Resilient Schools plan starts in the fall. Magic School is the platform, and "
+        "Colorado's Big Three goal is 100 percent."
+    )
+    assert repair_text(text, NO_DOCUMENTS) == (text, [])
+
+
+def test_an_empty_record_still_replaces_a_caption_name() -> None:
+    # No roster and no documents: no record holds any name, so a person's name still prints
+    # as a role rather than as the caption's spelling.
+    empty = load_people([], {}, "")
+    assert empty.persons == ()
+    out, changes = repair_text(
+        "Chief Information Officer Frank Elmore said the committee would meet.", empty
+    )
+    assert "Elmore" not in out
+    assert "The chief information officer said the committee would meet." in out
+    assert changes
+
+
 def test_a_word_that_is_already_part_of_a_board_surname_is_left_as_heard() -> None:
     from civiccast_brief.episode.build import _name_fixes
 
@@ -949,3 +1052,363 @@ def test_a_word_that_is_already_part_of_a_board_surname_is_left_as_heard() -> No
     pairs = [(p["from"], p["to"]) for p in _name_fixes(recap, town, lines)]
     # "Connor" is a name of its own, not a mishearing of Council Member O'Connor.
     assert ("Connor", "O'Connor") not in pairs
+
+
+EMPTY_RECORD = load_people([], {}, "")
+
+
+# The real Boulder Valley line: the title printed before a name replaces the name, lower-cased
+# as ordinary prose, with an article. No doubled role, no missing article, no leftover comma.
+def test_a_printed_title_replaces_the_name_with_an_article() -> None:
+    cases = [
+        (
+            "Deputy Superintendent Nativity Miller said the review began.",
+            "The deputy superintendent said the review began.",
+        ),
+        (
+            "Chief Information Officer Frank Elmore said the committee would meet.",
+            "The chief information officer said the committee would meet.",
+        ),
+        (
+            (
+                "District staff said Title IX compliance officer Liz Lindell is building a "
+                "similar process."
+            ),
+            "District staff said the Title IX compliance officer is building a similar process.",
+        ),
+        (
+            "Neil Anderson, assistant superintendent of schools, said the reports came in.",
+            "The assistant superintendent of schools said the reports came in.",
+        ),
+        (
+            "The district said the reviewer, Shelly Billig, is an outside contractor.",
+            "The district said the reviewer is an outside contractor.",
+        ),
+    ]
+    for text, expected in cases:
+        out, _ = repair_text(text, EMPTY_RECORD)
+        assert out == expected
+
+
+def test_a_later_bare_mention_takes_the_same_title() -> None:
+    text = (
+        "Deputy Superintendent Nativity Miller described the review. Miller said a report "
+        "will follow."
+    )
+    out, _ = repair_text(text, EMPTY_RECORD)
+    assert out == (
+        "The deputy superintendent described the review. The deputy superintendent said a "
+        "report will follow."
+    )
+
+
+def test_a_person_keeps_the_most_specific_title_and_never_a_shorter_job() -> None:
+    article = Article(
+        headline="Superintendent Anderson described the plan",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "Assistant Superintendent Neil Anderson said it would start.", ("c01",)
+                    ),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, EMPTY_RECORD)
+    assert fixed.headline == "The assistant superintendent described the plan"
+    assert (
+        fixed.sections[0].paragraphs[0].text == "The assistant superintendent said it would start."
+    )
+    # "assistant superintendent" is never shortened into "superintendent".
+    assert "The superintendent" not in fixed.headline
+
+
+def test_a_first_mention_with_no_title_uses_a_title_printed_later() -> None:
+    text = (
+        "Neil Anderson said the plan is new. Assistant Superintendent Neil Anderson later "
+        "described it."
+    )
+    out, _ = repair_text(text, EMPTY_RECORD)
+    assert out == (
+        "The assistant superintendent said the plan is new. The assistant superintendent later "
+        "described it."
+    )
+
+
+def test_two_people_never_share_one_label() -> None:
+    article = Article(
+        headline="Two staff briefed the board",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "Neil Anderson said the district administrator role is new.", ("c01",)
+                    ),
+                    Paragraph(
+                        "Nativity Miller said the district administrator role is new.", ("c02",)
+                    ),
+                    Paragraph("Anderson said the review began.", ("c03",)),
+                    Paragraph("Miller said it will continue.", ("c04",)),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, EMPTY_RECORD)
+    texts = [paragraph.text for paragraph in fixed.sections[0].paragraphs]
+    assert texts[0] == "A district administrator said the district administrator role is new."
+    assert texts[1] == (
+        "A second district administrator said the district administrator role is new."
+    )
+    assert texts[2] == "The district administrator said the review began."
+    assert texts[3] == "The second district administrator said it will continue."
+
+
+def test_a_name_inside_a_quotation_is_left_and_reported() -> None:
+    text = 'The board heard "Neil Anderson will present" and Neil Anderson said it was new.'
+    out, changes = repair_text(text, EMPTY_RECORD)
+    assert '"Neil Anderson will present"' in out
+    assert out.endswith("and a speaker said it was new.")
+    assert any("quotation" in change for change in changes)
+
+
+def test_one_person_keeps_one_label_across_every_surface() -> None:
+    article = Article(
+        headline="Deputy Superintendent Nativity Miller reports",
+        dek="Miller described the review.",
+        sections=(
+            Section(
+                "Miller said the review began",
+                (Paragraph("Miller said it will continue.", ("c01",)),),
+            ),
+        ),
+        votes=(Vote("Miller moved to accept the report.", "Approved", None, "c02"),),
+        quotes=(Quote("c03", "Miller"),),
+    )
+    fixed, _ = repair_article(article, EMPTY_RECORD)
+    label = "The deputy superintendent"
+    assert fixed.headline == f"{label} reports"
+    assert fixed.dek == f"{label} described the review."
+    assert fixed.sections[0].heading == f"{label} said the review began"
+    assert fixed.sections[0].paragraphs[0].text == f"{label} said it will continue."
+    assert fixed.votes[0].motion == f"{label} moved to accept the report."
+    assert fixed.quotes[0].speaker == label
+
+
+# A general action verb ("came up", "runs", "started") is done by a project or an event as
+# well as a person, so it is not evidence on its own. These are the real rehearsal lines that
+# the widened verb list turned into "a speaker".
+def test_a_rail_project_that_a_verb_follows_keeps_its_name() -> None:
+    text = (
+        "During council comments Nov. 17, a council member said Front Range Rail came up at "
+        "last week's Northwest Mayors and Commissioners Coalition meeting and that Louisville "
+        "would probably get a train in 2029."
+    )
+    assert repair_text(text, EMPTY_RECORD) == (text, [])
+
+
+def test_an_event_that_a_verb_follows_keeps_its_name() -> None:
+    text = (
+        "The town's Winter Festival runs from 2 to 5 p.m. Saturday, Dec. 12, in downtown Superior."
+    )
+    assert repair_text(text, EMPTY_RECORD) == (text, [])
+
+
+def test_a_club_that_a_verb_follows_keeps_its_name() -> None:
+    # A third shape of the same mistake: a body or club "starts".
+    text = "The Youth Robotics Club started in January with six students."
+    assert repair_text(text, EMPTY_RECORD) == (text, [])
+
+
+def test_a_job_named_after_a_titleless_name_is_evidence_of_a_person() -> None:
+    # The one non-speech cue a titleless run may use: the sentence gives the job it started.
+    out, changes = repair_text(
+        "Sunny Vincent started July 1 as the district's new director of gifted education.",
+        EMPTY_RECORD,
+    )
+    assert (
+        out == "A staff member started July 1 as the district's new director of gifted education."
+    )
+    assert changes
+
+
+# --- Three defects found by auditing all 50 real stories (Nov 21, 2026) ---
+
+
+# Defect 1: a capitalised sentence word joined the name run and was swallowed by the
+# replacement. Longmont, Nov 3 2026: "When Matthew Popkin asked about comments on nighttime
+# safety, one speaker said ..." became "A speaker asked ...", losing "When" and the grammar.
+def test_a_sentence_word_is_not_part_of_a_name() -> None:
+    text = (
+        "When Matthew Popkin asked about comments on nighttime safety, one speaker said staff "
+        "could look into it."
+    )
+    out, changes = repair_text(text, EMPTY_RECORD)
+    assert out == (
+        "When a speaker asked about comments on nighttime safety, one speaker said staff could "
+        "look into it."
+    )
+    assert changes
+
+
+def test_another_subordinating_sentence_word_is_not_a_name() -> None:
+    # A second shape: "While" in front of a name, mid-story, keeps its word.
+    out, _ = repair_text(
+        "While Lynn Segal said the program was new, the board asked questions.", EMPTY_RECORD
+    )
+    assert out == "While a speaker said the program was new, the board asked questions."
+
+
+# Defect 2: a seat several members of one body hold is not a unique job. Longmont Housing
+# Authority, Nov 10 2026: the record held none of McCoy, Mar or Boyce, and each lost their
+# name to "the commissioner", as if the board had one.
+COMMISSIONERS = load_people([], {}, "")
+
+
+def test_two_seat_holders_in_one_paragraph_are_never_the_same_person() -> None:
+    # Longmont Housing Authority, Nov 10 2026: "the commissioner" after McCoy seconded read
+    # as McCoy, so the absent Mar was reported as the one who seconded. The two are told apart.
+    text = (
+        "Commissioner McCoy seconded the motion, and the board held discussion on the vote. "
+        "Commissioner Mar was absent."
+    )
+    out, _ = repair_text(text, COMMISSIONERS)
+    assert out == (
+        "A commissioner seconded the motion, and the board held discussion on the vote. "
+        "Another commissioner was absent."
+    )
+    assert "the commissioner" not in out and "second commissioner" not in out
+
+
+def test_a_shared_seat_restarts_in_each_text() -> None:
+    # The dek has one holder of the seat, so it is not "another": it starts at "a commissioner".
+    article = Article(
+        headline="Housing authority delays vote",
+        dek="Commissioner Mar was absent as the motion carried unanimously.",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "Commissioner McCoy seconded the motion, and the board held discussion "
+                        "on the vote. Commissioner Mar was absent.",
+                        ("c01",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, COMMISSIONERS)
+    assert fixed.sections[0].paragraphs[0].text == (
+        "A commissioner seconded the motion, and the board held discussion on the vote. "
+        "Another commissioner was absent."
+    )
+    assert fixed.dek == "A commissioner was absent as the motion carried unanimously."
+
+
+def test_a_third_seat_holder_in_one_text_is_the_third() -> None:
+    out, _ = repair_text(
+        "Commissioner McCoy moved. Commissioner Mar seconded. Commissioner Boyce abstained.",
+        COMMISSIONERS,
+    )
+    assert out == (
+        "A commissioner moved. Another commissioner seconded. A third commissioner abstained."
+    )
+
+
+def test_a_repeated_seat_holder_is_indefinite_when_another_shares_the_text() -> None:
+    # "The commissioner" could point at either holder, so the indefinite form repeats.
+    out, _ = repair_text(
+        "Commissioner McCoy made amendments. A motion was made by Commissioner Boyce. "
+        "Commissioner McCoy spoke again.",
+        COMMISSIONERS,
+    )
+    assert out == (
+        "A commissioner made amendments. A motion was made by another commissioner. "
+        "A commissioner spoke again."
+    )
+
+
+def test_one_seat_holder_is_indefinite_then_definite() -> None:
+    out, _ = repair_text("Commissioner McCoy moved. Commissioner McCoy spoke again.", COMMISSIONERS)
+    assert out == "A commissioner moved. The commissioner spoke again."
+
+
+def test_a_unique_job_keeps_the_definite_article() -> None:
+    # The Board of Education labels do not change: a unique office is "the", first mention on.
+    out, _ = repair_text(
+        "Deputy Superintendent Nativity Miller said the review began. Miller spoke.", EMPTY_RECORD
+    )
+    assert out == (
+        "The deputy superintendent said the review began. The deputy superintendent spoke."
+    )
+
+
+def test_a_person_whose_name_is_a_month_abbreviation_after_a_title_is_still_named() -> None:
+    # "Mar" is the month abbreviation, but "Commissioner Mar" is a commissioner, and the
+    # meeting's record does not hold Mar, so Mar follows the same rule as McCoy.
+    out, changes = repair_text("Commissioner Mar was absent.", COMMISSIONERS)
+    assert out == "A commissioner was absent."
+    assert changes
+
+
+# Defect 3: because the skill path now runs the full repair, fill_roll_call_names added roster
+# names to sentences that named only the seat. Superior printed "mayor pro tem" and the repair
+# made it "Mayor Pro Tem Jenn Kaaoush"; Erie became "Mayor Pro Tem Brandon Bell". The skill
+# path sets add_seat_names=False, so a seat-only mention stays as written.
+def test_the_skill_path_never_adds_a_seat_holders_name() -> None:
+    article = Article(
+        headline="Superior hears fire code",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "The council approved the contract; Mayor Pro Tem voted yes.",
+                        ("c01",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, PEOPLE, add_seat_names=False)
+    assert "Mayor Pro Tem voted yes" in fixed.paragraphs[0].text
+    assert "Kaaoush" not in fixed.paragraphs[0].text
+
+
+def test_the_skill_path_leaves_a_seat_only_vote_as_written() -> None:
+    # A second shape: the seat-only "Mayor" at a vote must also stay unnamed.
+    article = Article(
+        headline="Superior hears fire code",
+        sections=(
+            Section(
+                None,
+                (Paragraph("The council voted on the fire code.", ("c01",)),),
+            ),
+        ),
+        votes=(Vote("Mayor voted yes; the motion carried.", "passed", None, "c01"),),
+    )
+    fixed, _ = repair_article(article, PEOPLE, add_seat_names=False)
+    assert fixed.votes[0].motion == "Mayor voted yes; the motion carried."
+
+
+def test_the_non_skill_path_still_names_a_seat_only_voter() -> None:
+    # The existing behaviour is the default, so the writer and site paths are unchanged.
+    article = Article(
+        headline="Superior hears fire code",
+        sections=(
+            Section(
+                None,
+                (
+                    Paragraph(
+                        "The council approved the contract; Mayor Pro Tem voted yes.",
+                        ("c01",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    fixed, _ = repair_article(article, PEOPLE)
+    assert "Mayor Pro Tem Jenn Kaaoush voted yes" in fixed.paragraphs[0].text
