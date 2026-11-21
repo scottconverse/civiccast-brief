@@ -1,6 +1,6 @@
 """Command line for the audio package.
 
-    python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|gemini|fake] --out DIR
+    python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|gemini|lfm3|fake] --out DIR
                                     [--fallback-engine NAME] [--intro FILE] [--outro FILE]
                                     [--config FILE]
 
@@ -66,8 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         help=(
-            "JSON file overriding the GPU box, engine paths, Gemini settings and voices "
-            "(see engines.py)"
+            "JSON file overriding the GPU box, engine paths, Gemini and LFM3 settings and "
+            "voices (see engines.py)"
         ),
     )
     return parser
