@@ -171,10 +171,6 @@ def test_a_roundup_line_may_name_its_meeting_date_from_the_claim():
             "S1",
             "Welcome to CivicCast Brief: Longmont City Council, October twentieth and twenty-seventh.",
         ),
-        ScriptLine(
-            "S2",
-            "This episode is AI-generated from the public meeting video; check the official record.",
-        ),
         ScriptLine("CHAPTER", "October twentieth meeting", ("m1-c01",)),
         ScriptLine("S1", "On October twentieth, A passed six to one.", ("m1-c01",)),
         ScriptLine("S2", "Find the meeting videos on the city's YouTube channel."),

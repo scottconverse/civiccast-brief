@@ -1,6 +1,6 @@
 from civiccast_brief.script.checker import check_script, model_check
 from civiccast_brief.script.recap import Claim, Recap
-from civiccast_brief.script.writer import DISCLAIMER, ScriptLine
+from civiccast_brief.script.writer import ScriptLine
 
 RECAP = Recap(
     city="Longmont",
@@ -38,15 +38,13 @@ def good_script() -> list[ScriptLine]:
         ScriptLine(
             "S1", "CivicCast Brief, Longmont, October twentieth, twenty twenty-six.", ("c01",)
         ),
-        ScriptLine("S2", DISCLAIMER),
         ScriptLine("CHAPTER", "Ordinance twenty twenty-six dash sixty-nine", ("c02",)),
         ScriptLine(
-            "S1",
+            "S2",
             "Council approved Ordinance twenty twenty-six dash sixty-nine six to one.",
             ("c02",),
         ),
-        ScriptLine("S2", "Right."),
-        ScriptLine("S1", "That's a big number."),
+        ScriptLine("S1", "Right."),
         ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c03",)),
     ]
 
@@ -60,28 +58,28 @@ def test_good_script_passes_with_no_warnings():
     report = check_script(RECAP, good_script())
     assert report.passed
     assert report.issues == []
-    assert report.speech_lines == 6
+    assert report.speech_lines == 4
     assert report.chapter_lines == 1
 
 
 def test_added_number_fails():
     lines = good_script()
-    lines[3] = ScriptLine(
-        "S1", "Council approved Ordinance twenty twenty-six dash sixty-nine seven to one.", ("c02",)
+    lines[2] = ScriptLine(
+        "S2", "Council approved Ordinance twenty twenty-six dash sixty-nine seven to one.", ("c02",)
     )
-    assert (4, "number") in errors_by_code(lines)
+    assert (3, "number") in errors_by_code(lines)
 
 
 def test_uncited_factual_line_fails():
     lines = good_script()
-    lines[4] = ScriptLine("S2", "The council spent two hundred thousand dollars on buses.")
-    assert (5, "uncited") in errors_by_code(lines)
+    lines[3] = ScriptLine("S1", "The council spent two hundred thousand dollars on buses.")
+    assert (4, "uncited") in errors_by_code(lines)
 
 
 def test_invented_name_fails():
     lines = good_script()
-    lines[3] = ScriptLine(
-        "S1",
+    lines[2] = ScriptLine(
+        "S2",
         "Council member Marcen approved Ordinance twenty twenty-six dash sixty-nine.",
         ("c02",),
     )
@@ -89,33 +87,48 @@ def test_invented_name_fails():
     assert any(i.code == "name" and "Marcen" in i.message for i in report.errors)
 
 
-def test_missing_disclaimer_fails():
+def test_old_disclaimer_line_is_dropped_before_checking():
     lines = good_script()
-    lines[1] = ScriptLine("S2", "This episode is AI-generated.")
-    assert (2, "disclaimer") in errors_by_code(lines)
+    lines.insert(
+        1,
+        ScriptLine(
+            "S2",
+            "This episode is AI-generated from the public meeting video; check the official record.",
+        ),
+    )
+    report = check_script(RECAP, lines)
+    assert report.passed, report.render()
+    assert all("AI-generated" not in line.text for line in report.lines)
+
+
+def test_old_host_names_still_pass_the_name_check():
+    lines = good_script()
+    lines[0] = ScriptLine("S1", "CivicCast Brief. I'm Maya, and this is Theo.")
+    report = check_script(RECAP, lines)
+    assert not [i for i in report.errors if i.code == "name"], report.render()
 
 
 def test_digits_in_spoken_text_fail():
     lines = good_script()
-    lines[3] = ScriptLine("S1", "Council approved Ordinance 2026-69 six to one.", ("c02",))
-    assert (4, "digits") in errors_by_code(lines)
+    lines[2] = ScriptLine("S2", "Council approved Ordinance 2026-69 six to one.", ("c02",))
+    assert (3, "digits") in errors_by_code(lines)
 
 
 def test_a_chapter_title_is_shown_not_spoken_so_it_may_use_digits():
     lines = good_script()
-    lines[2] = ScriptLine("CHAPTER", "Ordinance 2026-69", ("c02",))
+    lines[1] = ScriptLine("CHAPTER", "Ordinance 2026-69", ("c02",))
     assert check_script(RECAP, lines).passed
     # Its numbers must still be in the cited claim.
-    lines[2] = ScriptLine("CHAPTER", "Ordinance 2026-70", ("c02",))
-    assert (3, "number") in errors_by_code(lines)
+    lines[1] = ScriptLine("CHAPTER", "Ordinance 2026-70", ("c02",))
+    assert (2, "number") in errors_by_code(lines)
 
 
 def test_unknown_claim_id_fails():
     lines = good_script()
-    lines[3] = ScriptLine(
-        "S1", "Council approved Ordinance twenty twenty-six dash sixty-nine six to one.", ("c99",)
+    lines[2] = ScriptLine(
+        "S2", "Council approved Ordinance twenty twenty-six dash sixty-nine six to one.", ("c99",)
     )
-    assert (4, "unknown_claim") in errors_by_code(lines)
+    assert (3, "unknown_claim") in errors_by_code(lines)
 
 
 def test_outro_must_point_to_youtube():
@@ -127,7 +140,7 @@ def test_outro_must_point_to_youtube():
 def test_reaction_and_question_pass_uncited():
     assert check_script(RECAP, good_script()).passed
     lines = good_script()
-    lines[4] = ScriptLine("S2", "Did they vote on that?")
+    lines[3] = ScriptLine("S1", "Did they vote on that?")
     assert check_script(RECAP, lines).passed
 
 
@@ -135,9 +148,7 @@ def test_model_check_adds_warnings_for_unsupported_lines():
     answers = iter(
         [
             '{"states_fact": true, "supported": true, "problem": ""}',
-            '{"states_fact": false, "supported": true, "problem": ""}',
             '{"states_fact": true, "supported": false, "problem": "eleven"}',
-            '{"states_fact": false, "supported": true, "problem": ""}',
             '{"states_fact": false, "supported": true, "problem": ""}',
             '{"states_fact": false, "supported": true, "problem": ""}',
             '{"states_fact": false, "supported": true, "problem": ""}',
@@ -190,15 +201,15 @@ def test_intro_may_not_add_facts_beyond_the_header():
 
 def test_a_middle_line_still_needs_a_claim_for_header_facts():
     lines = good_script()
-    lines[4] = ScriptLine("S2", "The Longmont City Council met on October twentieth.")
-    assert (5, "uncited") in errors_by_code(lines)
+    lines[3] = ScriptLine("S1", "The Longmont City Council met on October twentieth.")
+    assert (4, "uncited") in errors_by_code(lines)
 
 
 def test_two_chapter_marks_together_fail_the_check():
     # The audio cannot place a chapter with no line in it, so a passing script must not hold one.
     lines = good_script()
-    lines.insert(2, ScriptLine("CHAPTER", "October 20 meeting", ("c01",)))
-    assert lines[3].is_chapter
+    lines.insert(1, ScriptLine("CHAPTER", "October 20 meeting", ("c01",)))
+    assert lines[2].is_chapter
     report = check_script(RECAP, lines)
     assert not report.passed
     assert [i.code for i in report.errors] == ["empty_chapter"]
@@ -223,7 +234,6 @@ def _close_report(middle: list[ScriptLine], outro: str):
         CLOSE,
         [
             ScriptLine("S1", "Welcome to CivicCast Brief, with the Boulder City Council."),
-            ScriptLine("S2", DISCLAIMER),
             *middle,
             ScriptLine("S2", outro),
         ],
@@ -275,10 +285,9 @@ def test_a_one_the_claim_says_may_be_spoken():
     )
     lines = [
         ScriptLine("S1", "Welcome to CivicCast Brief, with the Boulder City Council."),
-        ScriptLine("S2", DISCLAIMER),
         ScriptLine("S1", "It is built in phase one, a speaker said.", ("c1",)),
         ScriptLine("S2", "Watch the meeting video on YouTube."),
     ]
     assert check_script(phase, lines).passed
-    lines[2] = ScriptLine("S1", "It is built in phase two, a speaker said.", ("c1",))
+    lines[1] = ScriptLine("S1", "It is built in phase two, a speaker said.", ("c1",))
     assert any(i.code == "number" for i in check_script(phase, lines).errors)

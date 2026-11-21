@@ -70,9 +70,8 @@ def test_episode_page_has_player_recap_chapters_and_transcript(
     assert "Timed transcript (WebVTT)" in page
     # The meeting transcript link appears because the episode has one.
     assert "/episodes/2026-10-20-example-council/transcript/" in page
-    # Republish notice and AI disclaimer on every story; corrections are gone.
+    # Republish notice on every story; corrections are gone.
     assert "Free to republish." in page
-    assert "Written with AI." in page
     assert "orrection" not in page
     assert 'href="/boards/city-council/"' in page
     assert 'href="/topics/land-use/"' in page
@@ -125,9 +124,7 @@ def test_how_made_and_about_pages_and_no_corrections_page(built: tuple[Path, obj
     for file in out.rglob("*.html"):
         assert "/corrections/" not in file.read_text(encoding="utf-8"), file
     how = _text(out, "how-this-is-made/index.html")
-    assert "AI-generated from a public meeting video" in how
     assert "Script check." in how
-    assert "This episode is AI-generated" in how
     about = _text(out, "about/index.html")
     assert "This site uses Cloudflare Web Analytics to count visits. It sets no cookies" in about
     assert 'id="privacy"' in about

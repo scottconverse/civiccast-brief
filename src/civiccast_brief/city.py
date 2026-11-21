@@ -135,8 +135,8 @@ def city_settings(
         "hosts": {"S1": "Pat", "S2": "Alex"},
         "about": [
             (
-                f"Short recaps of {name} public meetings, written from the meeting captions and "
-                "read by two AI voices. Every fact links to the moment in the meeting where it was "
+                f"Short recaps of {name} public meetings, written from the meeting captions. "
+                "Every fact links to the moment in the meeting where it was "
                 "said. A person approves each episode before it is published."
             )
         ],
@@ -146,7 +146,7 @@ def city_settings(
             "author": publisher,
             "owner_name": publisher,
             "owner_email": podcast_email,
-            "description": f"Short, cited recaps of {name} public meetings, read by two AI hosts.",
+            "description": f"Short, cited recaps of {name} public meetings.",
             "category": "Government",
             "subcategory": "",
             "language": "en-us",

@@ -126,7 +126,7 @@ def test_pipeline_refuses_a_granicus_run_without_a_view_id(tmp_path):
 def test_granicus_recap_points_the_outro_to_the_city_website(tmp_path, monkeypatch):
     from civiccast_brief.script.checker import check_script
     from civiccast_brief.script.recap import load_recap
-    from civiccast_brief.script.writer import DISCLAIMER, ScriptLine, build_prompt
+    from civiccast_brief.script.writer import ScriptLine, build_prompt
 
     clip = G.Clip(
         host="oakland.granicus.com", view_id=2, clip_id=7806, name="Council", date="October 6, 2026"
@@ -151,7 +151,6 @@ def test_granicus_recap_points_the_outro_to_the_city_website(tmp_path, monkeypat
     def outro(text):
         lines = [
             ScriptLine("S1", "Welcome to CivicCast Brief."),
-            ScriptLine("S2", DISCLAIMER),
             ScriptLine("S2", text),
         ]
         return [i.message for i in check_script(recap, lines).issues if i.code == "outro"]

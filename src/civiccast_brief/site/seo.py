@@ -64,7 +64,7 @@ def episode_podcast_episode(city: City, urls: Urls, episode: Episode) -> dict[st
         "@context": "https://schema.org",
         "@type": "PodcastEpisode",
         "name": episode.display_headline,
-        "description": episode.dek or city.disclaimer,
+        "description": episode.dek or episode.display_headline,
         "datePublished": episode.published.isoformat(),
         "url": page,
         "duration": iso_duration(episode.audio.duration_s),

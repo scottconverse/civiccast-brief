@@ -55,7 +55,6 @@ def test_city_settings_are_read(episodes_dir: Path) -> None:
     assert site.city.slug == "example"
     assert site.city.hosts == {"S1": "Pat", "S2": "Alex"}
     assert site.city.podcast.category == "Government"
-    assert site.city.disclaimer.startswith("This episode is AI-generated")
 
 
 def test_script_tags_must_name_a_speaker(episodes_dir: Path) -> None:

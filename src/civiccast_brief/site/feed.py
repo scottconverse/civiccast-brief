@@ -49,7 +49,6 @@ def _rfc822(moment: datetime) -> str:
 def _item_html(city: City, urls: Urls, episode: Episode) -> str:
     page = urls.absolute(urls.page_path("episodes", episode.id))
     parts = [f"<p>{escape(episode.dek)}</p>"] if episode.dek else []
-    parts.append(f"<p>{escape(city.disclaimer)}</p>")
     if episode.claims:
         # Apple allows only p, ol, ul, li and a in episode notes, so no heading tag.
         parts.append("<p>Recap:</p>")
@@ -72,7 +71,7 @@ def _sentence(text: str) -> str:
 
 def _description(city: City, episode: Episode) -> str:
     lead = episode.dek or episode.display_headline
-    text = f"{_sentence(lead)} {city.disclaimer}"
+    text = _sentence(lead)
     if len(text) > EPISODE_DESCRIPTION_MAX_CHARS:
         text = text[: EPISODE_DESCRIPTION_MAX_CHARS - 1].rstrip() + "…"
     return text

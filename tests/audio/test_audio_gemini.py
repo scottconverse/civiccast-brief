@@ -30,7 +30,7 @@ KEY = "not-a-real-key-123"
 RATE = 24000
 LINES = [
     Line(1, "S1", "This is CivicCast Brief, for the November twentieth session."),
-    Line(2, "S2", "This episode is AI-generated from the public meeting video."),
+    Line(2, "S2", "The public comment period ran for about ten minutes."),
     Line(3, "S1", "Council approved the minutes."),
 ]
 

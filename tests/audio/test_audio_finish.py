@@ -33,7 +33,7 @@ needs_ffmpeg = pytest.mark.skipif(not tools_available(), reason="ffmpeg/ffprobe 
 EPISODE_SCRIPT = """\
 [CHAPTER Intro]
 [S1] Welcome to the Longmont council recap for October twentieth.
-[S2] This episode is AI-generated from the public meeting video.
+[S2] The public comment period ran for about ten minutes.
 [CHAPTER Votes]
 [S1] Ordinance 2026-69 passed five to two.
 [S2] The amendments need a fire plan by March first, twenty twenty-seven.

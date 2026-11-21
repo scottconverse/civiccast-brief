@@ -304,7 +304,6 @@ figure figcaption { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
 .status ul { list-style: none; margin-top: 12px; display: grid; gap: 10px; }
 .status li { padding-left: 18px; position: relative; color: var(--muted); font-size: 15.5px; }
 .status li::before { content: ""; position: absolute; left: 0; top: .7em; width: 7px; height: 2px; background: var(--muted); }
-.disclaimer { margin-top: 24px; padding: 16px 20px; border-left: 4px solid var(--split); background: var(--split-soft); border-radius: 0 10px 10px 0; font-size: 15.5px; }
 
 /* Final CTA */
 .final { background: var(--night); color: var(--night-ink); padding: 88px 0; text-align: center; }

@@ -355,8 +355,6 @@ def test_assemble_refuses_an_article_edited_on_the_desk_to_add_a_number(
 
 def _passing_script(meeting_dir):
     """A script that passes the deterministic check, with the recap claims it needs."""
-    from civiccast_brief.script.writer import DISCLAIMER
-
     recap = json.loads((meeting_dir / "recap.json").read_text(encoding="utf-8"))
     recap["claims"].append(
         {
@@ -370,7 +368,6 @@ def _passing_script(meeting_dir):
     (meeting_dir / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
     lines = [
         {"speaker": "S1", "text": "CivicCast Brief, Longmont, October twentieth.", "claim_ids": []},
-        {"speaker": "S2", "text": DISCLAIMER, "claim_ids": []},
         {"speaker": "CHAPTER", "text": "Consent agenda", "claim_ids": ["c01"]},
         {"speaker": "S1", "text": "The consent agenda passed.", "claim_ids": ["c01"]},
         {
@@ -396,9 +393,31 @@ def test_stage_checks_the_script_and_publishes_it_at_once(tmp_path, meeting):
     assert item.body == "City Council"
 
 
+def test_a_saved_script_with_the_old_disclaimer_line_still_passes(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    script = _passing_script(meeting_dir)
+    lines = json.loads(script.read_text(encoding="utf-8"))
+    lines.insert(
+        1,
+        {
+            "speaker": "S2",
+            "text": "This episode is AI-generated from the public meeting video; "
+            "check the official record.",
+            "claim_ids": [],
+        },
+    )
+    script.write_text(json.dumps(lines), encoding="utf-8")
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, script)
+    with ReviewStore(db) as store:
+        item = store.get_item(item_id)
+    assert item.checks_passed is True
+    assert "AI-generated" not in item.script
+
+
 def test_a_failing_script_is_held_in_review(tmp_path, meeting):
     meeting_dir, _ = meeting
-    # The fixture's own script has no disclaimer and no outro, so it fails the check.
+    # The fixture's own script has no outro, so it fails the check.
     db2 = tmp_path / "review2.db"
     failing = B.stage(db2, meeting_dir, meeting_dir / "script.json")
     with ReviewStore(db2) as store:

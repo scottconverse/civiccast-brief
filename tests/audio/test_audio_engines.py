@@ -38,7 +38,7 @@ HOST = "nvideablackwell"
 SCRIPT = parse_script(
     "[CHAPTER Intro]\n"
     "[S1] This is CivicCast Brief, for the October twentieth session.\n"
-    "[S2] This episode is AI-generated from the public meeting video.\n"
+    "[S2] The public comment period ran for about ten minutes.\n"
     "[S1] Council approved the minutes.\n"
     "[CHAPTER Votes]\n"
     "[S2] Resolution 2026-75 passed six to one.\n"

@@ -16,7 +16,9 @@ from typing import Any
 
 from civiccast_brief.script.recap import Recap, named_meeting
 
-DISCLAIMER = (
+#: A sentence older saved scripts carry as line 2. It is no longer written, spoken or shown;
+#: it is dropped on load so an old script still checks, renders and plays.
+_OLD_DISCLAIMER = (
     "This episode is AI-generated from the public meeting video; check the official record."
 )
 SPEAKERS = {"S1": "Pat", "S2": "Alex"}
@@ -39,6 +41,12 @@ class ScriptFormatError(ValueError):
     """The model answer is not a script in the agreed line format."""
 
 
+def strip_old_disclaimer(lines: list[ScriptLine]) -> list[ScriptLine]:
+    """Drop the old on-air disclaimer line from a saved script. It is no longer written, so a
+    saved script that carries it must still check and play without it."""
+    return [line for line in lines if line.text.strip() != _OLD_DISCLAIMER]
+
+
 PROMPT_HEAD = """You write the script for a two-host audio episode about one city council meeting. A text-to-speech voice reads the script aloud, so the words must sound right when spoken.
 
 Hosts: Pat (speaker S1) opens and leads. Alex (speaker S2) adds context and closes. They trade the points. Keep every line under 45 words.
@@ -53,9 +61,8 @@ claim_ids lists every claim the line relies on. Use an empty list only for a sho
 
 STRUCTURE, in this order:
 1. Pat (S1): an intro that names CivicCast Brief, the city, the body and the meeting date, from the meeting header below. It needs no claim id; cite one only if the intro uses a fact from it.
-2. Alex (S2): this sentence, exactly: This episode is AI-generated from the public meeting video; check the official record.
-3. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name in 45 characters or fewer, such as "Art in Public Places mural", "Setback appeal" or "Ordinance 2026-75 hearing". A chapter title is shown on screen and never spoken: start it with a capital letter and write its numbers in digits. Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
-4. Last line: Alex (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
+2. The meeting's items in the order of the claims. A CHAPTER line starts each agenda item (an ordinance, resolution, hearing, appeal, public comment, or council reports) and is titled with that item's plain name in 45 characters or fewer, such as "Art in Public Places mural", "Setback appeal" or "Ordinance 2026-75 hearing". A chapter title is shown on screen and never spoken: start it with a capital letter and write its numbers in digits. Do not start a chapter for a single remark; put the remark under the item it belongs to. For each item: what it is, the main points made, then the vote count and outcome. Cover public comment.
+3. Last line: Alex (S2) closes and points listeners to the meeting video on the city's {video_place}. This line states no other fact and needs no claim id.
 
 WRITE FOR THE EAR. Spell numbers, codes and addresses the way a radio host would say them, in words. Examples of the form (use one only when a claim has that fact): "Ordinance twenty twenty-six dash sixty-nine", "two hundred thousand dollars", "eighty-five thirteen Main Street", "March first, twenty twenty-seven", "six to one", "about seven hundred spaces".
 No digits anywhere in the spoken text (S1 and S2 lines). Say an initialism letter by letter with hyphens, such as R-T-D or H-O-A. Short sentences. Natural conversation: an occasional light reaction ("Right.", "That's a big number.") and a question one host asks the other. Alternate the speakers. No jokes about people.
@@ -127,7 +134,7 @@ def parse_script(answer: str) -> list[ScriptLine]:
         raise ScriptFormatError(f"{len(bad)} line(s) are not script JSON, e.g. {bad[0]!r}")
     if not lines:
         raise ScriptFormatError("the model answer holds no script lines")
-    return lines
+    return strip_old_disclaimer(lines)
 
 
 def _line_from_dict(obj: dict[str, Any], bad: list[str], raw: str) -> ScriptLine:
@@ -184,7 +191,7 @@ def parse_txt(text: str) -> list[ScriptLine]:
             raise ScriptFormatError(f"not a script line: {line[:120]!r}")
     if not lines:
         raise ScriptFormatError("the script has no lines")
-    return lines
+    return strip_old_disclaimer(lines)
 
 
 def script_to_dict(lines: list[ScriptLine]) -> list[dict[str, Any]]:
@@ -201,7 +208,7 @@ def script_from_dict(data: list[dict[str, Any]]) -> list[ScriptLine]:
     lines = [_line_from_dict(item, bad, json.dumps(item)) for item in data]
     if bad:
         raise ScriptFormatError(f"script JSON has a bad line: {bad[0]}")
-    return lines
+    return strip_old_disclaimer(lines)
 
 
 def save_script(lines: list[ScriptLine], txt_path: Path, json_path: Path) -> None:

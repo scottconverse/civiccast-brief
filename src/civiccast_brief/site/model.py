@@ -31,10 +31,6 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 SCRIPT_LINE_RE = re.compile(r"^\[([A-Za-z0-9_ -]{1,24})\]\s*(\S.*)$")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 DEFAULT_BOARD = "City Council"
-DEFAULT_DISCLAIMER = (
-    "This episode is AI-generated from the public meeting video. Check the official record "
-    "before you rely on anything it says."
-)
 
 
 class InputError(ValueError):
@@ -66,7 +62,6 @@ class City:
     site_title: str
     tagline: str
     publisher: str
-    disclaimer: str
     hosts: dict[str, str]
     podcast: PodcastInfo
     official_site: str | None
@@ -611,7 +606,6 @@ def _load_city(path: Path, directory: Path, problems: list[str]) -> City:
         tagline=check.text(data, "tagline", required=False, limit=300)
         or "What did our local government just do?",
         publisher=check.text(data, "publisher", required=False, limit=120) or "CivicCast Brief",
-        disclaimer=check.text(data, "disclaimer", required=False, limit=600) or DEFAULT_DISCLAIMER,
         hosts=hosts or {"S1": "Host 1", "S2": "Host 2"},
         podcast=podcast,
         official_site=check.url(data, "official_site", required=False),
