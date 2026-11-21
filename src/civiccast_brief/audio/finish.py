@@ -5,20 +5,27 @@ true peak and 11 LU loudness range (set explicitly; loudnorm's own default range
 second pass uses linear gain when the peak ceiling allows it and loudnorm's dynamic gain when it
 does not. Neither mode changes the length, so the transcript and chapter times stay valid.
 
-Known limit: loudnorm reaches the target only when the material's peak-to-loudness spread is small
-enough. The 90-second Chatterbox render has about 21 LU of spread and ends at -17.0 LUFS with the
-true-peak ceiling binding. A compressor before loudnorm reached -16.1 LUFS in a scratch test; that
-is not in this chain because it changes the sound and needs Scott's listening decision.
+loudnorm alone cannot reach both targets on this speech. The material's true peak sits within a
+few tenths of a dB of full scale while its integrated loudness is about -20 LUFS, so the peak
+ceiling binds before the loudness target, and a 64 kbps LAME encode then lifts the decoded true
+peak above the master's again. Two changes handle that. LAME runs at its slowest search
+(MP3_COMPRESSION_LEVEL), which cuts the decoded peak overshoot from about 3 dB to well under
+1 dB at the same bitrate. And the master gets a lookahead limiter (`alimiter`) after loudnorm: it
+shaves only the samples above its ceiling and is a no-op when the peaks are already below it. Its
+delay compensation is on (`latency=true`). Without it the limiter outputs its lookahead delay
+first: every real episode came out 219 samples (5.0 ms at 44.1 kHz) later than the loudnorm
+output, which would slide the audio against the chapter and transcript times. With it, the
+output samples sit at the same positions as the input and the length is unchanged. The
+MP3 is measured with ebur128 after encoding; if its true peak is over -1.5 dBTP the ceiling is
+lowered by the overshoot and the master re-rendered from the loudnorm output (never from a
+previously limited master, so gain reduction does not compound). The master is held at
+MASTER_TARGET_LUFS so the decoded MP3 lands near -16 LUFS; the peak ceiling takes priority when
+both cannot be met. Neither step changes the length.
 
 MP3 is mono at 44.1 kHz, LAME at 64 kbps. The output is one voice at a time, so a single channel
 carries it, and 64 kbps is 8 KB per second: a 90-second episode is about 720 KB, where 128 kbps
 would be about 1.4 MB. That is a choice from the arithmetic, not a listening test; 96 kbps is the
 step to try if Scott hears artifacts.
-
-MP3 encoding can overshoot the master's true peak (measured at 1.7 dB on a Gemini TTS episode), so
-the MP3 is measured with ebur128 after encoding. If it is above the target (plus 0.5 dB of slack),
-the master is normalised again with a lower true-peak target, lowered by the overshoot, and
-re-encoded, up to two retries; the lowest-peak attempt is kept.
 
 Chapters use the Podcasting 2.0 JSON chapters format, version 1.2.0. A chapter starts at the first
 spoken line after its [CHAPTER] mark. The first chapter always starts at 0, so it also covers an
@@ -42,11 +49,21 @@ from civiccast_brief.audio.lines import SPEAKERS, Line, Script
 
 TARGET_LUFS = -16.0
 TARGET_TRUE_PEAK_DBTP = -1.5
-MP3_PEAK_MARGIN_DB = 0.5
-MP3_PEAK_RETRIES = 2
+# LAME loses ~0.3-0.4 LU, so a master aimed a little hot lands the decoded MP3 near -16 LUFS.
+MASTER_TARGET_LUFS = -15.7
+LOUDNESS_TOLERANCE_LU = 0.5
+# Peak must clear the target by this much, so codec noise cannot land exactly on the boundary.
+MP3_PEAK_MARGIN_DB = 0.1
+MAX_LIMIT_ATTEMPTS = 4
+MAX_GAIN_STEPS = 6
+LIMITER_ATTACK_MS = 5
+LIMITER_RELEASE_MS = 50
 TARGET_LRA = 11.0
 SAMPLE_RATE = 44100
 MP3_BITRATE = "64k"
+# LAME's slowest search produces less quantization noise, so the decoded true peak overshoots
+# the master by well under 1 dB instead of the ~3 dB it does at the default effort. Same bitrate.
+MP3_COMPRESSION_LEVEL = 9
 CHAPTERS_VERSION = "1.2.0"
 SPEAKER_NAMES = {"S1": "Maya", "S2": "Theo"}
 
@@ -174,6 +191,63 @@ def normalize_loudness(
     )
 
 
+def limiter_filter(gain_db: float, ceiling_db: float) -> str:
+    """Volume by gain_db, then a lookahead limiter whose sample peak never passes ceiling_db.
+
+    `latency=true` turns on the filter's delay compensation, so the output is not shifted by the
+    lookahead and the sample positions match the input.
+    """
+    limit = 10 ** (ceiling_db / 20)
+    return (
+        f"volume={gain_db:.3f}dB,"
+        f"alimiter=limit={limit:.6f}:level=disabled"
+        f":attack={LIMITER_ATTACK_MS}:release={LIMITER_RELEASE_MS}:latency=true"
+    )
+
+
+def apply_peak_limiter(program: Path, out_wav: Path, *, gain_db: float, ceiling_db: float) -> None:
+    """Apply gain and a lookahead limiter. Writes 16-bit mono WAV.
+
+    The length and the sample positions are unchanged, so timed chapters and transcripts still line
+    up with the audio.
+    """
+    run_ffmpeg(
+        [
+            "-nostats",
+            "-i",
+            str(program),
+            "-af",
+            limiter_filter(gain_db, ceiling_db),
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(out_wav),
+        ],
+        what="true-peak limiting",
+    )
+
+
+def solve_limiter_gain(
+    program: Path, out_wav: Path, *, ceiling_db: float, target_lufs: float
+) -> float:
+    """Gain that makes the limited master measure target_lufs. Renders into out_wav as it goes.
+
+    Limiting is nonlinear, so the gain is found by measuring, not by arithmetic.
+    """
+    gain_db = target_lufs - measure_loudness(program).integrated_lufs
+    for _ in range(MAX_GAIN_STEPS):
+        apply_peak_limiter(program, out_wav, gain_db=gain_db, ceiling_db=ceiling_db)
+        measured = measure_loudness(out_wav).integrated_lufs
+        error = target_lufs - measured
+        if abs(error) < 0.05:
+            break
+        gain_db += error
+    return gain_db
+
+
 def encode_mp3(master: Path, out_mp3: Path) -> None:
     run_ffmpeg(
         [
@@ -183,6 +257,8 @@ def encode_mp3(master: Path, out_mp3: Path) -> None:
             "libmp3lame",
             "-b:a",
             MP3_BITRATE,
+            "-compression_level",
+            str(MP3_COMPRESSION_LEVEL),
             "-ac",
             "1",
             "-ar",
@@ -191,6 +267,59 @@ def encode_mp3(master: Path, out_mp3: Path) -> None:
         ],
         what="MP3 encode",
     )
+
+
+def pick_attempt(attempts: list[tuple[Path, Path, Loudness]]) -> tuple[Path, Path, Loudness]:
+    """The peak ceiling wins: prefer attempts at or under the target, then the one nearest -16 LUFS."""
+    under_ceiling = [
+        attempt for attempt in attempts if attempt[2].true_peak_dbtp <= TARGET_TRUE_PEAK_DBTP
+    ]
+    if under_ceiling:
+        return min(under_ceiling, key=lambda a: abs(a[2].integrated_lufs - TARGET_LUFS))
+    return min(attempts, key=lambda attempt: attempt[2].true_peak_dbtp)
+
+
+def master_for_mp3(program: Path, work: Path, out_mp3: Path) -> tuple[Path, Path, Loudness]:
+    """Normalise and limit a stitched program, then encode. Returns (master, mp3 files, loudness).
+
+    The limiter ceiling is lowered by however far the decoded MP3's true peak overshoots, and
+    each attempt is re-rendered from the loudnorm output so gain reduction never compounds.
+    """
+    normalised = work / "normalised.wav"
+    normalize_loudness(program, normalised)
+    master = work / "master.wav"
+    ceiling = TARGET_TRUE_PEAK_DBTP
+    attempts: list[tuple[Path, Path, Loudness]] = []
+    for number in range(MAX_LIMIT_ATTEMPTS):
+        attempt_master = work / f"master-{number + 1}.wav"
+        attempt_mp3 = work / f"episode-{number + 1}.mp3"
+        solve_limiter_gain(
+            normalised, attempt_master, ceiling_db=ceiling, target_lufs=MASTER_TARGET_LUFS
+        )
+        encode_mp3(attempt_master, attempt_mp3)
+        loudness = measure_loudness(attempt_mp3)
+        attempts.append((attempt_master, attempt_mp3, loudness))
+        peak_ok = loudness.true_peak_dbtp <= TARGET_TRUE_PEAK_DBTP - MP3_PEAK_MARGIN_DB
+        loud_ok = abs(loudness.integrated_lufs - TARGET_LUFS) <= LOUDNESS_TOLERANCE_LU
+        if peak_ok and loud_ok:
+            break
+        if not peak_ok:
+            overshoot = loudness.true_peak_dbtp - (TARGET_TRUE_PEAK_DBTP - MP3_PEAK_MARGIN_DB)
+            ceiling -= overshoot + 0.1
+        else:
+            # The peak is fine but the MP3 is too loud or quiet; more limiting only loses
+            # loudness, so keep the closest attempt.
+            break
+
+    best_master, best_mp3, best_loudness = pick_attempt(attempts)
+    shutil.copyfile(best_master, master)
+    shutil.copyfile(best_mp3, out_mp3)
+    for attempt_master, attempt_mp3, _ in attempts:
+        if attempt_master != best_master:
+            attempt_master.unlink(missing_ok=True)
+        if attempt_mp3 != best_mp3:
+            attempt_mp3.unlink(missing_ok=True)
+    return master, out_mp3, best_loudness
 
 
 def parse_ebur128_summary(text: str) -> Loudness:
@@ -320,31 +449,9 @@ def finish_episode(
     work.mkdir(parents=True, exist_ok=True)
     offset = probe_duration(intro) if intro is not None else 0.0
     program = work / "program.wav"
-    master = work / "master.wav"
     stitch(render.wav, intro, outro, program)
     mp3 = out_dir / "episode.mp3"
-    # MP3 encoding can push the true peak over the master's; retry with a lower ceiling if it does.
-    true_peak = TARGET_TRUE_PEAK_DBTP
-    attempts: list[tuple[float, Loudness, Path, Path]] = []
-    for number in range(MP3_PEAK_RETRIES + 1):
-        attempt_master = work / f"master-{number + 1}.wav"
-        attempt_mp3 = work / f"episode-{number + 1}.mp3"
-        normalize_loudness(program, attempt_master, true_peak=true_peak)
-        encode_mp3(attempt_master, attempt_mp3)
-        loudness = measure_loudness(attempt_mp3)
-        attempts.append((loudness.true_peak_dbtp, loudness, attempt_master, attempt_mp3))
-        if loudness.true_peak_dbtp <= TARGET_TRUE_PEAK_DBTP + MP3_PEAK_MARGIN_DB:
-            break
-        # Lower the ceiling by however far the MP3 overshot the target.
-        true_peak -= loudness.true_peak_dbtp - TARGET_TRUE_PEAK_DBTP
-    _, loudness, best_master, best_mp3 = min(attempts, key=lambda attempt: attempt[0])
-    shutil.copyfile(best_master, master)
-    shutil.copyfile(best_mp3, mp3)
-    for _, _, attempt_master, attempt_mp3 in attempts:
-        if attempt_master != best_master:
-            attempt_master.unlink(missing_ok=True)
-        if attempt_mp3 != best_mp3:
-            attempt_mp3.unlink(missing_ok=True)
+    master, _, loudness = master_for_mp3(program, work, mp3)
 
     spans = [(line.start + offset, line.end + offset) for line in render.lines]
     marks = chapter_marks(script, [start for start, _ in spans])
