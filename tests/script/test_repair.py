@@ -1,4 +1,4 @@
-from test_checker import RECAP, good_script
+from test_checker import RECAP, VOTE_IDS, VOTE_RECAP, good_script
 
 from civiccast_brief.script.checker import check_script, drop_unsupported
 from civiccast_brief.script.writer import ScriptLine
@@ -78,3 +78,25 @@ def test_keeps_the_question_that_hands_over_to_the_outro():
     lines.insert(4, ScriptLine("S1", "Alex, where can people watch it?"))
     repaired, dropped = drop_unsupported(RECAP, lines)
     assert dropped == [] and repaired == lines
+
+
+def test_a_partial_vote_is_reduced_to_the_count_instead_of_ending_the_script():
+    """A partial-vote error must not cost a meeting its script. The repair path reduces the
+    sentence to the cited tally, drops the partial names, invents none, and passes."""
+    lines = [
+        ScriptLine("S1", "CivicCast Brief, Boulder."),
+        ScriptLine(
+            "S2",
+            "Schuchard, Speer, Benjamin and Brockett voted yes. Adams and Kaplan voted no.",
+            VOTE_IDS,
+        ),
+        ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c11",)),
+    ]
+    before = check_script(VOTE_RECAP, lines)
+    assert [i.code for i in before.errors] == ["partial_vote", "partial_vote"]
+
+    repaired, dropped = drop_unsupported(VOTE_RECAP, lines)
+
+    assert dropped == []
+    assert repaired[1].text == "The vote was five to three."
+    assert check_script(VOTE_RECAP, repaired).passed

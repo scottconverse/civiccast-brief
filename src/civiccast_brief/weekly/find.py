@@ -23,8 +23,10 @@
   same day; a day with documents and no video is kept with that reason.
 
 The same video found by two sources is one meeting; the portal's agenda and documents go
-with it. A meeting that cannot be run (no video, or a body no source covers) is kept with the
-reason, so the run reports it instead of passing over it.
+with it. A portal meeting with no video gives its agenda and documents to the same body's
+video meeting that day, when the name's core words agree and only one video matches; a
+meeting that cannot be run (no video, or a body no source covers) is kept with the reason,
+so the run reports it instead of passing over it.
 """
 
 from __future__ import annotations
@@ -254,6 +256,9 @@ def _day(value: Any) -> date | None:
     return None
 
 
+PORTAL_NO_VIDEO = "the portal lists no video for this meeting"
+
+
 def _primegov(source: Source, first: date, last: date, listers: Listers) -> list[Found]:
     found: list[Found] = []
     for meeting in listers.primegov(source.url, first, last):  # type: ignore[misc]
@@ -266,7 +271,7 @@ def _primegov(source: Source, first: date, last: date, listers: Listers) -> list
             continue
         video = youtube_id(meeting.video_url)
         agenda = listers.primegov_agenda(source.url, meeting) if listers.primegov_agenda else None
-        reason = "" if video else "the portal lists no video for this meeting"
+        reason = "" if video else PORTAL_NO_VIDEO
         if "cancel" in title.lower():
             reason = "the meeting was cancelled"
         documents = None
@@ -600,6 +605,47 @@ def _channel_upload(meeting: Found) -> bool:
     )
 
 
+def _join_portal_documents(by_key: dict[str, Found], city: str) -> None:
+    """A portal meeting with no video gives its agenda and documents to the video meeting of the
+    same body, same day and same ``_meeting_words``, and does not stay as its own "not run" entry.
+
+    A portal often lists the agenda and packet of a meeting whose video the channel carries, but
+    no link between them (Boulder, Nov 12 2026: "City Council Special Meeting"). The name's core
+    words keep the day's sessions apart ("Study Session" vs "Regular", "Part 1" vs "Part 2"). If
+    two videos could be the same meeting, neither is guessed at: the portal entry stays as it was.
+    A cancelled portal meeting gives nothing to a video.
+    """
+    videos = {
+        key: meeting
+        for key, meeting in by_key.items()
+        if meeting.video and not meeting.reason and meeting.body
+    }
+    for key, portal in list(by_key.items()):
+        if portal.video or portal.reason != PORTAL_NO_VIDEO or not portal.body:
+            continue
+        words = " ".join(_meeting_words(portal.title, city))
+        matches = [
+            (video_key, video)
+            for video_key, video in videos.items()
+            if video.body == portal.body
+            and video.day == portal.day
+            and " ".join(_meeting_words(video.title, city)) == words
+        ]
+        if len(matches) != 1:
+            continue
+        video_key, video = matches[0]
+        joined = replace(
+            video,
+            agenda=video.agenda or portal.agenda,
+            documents=_chain(video.documents, portal.documents),
+        )
+        by_key[video_key] = joined
+        # Two portal entries can match one video. The next join must chain onto the records
+        # this one just added, not onto the snapshot taken before the loop.
+        videos[video_key] = joined
+        del by_key[key]
+
+
 def _one_video_per_meeting(by_key: dict[str, Found], city: str) -> None:
     """Two videos of one meeting (the portal's link and the channel's upload, or two uploads)
     would make two episodes of it. The portal meeting runs before a channel video, whatever
@@ -619,6 +665,16 @@ def _one_video_per_meeting(by_key: dict[str, Found], city: str) -> None:
             by_key[first.key] = replace(
                 first, reason=f"another video of this meeting runs ({meeting.video})"
             )
+            # The preferred video keeps the records already joined to the dropped upload
+            # (a portal meeting with no video may have given them to it). `kept` must point at
+            # the updated meeting too, so a third upload is compared with the records.
+            updated = replace(
+                meeting,
+                agenda=meeting.agenda or first.agenda,
+                documents=_chain(meeting.documents, first.documents),
+            )
+            by_key[meeting.key] = updated
+            kept[same] = updated
             continue
         reason = f"another video of this meeting runs ({first.video})"
         by_key[key] = replace(meeting, reason=reason)
@@ -684,6 +740,7 @@ def find_meetings(
                 elif held.documents is None and meeting.documents is not None:
                     by_key[meeting.key] = replace(held, documents=meeting.documents)
     joined = _join_dateless_youtube(by_key, listed)
+    _join_portal_documents(by_key, listers.city)
     _one_video_per_meeting(by_key, listers.city)
     # Documents go with the body's video meeting that day; a day with none is its own entry.
     for meeting in listed:
