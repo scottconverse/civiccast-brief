@@ -1,9 +1,11 @@
 """Command line for the audio package.
 
     python -m civiccast_brief.audio SCRIPT [--engine dia2|chatterbox|gemini|fake] --out DIR
-                                    [--intro FILE] [--outro FILE] [--config FILE]
+                                    [--fallback-engine NAME] [--intro FILE] [--outro FILE]
+                                    [--config FILE]
 
-The default engine is dia2 (Scott, 2026-11-12). Output in DIR:
+The default engine is dia2 (Scott, 2026-11-12). With ``--fallback-engine``, a failure of the
+primary engine (making it or rendering with it) is retried with that engine instead. Output in DIR:
 episode.mp3, chapters.json, transcript.vtt, and work/ (the raw voice WAV, the program and master
 WAVs, and render.json with the line timings).
 """
@@ -15,10 +17,17 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from civiccast_brief.audio.engines import DEFAULT_ENGINE, ENGINE_NAMES, load_config, make_engine
+from civiccast_brief.audio.engines import (
+    DEFAULT_ENGINE,
+    ENGINE_NAMES,
+    AudioConfig,
+    RenderResult,
+    load_config,
+    make_engine,
+)
 from civiccast_brief.audio.errors import AudioError
 from civiccast_brief.audio.finish import finish_episode
-from civiccast_brief.audio.lines import read_script
+from civiccast_brief.audio.lines import Script, read_script
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"voice engine (default: {DEFAULT_ENGINE})",
     )
     parser.add_argument(
+        "--fallback-engine",
+        choices=ENGINE_NAMES,
+        help=(
+            "engine to render with if the primary engine fails to make or render "
+            "(default: none; the run fails instead)"
+        ),
+    )
+    parser.add_argument(
         "--out", required=True, type=Path, help="output directory (created if missing)"
     )
     parser.add_argument("--intro", type=Path, help="audio file to place before the voice")
@@ -56,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _render(name: str, config: AudioConfig, script: Script, out_wav: Path) -> RenderResult:
+    """Make the named engine and render the script with it. Raises AudioError on any failure."""
+    return make_engine(name, config).render(list(script.lines), out_wav)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     for label, path in (("intro", args.intro), ("outro", args.outro)):
@@ -65,11 +87,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         script = read_script(args.script)
         config = load_config(args.config)
-        engine = make_engine(args.engine, config)
-        out = args.out
-        out.mkdir(parents=True, exist_ok=True)
-        render = engine.render(list(script.lines), out / "work" / "voice.wav")
-        files = finish_episode(render, script, out, intro=args.intro, outro=args.outro)
+    except AudioError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    fallback = args.fallback_engine
+    if fallback == args.engine:
+        fallback = None
+    voice_wav = args.out / "work" / "voice.wav"
+    try:
+        args.out.mkdir(parents=True, exist_ok=True)
+        render = _render(args.engine, config, script, voice_wav)
+    except AudioError as exc:
+        if fallback is None:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"warning: {args.engine} engine failed ({exc}); rendering with {fallback}",
+            file=sys.stderr,
+        )
+        # A half-written WAV must not be mistaken for a finished render.
+        voice_wav.unlink(missing_ok=True)
+        try:
+            render = _render(fallback, config, script, voice_wav)
+        except AudioError as fallback_exc:
+            print(f"error: {exc}", file=sys.stderr)
+            print(f"error: {fallback_exc}", file=sys.stderr)
+            return 1
+
+    try:
+        files = finish_episode(render, script, args.out, intro=args.intro, outro=args.outro)
     except AudioError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
