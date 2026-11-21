@@ -23,14 +23,18 @@ Timing, per engine:
   audio lengths are exact. Inside a request, the boundary between two lines is estimated from the
   word counts of those lines, then the whole timeline is stretched to the final file length.
   Requests are joined in order with ``GeminiConfig.gap_s`` of silence.
+- ``measured`` (LfmLocal): llama-tts writes each line to its own 24 kHz mono WAV, so every line
+  length is exact. The line WAVs are joined in order with ``LfmConfig.gap_s`` of silence, and the
+  gaps and the total are exact. A line's end includes the quiet tail the model leaves, as with
+  ChatterboxRemote.
 
 The remote engines drive the bake-off renderers on the GPU box over ssh and scp. GeminiTTS is the
 one hosted engine: it calls Google's Gemini TTS Interactions API over HTTPS; nothing runs on the
-box. Remote commands are PowerShell (the box's default shell) sent with -EncodedCommand, so
-nothing has to survive
-cmd.exe quoting. Every engine runs as plain Windows Python on the box; none needs Linux or WSL.
-The outer PowerShell reports exit code 1 whenever the inner command failed, so
-the exit code is not trusted. Each remote command prints CIVICCAST_RC=<n>, and that line decides.
+box. LfmLocal is the one engine that runs on this PC: it calls llama-tts (llama.cpp) directly.
+Remote commands are PowerShell (the box's default shell) sent with -EncodedCommand, so nothing has
+to survive cmd.exe quoting. Every engine runs as plain Windows Python on the box; none needs Linux
+or WSL. The outer PowerShell reports exit code 1 whenever the inner command failed, so the exit
+code is not trusted. Each remote command prints CIVICCAST_RC=<n>, and that line decides.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -64,7 +69,7 @@ Timing = Literal["exact", "measured", "approximate"]
 
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=20")
 RC_MARKER = "CIVICCAST_RC="
-ENGINE_NAMES = ("dia2", "chatterbox", "gemini", "fake")
+ENGINE_NAMES = ("dia2", "chatterbox", "gemini", "lfm3", "fake")
 # Scott, 2026-11-12: Dia2, on Windows. Step-Audio-EditX (a Linux program) is not an option at all.
 DEFAULT_ENGINE = "dia2"
 
@@ -167,12 +172,34 @@ class GeminiConfig:
     retries_per_model: int = 2
 
 
+LFM3_MODEL = r"C:\dev\civiccast-brief-models\lfm3\LFM3-Audio-2B-Q8_0.gguf"
+LFM3_MMPROJ = r"C:\dev\civiccast-brief-models\lfm3\mmproj-LFM3-Audio-2B-Q8_0.gguf"
+# Where the WinGet package puts llama-tts.exe, relative to %LOCALAPPDATA%.
+LFM3_WINGET_EXE = (
+    r"Microsoft\WinGet\Packages\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe\llama-tts.exe"
+)
+
+
+@dataclass(frozen=True)
+class LfmConfig:
+    """LFM3 Audio through llama.cpp's llama-tts on this PC. Scott approved male S1, female S2."""
+
+    llama_tts: str = ""  # empty = look on PATH, then the WinGet package path
+    model: str = LFM3_MODEL
+    mmproj: str = LFM3_MMPROJ
+    voice_s1: str = "male"
+    voice_s2: str = "female"
+    gap_s: float = 0.35
+    timeout_s: float = 300.0  # per line
+
+
 @dataclass(frozen=True)
 class AudioConfig:
     box: RemoteConfig = field(default_factory=RemoteConfig)
     chatterbox: ChatterboxConfig = field(default_factory=ChatterboxConfig)
     dia2: Dia2Config = field(default_factory=Dia2Config)
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
+    lfm3: LfmConfig = field(default_factory=LfmConfig)
 
 
 def load_config(path: Path | None) -> AudioConfig:
@@ -224,6 +251,8 @@ def make_engine(name: str, config: AudioConfig) -> VoiceEngine:
         return Dia2Remote(config.box, config.dia2)
     if name == "gemini":
         return GeminiTTS(config.gemini)
+    if name == "lfm3":
+        return LfmLocal(config.lfm3)
     if name == "fake":
         return FakeEngine()
     raise ConfigError(f"unknown engine {name!r}; choose from {', '.join(ENGINE_NAMES)}")
@@ -559,6 +588,145 @@ class Dia2Remote:
         duration = probe_duration(out_wav)
         spans = fit_to_length(dia2_spans(chunks, lines, self.cfg.gap_s), duration)
         return _result(out_wav, self.name, "approximate", lines, spans, duration)
+
+
+# --- LFM3 Audio (local llama.cpp TTS) --------------------------------------------------------
+
+
+def lfm3_executable(
+    cfg: LfmConfig,
+    which: Callable[[str], str | None] = shutil.which,
+    environ: Mapping[str, str] | None = None,
+) -> str:
+    """The llama-tts.exe to run: the configured path, then PATH, then the WinGet package path."""
+    if cfg.llama_tts:
+        return cfg.llama_tts
+    found = which("llama-tts")
+    if found:
+        return found
+    env = os.environ if environ is None else environ
+    local = (env.get("LOCALAPPDATA") or "").strip()
+    if local:
+        return str(Path(local) / LFM3_WINGET_EXE)
+    return LFM3_WINGET_EXE
+
+
+class LfmLocal:
+    """LFM3 Audio through llama-tts on this PC. Timing is measured, per line.
+
+    Each line is rendered to its own WAV, then the lines are joined in order with `gap_s` of
+    silence. A non-zero exit, a run past `timeout_s`, or no audio raises EngineError naming the
+    line. See the module docstring.
+    """
+
+    name = "lfm3"
+
+    def __init__(self, cfg: LfmConfig, runner: Runner = subprocess.run) -> None:
+        self.cfg = cfg
+        self._runner = runner
+
+    def render(self, lines: list[Line], out_wav: Path) -> RenderResult:
+        if not lines:
+            raise EngineError("no spoken lines to render")
+        exe = lfm3_executable(self.cfg)
+        for label, path in (
+            ("llama-tts", exe),
+            ("LFM3 model", self.cfg.model),
+            ("LFM3 mmproj", self.cfg.mmproj),
+        ):
+            if not Path(path).is_file():
+                raise ConfigError(f"{label} not found: {path}")
+
+        out_wav.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="civiccast-lfm3-", dir=out_wav.parent) as tmp:
+            clips: list[Path] = []
+            for index, line in enumerate(lines):
+                clip = Path(tmp) / f"line-{index + 1:03d}.wav"
+                self._render_line(exe, line, clip)
+                clips.append(clip)
+            pcm, rate, durations = self._join_clips(clips, lines)
+        duration = write_pcm_wav(pcm, rate, out_wav)
+        spans = fit_to_length(spans_from_durations(durations, self.cfg.gap_s), duration)
+        return _result(out_wav, self.name, "measured", lines, spans, duration)
+
+    def _render_line(self, exe: str, line: Line, clip: Path) -> None:
+        voice = self.cfg.voice_s1 if line.speaker == "S1" else self.cfg.voice_s2
+        argv = [
+            exe,
+            "-m",
+            self.cfg.model,
+            "-mm",
+            self.cfg.mmproj,
+            "-p",
+            line.text,
+            "--tts-voice",
+            voice,
+            "-o",
+            str(clip),
+        ]
+        try:
+            proc = self._runner(
+                argv,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.cfg.timeout_s,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise EngineError(
+                f"line {line.number}: llama-tts ran past {self.cfg.timeout_s:.0f} s"
+            ) from exc
+        except FileNotFoundError as exc:
+            raise EngineError(f"line {line.number}: {exe} is not on PATH") from exc
+        if proc.returncode != 0:
+            raise EngineError(
+                f"line {line.number}: llama-tts exited {proc.returncode}:\n{_tail(proc.stderr)}"
+            )
+        if not clip.is_file() or clip.stat().st_size == 0:
+            raise EngineError(f"line {line.number}: llama-tts wrote no audio to {clip.name}")
+
+    def _join_clips(self, clips: list[Path], lines: list[Line]) -> tuple[bytes, int, list[float]]:
+        """Read the line WAVs and join their PCM with `gap_s` of silence.
+
+        Every clip must be mono 16-bit and share the first clip's rate. The durations come from
+        each WAV's frame count. A clip that cannot be read raises EngineError naming the line.
+        """
+        rate: int | None = None
+        chunks: list[bytes] = []
+        durations: list[float] = []
+        for clip, line in zip(clips, lines, strict=True):
+            try:
+                with wave.open(str(clip), "rb") as wav:
+                    channels = wav.getnchannels()
+                    width = wav.getsampwidth()
+                    clip_rate = wav.getframerate()
+                    frames = wav.getnframes()
+                    data = wav.readframes(frames)
+            except (wave.Error, EOFError, OSError) as exc:
+                raise EngineError(f"line {line.number}: cannot read {clip.name}: {exc}") from exc
+            if channels != 1 or width != 2:
+                raise EngineError(
+                    f"line {line.number}: {clip.name} is {channels} channel(s) at "
+                    f"{width * 8} bits; only mono 16-bit is supported"
+                )
+            if len(data) != frames * 2:
+                raise EngineError(
+                    f"line {line.number}: {clip.name} is truncated "
+                    f"({len(data)} of {frames * 2} bytes)"
+                )
+            if rate is None:
+                rate = clip_rate
+            elif clip_rate != rate:
+                raise EngineError(
+                    f"line {line.number}: {clip.name} is {clip_rate} Hz, expected {rate} Hz"
+                )
+            durations.append(frames / clip_rate)
+            chunks.append(data)
+        if rate is None:
+            raise EngineError("no spoken lines to render")
+        gap = b"\x00" * (round(self.cfg.gap_s * rate) * 2)
+        return gap.join(chunks), rate, durations
 
 
 # --- Gemini TTS (hosted) ---------------------------------------------------------------------

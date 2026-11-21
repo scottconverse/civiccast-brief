@@ -32,7 +32,7 @@ $site = Join-Path $Here 'live\site'
 Say "weekly run started"
 & $Python -m civiccast_brief.weekly run --city cities\$City --work runs\weekly --db desk.db --days 14 `
     --episodes live\episodes --media live\media --site-out $site `
-    --base-url https://$City.civiccastbrief.org --media-base-url https://media.civiccastbrief.org/$City --audio-engine gemini --audio-fallback-engine dia2 --diarize `
+    --base-url https://$City.civiccastbrief.org --media-base-url https://media.civiccastbrief.org/$City --audio-engine gemini --audio-fallback-engine lfm3 --diarize `
     *>&1 | ForEach-Object { Add-Content -Path $log -Value "$_" -Encoding utf8 }
 $runCode = $LASTEXITCODE
 Say "weekly run exit code $runCode"

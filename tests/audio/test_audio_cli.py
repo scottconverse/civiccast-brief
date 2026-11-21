@@ -43,7 +43,7 @@ def test_engine_defaults_to_dia2(tmp_path: Path) -> None:
 def test_engine_choices_are_the_windows_adapters_and_gemini() -> None:
     parser = build_parser()
     engine = next(a for a in parser._actions if a.dest == "engine")
-    assert list(engine.choices) == ["dia2", "chatterbox", "gemini", "fake"]
+    assert list(engine.choices) == ["dia2", "chatterbox", "gemini", "lfm3", "fake"]
 
 
 def test_stepaudio_is_not_an_engine_choice(tmp_path: Path, capsys) -> None:
