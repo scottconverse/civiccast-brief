@@ -33,7 +33,7 @@ $site = Join-Path $Here 'live\site'
 Say "publish started"
 & $Python -m civiccast_brief.weekly publish --city "cities\$City" --work runs\weekly --db desk.db `
     --episodes live\episodes --media live\media --site-out $site `
-    --base-url https://$City.civiccastbrief.org --media-base-url https://media.civiccastbrief.org/$City --audio-engine dia2 `
+    --base-url https://$City.civiccastbrief.org --media-base-url https://media.civiccastbrief.org/$City --audio-engine gemini --audio-fallback-engine lfm3 `
     *>&1 | ForEach-Object { Add-Content -Path $log -Value "$_" -Encoding utf8 }
 $runCode = $LASTEXITCODE
 Say "publish exit code $runCode"

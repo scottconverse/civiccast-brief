@@ -237,18 +237,18 @@ def _pages(args: argparse.Namespace) -> dict[str, DocPage] | None:
     return load_documents(path)
 
 
-def _repair(article, people: People, record=None, *, quiet: bool = False, names: bool = True):
+def _repair(
+    article, people: People, record=None, *, quiet: bool = False, add_seat_names: bool = True
+):
     """Print the record's spelling in place of each mangled name, and a role for a name the
     record does not hold. A garbled resolution number or item name takes the record's form.
 
-    ``names=False`` keeps the story's own spelling: the skill writes the record's names, and
-    the check is the gate; a rewrite to "a speaker" would change what the story says.
-    """
-    if names:
-        article, changes = repair_article(article, people)
-        if changes and not quiet:
-            for change in changes:
-                print(f"name check: {change}", file=sys.stderr)
+    ``add_seat_names=False`` (the skill story path) never adds a roster name to a sentence
+    that named only the seat; the seat stays as written."""
+    article, changes = repair_article(article, people, add_seat_names=add_seat_names)
+    if changes and not quiet:
+        for change in changes:
+            print(f"name check: {change}", file=sys.stderr)
     article, terms = repair_terms(article, record)
     if terms and not quiet:
         for change in terms:
@@ -542,10 +542,11 @@ def _skill(args: argparse.Namespace) -> int:
             return 1
         article, story_claims = skill.article_from_skill(run.story, recap, segments, pages)
         evidence_recap = replace(recap, claims=(*recap.claims, *story_claims))
-        # The skill writes the record's spellings. A name the roster or the documents do not
-        # hold is not rewritten into "a speaker" here (that would change the story); the
-        # names gate below reports it, and a paragraph that fails is dropped.
-        article = _repair(article, people, record, names=False)
+        # A person's name prints only when the roster or the documents hold it. The skill's
+        # captions-only names are replaced with a role, and a record name takes the record's
+        # spelling; the sentence and its facts stay. A seat-only mention is never filled in
+        # from the roster here: the roster may be stale after an election.
+        article = _repair(article, people, record, add_seat_names=False)
         report = check_article(
             evidence_recap, article, windows, pages, speakers, people, record, skill_evidence=True
         )
@@ -680,6 +681,11 @@ def _from_stories(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"roundup failed: {exc}", file=sys.stderr)
         return 1
+    # The roundup's own checked title (title.json) is its headline; without one it keeps the
+    # lead story's headline.
+    headline = roundup_mod.checked_title_headline(base, args.recap.parent, article.headline)
+    if headline != article.headline:
+        article = replace(article, headline=headline)
     merged = replace(
         merged,
         city=base.city,

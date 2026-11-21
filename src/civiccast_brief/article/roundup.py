@@ -131,6 +131,25 @@ def from_files(paths: list[Path]) -> tuple[Article, Recap]:
     return build([load_story(path) for path in paths])
 
 
+def checked_title_headline(recap: Recap, folder: Path, fallback: str) -> str:
+    """The roundup's checked title from ``folder/title.json``, or ``fallback``.
+
+    The title was written and checked against the same roundup recap (``article/title.py``), so
+    it is the roundup's own headline, not the lead story's. A missing, unreadable or failing
+    title keeps today's behaviour: the lead story's headline.
+    """
+    from civiccast_brief.article.title import check_title, load_title
+
+    path = Path(folder) / "title.json"
+    if not path.is_file():
+        return fallback
+    try:
+        title = load_title(path)
+    except (OSError, ValueError):
+        return fallback
+    return fallback if check_title(recap, title) else title.text
+
+
 def story_paths_from_state(state_path: Path) -> list[Path]:
     """The article.json of every meeting this run finished, in date order."""
     state = json.loads(state_path.read_text(encoding="utf-8"))

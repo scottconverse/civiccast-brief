@@ -122,7 +122,7 @@ ARTICLE_OPENERS = frozenset(
         "the",
     ]
 )
-_SENTENCE_START_RE = re.compile(r"(^|[.!?:]\s+)([A-Z][a-z]+)")
+_SENTENCE_START_RE = re.compile(r"(^|[.!?:][\"'”’)]?\s+)([A-Z][a-z]+)")
 #: Caption window around a claim's time, in seconds: a little before the quote, more after it.
 WINDOW_BEFORE = 20
 WINDOW_AFTER = 60

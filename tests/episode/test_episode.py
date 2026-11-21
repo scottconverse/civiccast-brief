@@ -321,9 +321,10 @@ def test_a_published_article_is_added_to_the_episode_in_the_site_format(
     assert article["votes"] == [
         {"motion": "Consent agenda", "result": "passed", "tally": None, "start_s": 1547}
     ]
-    # The quote is the claim's verbatim words; "Mayor Peck" is named in the captions there.
+    # The quote is the claim's verbatim words. "Mayor Peck" is heard only in the captions and
+    # no record in this meeting holds the name, so the printed title replaces the name.
     assert article["quotes"] == [
-        {"text": "The consent agenda passes.", "speaker": "Mayor Peck", "start_s": 1547}
+        {"text": "The consent agenda passes.", "speaker": "The mayor", "start_s": 1547}
     ]
 
 

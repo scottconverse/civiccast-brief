@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -57,6 +57,84 @@ ROLE_WORDS = (
     "Chairperson",
 )
 _ROLE_WORD_SET = {word.lower() for word in ROLE_WORDS}
+#: Lower-case joiners that may sit inside a printed title ("assistant superintendent of schools").
+_TITLE_JOINERS = frozenset({"of", "for", "and", "the", "in", "on"})
+#: The nouns a printed title ends with: the title is the words up to and including one of these.
+_TITLE_NOUNS = frozenset(
+    {
+        "spokesperson",
+        "spokeswoman",
+        "spokesman",
+        "officer",
+        "reviewer",
+        "director",
+        "superintendent",
+        "administrator",
+        "manager",
+        "clerk",
+        "attorney",
+        "supervisor",
+        "coordinator",
+        "specialist",
+        "analyst",
+        "engineer",
+        "liaison",
+        "principal",
+        "trustee",
+        "commissioner",
+        "councilor",
+        "councilmember",
+        "mayor",
+        "president",
+        "secretary",
+        "treasurer",
+        "chief",
+        "chair",
+        "chairperson",
+        "dean",
+        "provost",
+        "registrar",
+    }
+)
+#: Words that make a comma phrase after a name a clause, not a title ("whose role is new").
+_TITLE_STOPWORDS = frozenset(
+    {
+        "is",
+        "was",
+        "are",
+        "were",
+        "said",
+        "says",
+        "who",
+        "whose",
+        "that",
+        "which",
+        "role",
+        "roles",
+        "but",
+        "with",
+        "from",
+        "after",
+        "before",
+        "when",
+        "while",
+        "has",
+        "had",
+        "have",
+        "will",
+        "would",
+        "can",
+        "could",
+        "called",
+        "named",
+        "told",
+        "asked",
+        "described",
+        "serves",
+        "works",
+    }
+)
+_ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
 #: Words that start a sentence but are never a person's name.
 _OPENERS = {
     "the",
@@ -75,6 +153,25 @@ _OPENERS = {
     "after",
     "separately",
     "meanwhile",
+    # A sentence starts with a capital whatever its first word is, and a subordinating
+    # conjunction is never a person's name: "When Matthew Popkin asked ..." names Popkin, not
+    # "When Matthew Popkin". The run of capitals joins them, so the opener is cut here.
+    "when",
+    "whenever",
+    "while",
+    "whilst",
+    "if",
+    "unless",
+    "until",
+    "till",
+    "although",
+    "though",
+    "because",
+    "since",
+    "once",
+    "as",
+    "whereas",
+    "whether",
     "in",
     "on",
     "at",
@@ -309,7 +406,7 @@ _DOCUMENT_STRONG = frozenset(
 )
 _RUN_RE = re.compile(r"\b[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*)*")
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z'’\-]*")
-_SENTENCE_START = re.compile(r"(^|[.!?:]\s*)$")
+_SENTENCE_START = re.compile(r"(^|[.!?:][\"'”’)]?\s*)$")
 
 
 @dataclass(frozen=True)
@@ -558,19 +655,69 @@ def _misheard_seat_holder(span: Span, person: Person) -> bool:
 def _role_phrase(role: str, context: str, at_start: bool) -> str:
     """A role to print instead of a name the record does not hold."""
     key = _normal(role)
+    context_key = _normal(context)
     if "planning" in key or "building" in key:
         phrase = "a planning department staff member"
     elif "mayor" in key or "council" in key or "trustee" in key:
         phrase = "a council member"
+    elif any(word in key for word in ("superintendent", "administrator")):
+        phrase = "a district administrator"
     elif any(
         word in key
-        for word in ("manager", "director", "clerk", "attorney", "chief", "supervisor", "staff")
+        for word in (
+            "manager",
+            "director",
+            "clerk",
+            "attorney",
+            "chief",
+            "supervisor",
+            "staff",
+            "officer",
+            "reviewer",
+            "coordinator",
+            "principal",
+            "analyst",
+            "specialist",
+            "engineer",
+        )
     ):
-        phrase = "town staff"
-    elif "public comment" in _normal(context) or "resident" in _normal(context):
+        phrase = "a staff member"
+    elif "public comment" in context_key or "resident" in context_key:
         phrase = "a resident"
+    elif any(word in context_key for word in ("superintendent", "administrator")):
+        # No title is printed in front, but the sentence says who the person is ("assistant
+        # superintendent of schools").
+        phrase = "a district administrator"
+    elif any(
+        word in context_key
+        for word in (
+            "staff",
+            "director",
+            "officer",
+            "manager",
+            "teacher",
+            "principal",
+        )
+    ):
+        # No title is printed in front, but the sentence says who the person is ("started
+        # July 1 as the district's new director of gifted education").
+        phrase = "a staff member"
     else:
         phrase = "a speaker"
+    return phrase[:1].upper() + phrase[1:] if at_start else phrase
+
+
+def _definite(role: str) -> str:
+    """A role phrase for a later mention: "a staff member" -> "the staff member"."""
+    lowered = role.lower()
+    if lowered.startswith(("a ", "an ")):
+        return "the " + role.split(" ", 1)[1]
+    if lowered.startswith("the "):
+        return role
+    return "the " + role
+
+
+def _cased(phrase: str, at_start: bool) -> str:
     return phrase[:1].upper() + phrase[1:] if at_start else phrase
 
 
@@ -695,7 +842,10 @@ def _is_person_like(name: str, role: str) -> bool:
     return len(tokens) >= 2
 
 
-#: A verb only a person does, right after a name: "Jo Smith said", "Jo Smith, a resident, asked".
+#: A speech or civic verb only a person does, right after a name: "Jo Smith said", "Jo Smith,
+#: a resident, asked", "Jo Smith moved approval". A general action ("runs", "started", "came")
+#: is not evidence: an event or a project does those too ("Winter Festival runs...", "Front
+#: Range Rail came up..."). A run with no printed title and no person cue stays as written.
 _PERSON_VERB_RE = re.compile(
     r"\s*(?:,[^,.;]{1,80},\s*)?(?:said|says|asked|asks|told|spoke|speaks|added|noted|moved|"
     r"seconded|explained|argued|urged|presented|reported|answered|replied|responded|agreed|"
@@ -706,6 +856,241 @@ _PERSON_VERB_RE = re.compile(
 _PERSON_LEAD_RE = re.compile(
     r"\b(?:resident|speaker|named|commenter|applicant)\s*,?\s*$", re.IGNORECASE
 )
+#: A job named right after a run, which says a person is meant: "Jo Smith started July 1 as the
+#: district's new director of gifted education". A project or an event has no job title, so
+#: this is the one non-speech cue a titleless run may use.
+_TITLE_NOUN_PATTERN = "|".join(sorted(_TITLE_NOUNS, key=len, reverse=True))
+_PERSON_ROLE_AFTER_RE = re.compile(
+    rf"(?:\s+[^\s.;!?]+){{1,6}}\s+as\s+(?:the|a|an)\s+"
+    rf"(?:[^\s.;!?]+\s+){{0,4}}?(?i:{_TITLE_NOUN_PATTERN})\b"
+)
+#: The title (with its modifiers, determiner and any proper word inside it) a name is printed
+#: under: "Chief Information Officer Frank Elmore", "the reviewer, Shelly Billig", "Title IX
+#: compliance officer Liz Lindell". The title ends at a role noun, just before the name.
+_LEAD_TITLE_RE = re.compile(
+    r"(?P<lead>(?:(?:(?i:the|a|an|district'?s|city'?s|town'?s|deputy|assistant|associate|chief|"
+    r"compliance|executive|senior|interim|acting|new|of|for|and)|[A-Z][A-Za-z'’\-]*|"
+    r"[IVXLCDM]+)\s+){0,6}"
+    r"(?i:spokesperson|spokeswoman|spokesman|officer|reviewer|director|superintendent|"
+    r"administrator|manager|clerk|attorney|supervisor|coordinator|specialist|analyst|"
+    r"engineer|liaison|principal|trustee|commissioner|councilor|councilmember|"
+    r"council\s+member|mayor|president|secretary|treasurer|chief))"
+    r"(?P<comma>\s*,)?\s*$"
+)
+#: A title printed after the name as an appositive: "Neil Anderson, assistant superintendent of
+#: schools, said".
+_APPOSITIVE_TITLE_RE = re.compile(r"\s*,\s*(?P<title>[^,.;:]{1,80}?)\s*,")
+
+
+def _title_before(text: str, span: Span) -> tuple[int, str, bool] | None:
+    """The title printed just before a name: (start, title words, followed by a comma)."""
+    match = _LEAD_TITLE_RE.search(text[: span.start])
+    if match is None:
+        return None
+    title = " ".join(match.group("lead").split())
+    if not any(word.lower() in _TITLE_NOUNS for word in title.split()):
+        return None
+    return match.start("lead"), title, bool(match.group("comma"))
+
+
+def _title_after(text: str, span: Span) -> tuple[str, int] | None:
+    """The title printed after a name as an appositive: (title, where it ends).
+
+    Only a noun phrase with a title noun counts. A clause ("raising class time as a possible
+    factor", "whose role is new") is not a title and is left in place.
+    """
+    match = _APPOSITIVE_TITLE_RE.match(text, span.end)
+    if match is None:
+        return None
+    title = " ".join(match.group("title").split())
+    words = _normal(title).split()
+    if not words or len(words) > 5:
+        return None
+    if any(word in _TITLE_STOPWORDS for word in words):
+        return None
+    if not any(word in _TITLE_NOUNS for word in words):
+        return None
+    return title, match.end()
+
+
+def _printed_title(text: str, span: Span) -> str | None:
+    """The title a name is printed under, in front or after it, or None."""
+    if span.role:
+        return span.role
+    before = _title_before(text, span)
+    if before is not None:
+        return before[1]
+    after = _title_after(text, span)
+    return after[0] if after is not None else None
+
+
+def _title_key(title: str) -> str:
+    """A title's words without its determiner, for comparing two printings of one title."""
+    return " ".join(word for word in _normal(title).split() if word not in {"the", "a", "an"})
+
+
+def _label_from_title(title: str) -> str:
+    """The definite label a printed title becomes: "Deputy Superintendent" -> "the deputy
+    superintendent"; "Title IX compliance officer" keeps its proper words."""
+    words = title.split()
+    while words and words[0].lower() in {"the", "a", "an"}:
+        words = words[1:]
+    if not words:
+        return "the staff member"
+    out: list[str] = []
+    for index, word in enumerate(words):
+        proper = _ROMAN_RE.match(word) or (len(word) >= 2 and word.isupper())
+        if word == "Title":
+            following = words[index + 1] if index + 1 < len(words) else ""
+            out.append("Title" if _ROMAN_RE.match(following) else "title")
+        elif proper:
+            out.append(word)
+        else:
+            out.append(word.lower())
+    return "the " + " ".join(out)
+
+
+def _more_specific(current: str | None, candidate: str) -> str:
+    """The more specific of two printed titles: more words wins, never a shortened job."""
+    if current is None:
+        return candidate
+    if (len(candidate.split()), len(candidate)) > (len(current.split()), len(current)):
+        return candidate
+    return current
+
+
+def _indefinite(label: str) -> str:
+    """The first-mention form of a seat label: "the commissioner" -> "a commissioner"."""
+    head, _, rest = label.partition(" ")
+    if head.lower() == "the" and rest:
+        return f"a {rest}"
+    return label
+
+
+#: The last word of a seat that several members of one body hold. Such a seat is not a unique
+#: job: the first mention is "a commissioner", not "the commissioner", and a later mention of
+#: the same person, or of a second holder, is told apart as "the commissioner" / "the second
+#: commissioner". Unique offices ("deputy superintendent", "chief information officer") keep
+#: "the" on every mention.
+_SEAT_TAILS = frozenset(
+    {
+        "commissioner",
+        "commissioner's",
+        "trustee",
+        "representative",
+        "councilor",
+        "councillor",
+        "councelor",
+        "councilmember",
+    }
+)
+
+
+def _is_seat_title(title: str) -> bool:
+    """Whether a printed title names a seat more than one member of the body can hold."""
+    words = _normal(title).split()
+    if not words:
+        return False
+    if words[-1] in _SEAT_TAILS:
+        return True
+    joined = f" {' '.join(words)} "
+    if " council member " in joined or " board member " in joined:
+        return True
+    if " commission member " in joined:
+        return True
+    # "Director of the board" is a seat of that board; a "director of gifted education" is a
+    # unique staff job and keeps "the".
+    return "director" in words and ("board" in words or "commission" in words)
+
+
+def _is_person_title(role: str) -> bool:
+    """Whether a title printed in front of a run can introduce a person's name."""
+    key = _role_key(role)
+    words = key.split()
+    if not words:
+        return False
+    return words[-1] in _TITLE_NOUNS or _is_seat_title(role) or key.endswith("pro tem")
+
+
+def _with_second(phrase: str) -> str:
+    """ "the district administrator" -> "the second district administrator"."""
+    head, _, rest = phrase.partition(" ")
+    if head.lower() in {"the", "a", "an"} and rest:
+        return f"{head} second {rest}"
+    return f"a second {phrase}"
+
+
+#: Position words for the third and later holders of one seat in one text.
+_SEAT_ORDINALS = (
+    "another",
+    "a third",
+    "a fourth",
+    "a fifth",
+    "a sixth",
+    "a seventh",
+    "an eighth",
+    "a ninth",
+    "a tenth",
+)
+
+
+def _seat_label(base: str, index: int) -> str:
+    """The label for the holder at ``index`` (0 = first) of one seat within one text.
+
+    "a commissioner", then "another commissioner", then "a third commissioner". A holder is
+    never "the commissioner" while another holder could be meant by it.
+    """
+    head, _, rest = base.partition(" ")
+    tail = rest if head.lower() in {"a", "an"} and rest else base
+    if index == 0:
+        return base
+    if index - 1 < len(_SEAT_ORDINALS) - 1:
+        word = _SEAT_ORDINALS[index - 1]
+        return f"another {tail}" if word == "another" else f"{word} {tail}"
+    return f"a {index + 1}th {tail}"
+
+
+def _takes_label(text: str, span: Span, people: People, story: _Story) -> bool:
+    """Whether this span loses its name to the label the story keeps for its person."""
+    if not span.role and people.not_a_person(span.name):
+        return False
+    if people.match(span.name, span.role) is not None:
+        return False
+    if people.verbatim(span.name):
+        return False
+    tokens = _tokens(span.name)
+    if not tokens:
+        return False
+    surname = tokens[-1]
+    known_here = surname in story.labels and (
+        len(tokens) == 1 or _is_person_like(span.name, span.role)
+    )
+    return (known_here or _unmatched_person(text, span)) and surname in story.labels
+
+
+def _text_seat_labels(
+    text: str, people: People, story: _Story, quoted: list[tuple[int, int]]
+) -> dict[str, dict[str, str]]:
+    """Each shared seat's holders in one text, in print order, with their labels.
+
+    The first holder is "a commissioner", a different holder "another commissioner", a third
+    "a third commissioner". The map is built for the whole text before any replacement so a
+    later mention knows whether another holder shares the text and "the" would be ambiguous.
+    """
+    state: dict[str, dict[str, str]] = {}
+    if not story.seat_multi:
+        return state
+    for span in spans(text):
+        if _inside(quoted, span.start) or not _takes_label(text, span, people, story):
+            continue
+        surname = _tokens(span.name)[-1]
+        group = story.seat_multi.get(surname)
+        if group is None:
+            continue
+        holders = state.setdefault(group, {})
+        if surname not in holders:
+            holders[surname] = _seat_label(story.seat_base[surname], len(holders))
+    return state
 
 
 def _unmatched_person(text: str, span: Span) -> bool:
@@ -713,15 +1098,19 @@ def _unmatched_person(text: str, span: Span) -> bool:
 
     With a title in front ("Council Member X") it is. With none, a run of capitalised words is
     more often a bill, a program, a body or a place ("Senate Bill", "Dream Lab", "Thistle
-    Resident-Owned Communities"); only a person cue around it (a speech verb after, "resident"
-    before) makes it a person. Otherwise the words stay as written.
+    Resident-Owned Communities"); only a person cue around it (a speech verb after, a job named
+    after it, "resident" before) makes it a person. A general action verb is not enough: an
+    event runs and a rail project comes up. Otherwise the words stay as written.
     """
     if not _is_person_like(span.name, span.role):
         return False
     if span.role:
         return True
+    if _title_before(text, span) is not None:
+        return True
     return bool(
         _PERSON_VERB_RE.match(text, span.end)
+        or _PERSON_ROLE_AFTER_RE.match(text, span.end)
         or _PERSON_LEAD_RE.search(text[max(0, span.lead_start - 40) : span.lead_start])
     )
 
@@ -740,28 +1129,59 @@ def spans(text: str) -> list[Span]:
     """The person names printed in a text: runs of capitalised words, with a role in front."""
     found: list[Span] = []
     for match in _RUN_RE.finditer(text):
-        words = _WORD_RE.findall(match.group(0))
-        if not words:
-            continue
-        start, end = match.start(), match.end()
         raw = match.group(0)
         # A run that ends in a possessive keeps the name only.
         if raw.endswith(("'s", "’s")):
             raw = raw[:-2]
-            end -= 2
-        tokens = raw.split()
-        while tokens and tokens[0].lower() in _OPENERS:
-            tokens.pop(0)
-        role_words: list[str] = []
-        while tokens and tokens[0].lower() in _ROLE_WORD_SET:
-            role_words.append(tokens.pop(0))
-        tokens = [t for t in tokens if t.lower() not in _ROLE_WORD_SET]
-        if not tokens:
+        words = [(word.group(0), word.start(), word.end()) for word in _WORD_RE.finditer(raw)]
+        if not words:
             continue
+        index = 0
+        while index < len(words) and words[index][0].lower() in _OPENERS:
+            index += 1
+        role_words: list[str] = []
+        while index < len(words) and words[index][0].lower() in _ROLE_WORD_SET:
+            role_words.append(words[index][0])
+            index += 1
+        # A capitalised word inside a printed title is still part of it: "Chief Information
+        # Officer Frank Elmore" is the title "Chief Information Officer" and the name
+        # "Frank Elmore". The title keeps running while a later role word closes it.
+        while role_words:
+            stop = index
+            while stop < len(words) and words[stop][0].lower() not in _ROLE_WORD_SET:
+                stop += 1
+            if (
+                stop < len(words)
+                and index < stop <= index + 3
+                and stop + 1 < len(words)
+                and words[index][0][:1].isupper()
+                and all(
+                    word[0][:1].isupper() or word[0].lower() in _TITLE_JOINERS
+                    for word in words[index:stop]
+                )
+            ):
+                role_words.extend(word[0] for word in words[index : stop + 1])
+                index = stop + 1
+            else:
+                break
+        kept = words[index:]
+        if not kept:
+            continue
+        # A role word left in the name is a heading, not a person ("Board Member Davis"), and a
+        # name with no title in front must be one contiguous run.
+        if any(word[0].lower() in _ROLE_WORD_SET for word in kept):
+            continue
+        tokens = [word for word, _start, _end in kept]
+        role = " ".join(role_words)
         # "Ordinance O-2026-59" is a document number, not a person.
         if any(len(t.strip("'’\\-")) <= 1 for t in tokens):
             continue
-        if all(t.lower() in _NOT_NAME_WORDS for t in tokens):
+        # A word that is a month, place, body or heading is not a name on its own, unless a
+        # person's title stands in front: "Commissioner Mar" names Mar, while "Town Hall" is
+        # still the hall. ("Mar" is also the month abbreviation in _NOT_PERSON.)
+        if all(t.lower() in _NOT_NAME_WORDS for t in tokens) and not (
+            role and _is_person_title(role)
+        ):
             continue
         lowered = {token.lower() for token in tokens}
         if tokens[0].lower() in _DOCUMENT_WORDS or lowered & _DOCUMENT_STRONG:
@@ -769,20 +1189,13 @@ def spans(text: str) -> list[Span]:
         # "Full-depth" is a compound word, not a person: a surname's second half is capitalised.
         if re.search(r"-[a-z]", " ".join(tokens)):
             continue
-        role = " ".join(role_words)
-        name = " ".join(tokens)
-        # Offsets: the run's match is contiguous, so the name starts after the words stripped.
-        lead = len(raw) - len(raw.lstrip())
-        name_at = raw.find(name)
-        if name_at < 0:
-            continue
         found.append(
             Span(
-                start + lead + name_at,
-                start + lead + name_at + len(name),
-                name,
+                match.start() + kept[0][1],
+                match.start() + kept[-1][2],
+                " ".join(tokens),
                 role,
-                start + lead,
+                match.start() + words[0][1],
             )
         )
     return found
@@ -992,14 +1405,174 @@ def fixes(text: str, people: People | None) -> list[tuple[str, str]]:
     return out
 
 
-def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
+@dataclass
+class _Story:
+    """The label each replaced person prints under, shared by the whole story.
+
+    ``labels`` is the definite form a later mention takes ("the deputy superintendent");
+    ``first`` is the first mention's form, indefinite for a person who has no printed title
+    ("a district administrator"). ``seen`` records who has already been mentioned.
+
+    ``seat_multi`` maps a surname to the shared seat it holds when two or more replaced people
+    in the story hold that same seat ("commissioner"); such a seat is labelled within each
+    text, never by ``labels``/``first``, so no "the commissioner" can point at the wrong
+    holder. ``seat_base`` is that seat's indefinite form ("a commissioner").
+    """
+
+    labels: dict[str, str]
+    first: dict[str, str]
+    seen: set[str]
+    seat_multi: dict[str, str] = field(default_factory=dict)
+    seat_base: dict[str, str] = field(default_factory=dict)
+
+
+def _quoted_ranges(text: str) -> list[tuple[int, int]]:
+    """Where each quotation in a text starts and ends; a name inside one is never changed."""
+    return [(match.start(), match.end()) for match in re.finditer(r'"[^"]*"|“[^”]*”', text)]
+
+
+def _inside(ranges: list[tuple[int, int]], at: int) -> bool:
+    return any(start < at < end for start, end in ranges)
+
+
+def _replaceable(text: str, span: Span, people: People) -> bool:
+    """Whether this span is a person's name the record does not hold, so it loses the name."""
+    if not span.role and people.not_a_person(span.name):
+        return False
+    if people.match(span.name, span.role) is not None:
+        return False
+    if people.verbatim(span.name):
+        return False
+    return _unmatched_person(text, span)
+
+
+def _story_labels(texts: Iterable[str], people: People) -> _Story:
+    """Find every printed title before replacing, and give each person one label.
+
+    A person's most specific printed title becomes their label; a person with no title keeps a
+    plain role. Two people who would share a label are told apart as "a second ...".
+    """
+    titles: dict[str, str] = {}
+    plain: dict[str, str] = {}
+    order: list[str] = []
+    for text in texts:
+        if not text:
+            continue
+        quoted = _quoted_ranges(text)
+        for span in spans(text):
+            if not _replaceable(text, span, people):
+                continue
+            if _inside(quoted, span.start):
+                continue
+            tokens = _tokens(span.name)
+            if not tokens:
+                continue
+            surname = tokens[-1]
+            if surname not in order:
+                order.append(surname)
+            title = _printed_title(text, span)
+            if title:
+                titles[surname] = _more_specific(titles.get(surname), title)
+            elif surname not in plain:
+                context = text[max(0, span.start - 60) : span.end + 60]
+                plain[surname] = _role_phrase("", context, False)
+    labels: dict[str, str] = {}
+    first: dict[str, str] = {}
+    seat_base: dict[str, str] = {}
+    for surname in order:
+        title = titles.get(surname)
+        if title:
+            label = _label_from_title(title)
+            labels[surname] = label
+            # A seat several members hold is indefinite on its first mention ("a
+            # commissioner"); a unique office keeps "the" ("the deputy superintendent").
+            first[surname] = _indefinite(label) if _is_seat_title(title) else label
+            if _is_seat_title(title):
+                seat_base[surname] = first[surname]
+            continue
+        base = plain.get(surname, "a speaker")
+        lowered = base.lower()
+        if lowered.startswith(("a ", "an ")):
+            first[surname], labels[surname] = base, _definite(base)
+        elif lowered.startswith("the "):
+            first[surname] = labels[surname] = base
+        else:
+            first[surname], labels[surname] = "a " + base, "the " + base
+    # Two different people never share a label: the later one is "a second ...". A seat that
+    # two or more replaced people hold is the exception: it is labelled within each text
+    # ("a commissioner", "another commissioner"), so no "the commissioner" can mean one of
+    # them, and neither takes a story-wide "second".
+    groups: dict[str, list[str]] = {}
+    for surname in order:
+        groups.setdefault(_normal(labels[surname]), []).append(surname)
+    seat_multi: dict[str, str] = {}
+    for group in groups.values():
+        if len(group) >= 2 and all(surname in seat_base for surname in group):
+            for surname in group:
+                seat_multi[surname] = _normal(seat_base[group[0]])
+            continue
+        for surname in group[1:]:
+            labels[surname] = _with_second(labels[surname])
+            first[surname] = _with_second(first[surname])
+    return _Story(labels, first, set(), seat_multi, seat_base)
+
+
+def _titles_match(title: str, label: str) -> bool:
+    left, right = _title_key(title), _title_key(label)
+    return bool(left and right) and (left == right or left in right or right in left)
+
+
+def _label_range(text: str, span: Span, label: str) -> tuple[int, int]:
+    """The character range a label replaces: the title and name, an appositive, or the name."""
+    if span.role:
+        start = span.lead_start
+        # A determiner printed in front of the title goes with it, so "the the" cannot happen.
+        determiner = re.search(r"\b(?:the|a|an)\s+$", text[:start], re.IGNORECASE)
+        if determiner is not None:
+            start = determiner.start()
+        return start, span.end
+    before = _title_before(text, span)
+    if before is not None:
+        start, _title, comma = before
+        end = span.end
+        if comma:
+            # The comma before the name is inside the range; the comma after it goes too, but
+            # the space that follows stays so the next word is not run into the label.
+            tail = re.match(r"\s*,", text[end:])
+            if tail is not None:
+                end += tail.end()
+        return start, end
+    after = _title_after(text, span)
+    if after is not None and _titles_match(after[0], label):
+        # The same title is printed after the name ("Neil Anderson, assistant superintendent of
+        # schools, said"): the label stands in for the whole phrase, commas and all.
+        return span.start, after[1]
+    return span.start, span.end
+
+
+def repair_text(
+    text: str, people: People | None, story: _Story | None = None
+) -> tuple[str, list[str]]:
     """Replace each record-matched name with the record's spelling, and each unmatched name
-    with a role. Returns the text and a line for each change."""
-    if people is None or not people.persons:
+    with the one label its person keeps across the whole story.
+
+    An empty record (``People(persons=())``) still replaces a person's name: the rule is that a
+    name prints only when a record holds it, and an empty record holds none.
+
+    ``story`` carries every replaced person's label between the parts of one story, so a later
+    paragraph's bare "Anderson said" takes the title the full name was printed under, and two
+    people never share a label. A name inside quotation marks is left as printed and reported.
+    """
+    if people is None:
         return text, []
+    if story is None:
+        story = _story_labels([text], people)
     changes: list[str] = []
-    out = text
-    for span in reversed(spans(text)):
+    quoted = _quoted_ranges(text)
+    seat_state = _text_seat_labels(text, people, story, quoted)
+    seat_used: set[str] = set()
+    edits: list[tuple[int, int, str, str]] = []
+    for span in spans(text):
         if not span.role and people.not_a_person(span.name):
             continue
         person = people.match(span.name, span.role)
@@ -1009,31 +1582,97 @@ def repair_text(text: str, people: People | None) -> tuple[str, list[str]]:
             if _sentence_word(text, span, person):
                 continue
             spelling = _spelling(span, person)
-            out = out[: span.start] + spelling + out[span.end :]
-            changes.append(f"name {span.name!r} -> {spelling!r} ({person.source})")
+            edits.append(
+                (
+                    span.start,
+                    span.end,
+                    spelling,
+                    f"name {span.name!r} -> {spelling!r} ({person.source})",
+                )
+            )
             continue
-        if not _unmatched_person(text, span) or people.verbatim(span.name):
+        if people.verbatim(span.name):
             continue
-        context = text[max(0, span.start - 60) : span.end + 60]
-        role = _role_phrase(span.role, context, _at_sentence_start(text, span.lead_start))
-        out = out[: span.lead_start] + role + out[span.end :]
-        changes.append(f"name {span.name!r} -> {role!r} (no record match)")
+        tokens = _tokens(span.name)
+        if not tokens:
+            continue
+        surname = tokens[-1]
+        if _inside(quoted, span.start):
+            # A quotation's words are the speaker's, not the story's: report, never rewrite.
+            if len(tokens) >= 2 or span.role or surname in story.labels:
+                changes.append(f"name {span.name!r} is inside a quotation; left as printed")
+            continue
+        if not _takes_label(text, span, people, story):
+            continue
+        group = story.seat_multi.get(surname)
+        if group is not None:
+            # A seat two or more replaced people hold is labelled within this text: the first
+            # holder is "a commissioner", a different one "another commissioner". A holder is
+            # "the commissioner" only when no other holder shares the text.
+            holders = seat_state[group]
+            if surname in seat_used:
+                label = _definite(holders[surname]) if len(holders) == 1 else holders[surname]
+            else:
+                label = holders[surname]
+                seat_used.add(surname)
+        else:
+            first = surname not in story.seen
+            story.seen.add(surname)
+            label = story.first[surname] if first else story.labels[surname]
+        start, end = _label_range(text, span, label)
+        replacement = _cased(label, _at_sentence_start(text, start))
+        edits.append(
+            (
+                start,
+                end,
+                replacement,
+                f"name {span.name!r} -> {replacement!r} (no record match)",
+            )
+        )
+    out = text
+    for start, end, replacement, message in sorted(edits, key=lambda edit: -edit[0]):
+        out = out[:start] + replacement + out[end:]
+        changes.append(message)
     return out, changes
 
 
-def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]:
-    """Repair every printed name in a story, in place of :class:`Article` (same shape)."""
+def repair_article(
+    article: Any, people: People | None, *, add_seat_names: bool = True
+) -> tuple[Any, list[str]]:
+    """Repair every printed name in a story, in place of :class:`Article` (same shape).
+
+    ``add_seat_names`` names a seat the story printed without a person ("Mayor Pro Tem" ->
+    "Mayor Pro Tem Jenn Kaaoush") from the roster. A roster can be stale, so the skill story
+    path sets it false: a seat-only mention stays as written, and repair never adds a name the
+    sentence did not have.
+    """
     if people is None:
         return article, []
     changes: list[str] = []
+    texts = [article.headline, article.dek or ""]
+    for section in article.sections:
+        if section.heading:
+            texts.append(section.heading)
+        texts.extend(paragraph.text for paragraph in section.paragraphs)
+    for vote in article.votes:
+        texts.extend((vote.motion, vote.result))
+        if vote.tally:
+            texts.append(vote.tally)
+    texts.extend(quote.speaker for quote in article.quotes)
+    # One label per person, decided from every title the whole story prints.
+    story = _story_labels(texts, people)
 
     def fix(text: str) -> str:
-        new, lines = repair_text(text, people)
-        new, seat_lines = fill_roll_call_names(new, people)
+        new, lines = repair_text(text, people, story)
         changes.extend(lines)
-        changes.extend(seat_lines)
+        if add_seat_names:
+            new, seat_lines = fill_roll_call_names(new, people)
+            changes.extend(seat_lines)
         return new
 
+    # Repair in story order, so the first mention of a person takes the first-mention form.
+    headline = fix(article.headline)
+    dek = fix(article.dek) if article.dek is not None else None
     sections = tuple(
         replace(
             section,
@@ -1057,8 +1696,8 @@ def repair_article(article: Any, people: People | None) -> tuple[Any, list[str]]
     return (
         replace(
             article,
-            headline=fix(article.headline),
-            dek=fix(article.dek),
+            headline=headline,
+            dek=dek,
             sections=sections,
             votes=votes,
             quotes=quotes,
