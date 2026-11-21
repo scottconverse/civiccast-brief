@@ -1001,6 +1001,299 @@ def test_the_local_audio_step_gets_the_fallback_engine(tmp_path):
     assert _opt(audio, "--fallback-engine") == "dia2"
 
 
+def test_a_documents_fetch_that_fails_is_not_marked_done_and_is_tried_again(tmp_path):
+    """A portal failure must not be recorded as a finished step, and the recap must not be
+    handed a documents.json that was never written."""
+    from dataclasses import replace
+
+    attempts = []
+
+    def documents():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("portal answered 503")
+        return {"format": 1, "documents": []}, ["packet: 1 page"]
+
+    settings = _settings(tmp_path)
+    meeting = replace(COUNCIL_MEETING, documents=documents)
+    fake = Fake(fail={"article": 1})
+    run_week(settings, [meeting], LAST, fake.steps())
+
+    entry = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))["meetings"][
+        COUNCIL_MEETING.key
+    ]
+    assert "documents" not in entry["done"]
+    run_argv = next(argv for step, argv in fake.calls if step == "meeting")
+    assert "--documents" not in run_argv
+
+    rerun = Fake()
+    report = run_week(settings, [meeting], LAST, rerun.steps())
+    folder = settings.work / "2026-11-03-city-council-owzpzjzjwne"
+    assert attempts == [1, 1]
+    assert (folder / "documents.json").is_file()
+    article = next(argv for step, argv in rerun.calls if step == "article" and argv[0] == "skill")
+    assert _opt(article, "--documents") == str(folder / "documents.json")
+    assert report.failed == 0, report.lines
+
+
+def test_a_partial_audio_folder_is_rendered_again_and_a_missing_file_is_one_items_failure(tmp_path):
+    """A render that stopped with chapters.json but no transcript.vtt must be redone, and a
+    file missing during the copy is one item's logged failure, not the end of the run."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    audio = settings.work / "2026-11-03-city-council-owzpzjzjwne" / "audio"
+    audio.mkdir(parents=True)
+    (audio / "episode.mp3").write_text("half", encoding="utf-8")
+    (audio / "chapters.json").write_text("[]", encoding="utf-8")
+    # no transcript.vtt
+
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+
+    def mp3_only(argv):
+        fake.calls.append(("audio", list(argv)))
+        out = Path(_opt(argv, "--out"))
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "episode.mp3").write_text("whole", encoding="utf-8")
+        return 0
+
+    fake.audio = mp3_only
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+
+    assert "audio" in [step for step, _ in fake.calls]  # the partial folder was rendered again
+    assert report.failed == 1
+    assert any(
+        line.startswith("oWZpzjzjwnE:") and "transcript.vtt" in line for line in report.lines
+    ), report.lines
+    assert fake.calls[-1][0] == "site"  # the missing file did not stop the run
+
+
+def test_a_truncated_episode_mp3_is_rendered_again_not_reused(tmp_path, monkeypatch):
+    """The MP3 header still reports the whole length after a half copy, so presence alone must
+    not make a truncated episode count as done."""
+    from civiccast_brief.weekly import run as run_module
+
+    monkeypatch.setattr(run_module, "probe_duration", lambda path: 480.0)
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    item = {
+        "kind": "episode",
+        "status": "published",
+        "meeting_id": "oWZpzjzjwnE",
+        "content_hash": "a" * 64,
+        "script": "[S1] hi\n",
+    }
+    first = Fake()
+    first.exported = {"0001-episode": item}
+    run_week(
+        settings, [COUNCIL_MEETING], LAST, first.steps(), published="2026-11-10T09:00:00-07:00"
+    )
+    assert [step for step, _ in first.names()].count("audio") == 1
+
+    folder = settings.work / "2026-11-03-city-council-owzpzjzjwne"
+    (folder / "audio" / "episode.mp3").write_bytes(b"x" * 1000)  # half a copy
+
+    again = Fake()
+    again.exported = {"0001-episode": {**item, "content_hash": "b" * 64}}
+    run_week(
+        settings, [COUNCIL_MEETING], LAST, again.steps(), published="2026-11-11T09:00:00-07:00"
+    )
+
+    assert [step for step, _ in again.names()].count("audio") == 1  # rendered, not reused
+
+
+#: The two videos of Superior's Oct. 26 Town Council meeting, as the real state has them. The
+#: episode file on the site is the second one's, and its story is the one the site must keep.
+_TWO_VIDEOS = {
+    "civicclerk-superiorco-43": "https://cpmedia.azureedge.net/superiorco/clip.mp4",
+    "If5njrlpf7M": "https://www.youtube.com/watch?v=If5njrlpf7M",
+}
+
+
+def _two_video_fake(exported):
+    """A stand-in whose episode and story files carry the video each was built from, as the
+    real ones do, and whose two meetings build the same episode id."""
+    fake = Fake()
+    fake.exported = exported
+    episode = fake.episode
+
+    def same_id(argv):
+        code = episode(argv)
+        if argv[0] in ("assemble", "story"):
+            meeting_id = json.loads(
+                (
+                    Path(_opt(argv, "--item" if argv[0] == "assemble" else "--article"))
+                    / "item.json"
+                ).read_text(encoding="utf-8")
+            )["meeting_id"]
+            Path(_opt(argv, "--out")).write_text(
+                json.dumps(
+                    {"id": "2026-10-26-superior-town-council", "video_url": _TWO_VIDEOS[meeting_id]}
+                ),
+                encoding="utf-8",
+            )
+        return code
+
+    fake.episode = same_id
+    return fake
+
+
+def _two_video_meetings():
+    first = Found(
+        COUNCIL,
+        date(2026, 10, 26),
+        "Town Council",
+        "civicclerk",
+        "civicclerk-superiorco-43",
+        media_url=_TWO_VIDEOS["civicclerk-superiorco-43"],
+    )
+    second = Found(COUNCIL, date(2026, 10, 26), "Town Council", "p", "If5njrlpf7M")
+    return first, second
+
+
+def test_the_site_keeps_the_story_of_the_video_the_episode_was_built_from(tmp_path):
+    """Two videos of one meeting give two stories with one id, and both build the same episode
+    name. The episode file on the site is the second video's, so its story must be the one kept
+    (the first video's sorts first, which is how the real site ended up with the wrong one)."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    first, second = _two_video_meetings()
+    # The desk item order has the CivicClerk video first, so the second (YouTube) episode is
+    # written last over the same file name, as in the real saved output.
+    fake = _two_video_fake(
+        {
+            "0001-episode": {
+                "kind": "episode",
+                "status": "published",
+                "meeting_id": "civicclerk-superiorco-43",
+            },
+            "0002-article": {
+                "kind": "article",
+                "status": "published",
+                "meeting_id": "civicclerk-superiorco-43",
+            },
+            "0003-episode": {
+                "kind": "episode",
+                "status": "published",
+                "meeting_id": "If5njrlpf7M",
+            },
+            "0004-article": {
+                "kind": "article",
+                "status": "published",
+                "meeting_id": "If5njrlpf7M",
+            },
+        }
+    )
+    report = run_week(settings, [first, second], LAST, fake.steps())
+
+    built = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))["built"]
+    assert built == {
+        "civicclerk-superiorco-43": "2026-10-26-superior-town-council",
+        "If5njrlpf7M": "2026-10-26-superior-town-council",
+    }
+    stories = sorted(p.name for p in (site.episodes / "stories").glob("*.json"))
+    assert stories == ["if5njrlpf7m.json"]
+    assert report.failed == 1  # the duplicate is still reported for the editor
+
+
+def test_the_site_keeps_the_story_of_a_non_youtube_episode(tmp_path):
+    """The episode's video_url can be a CivicClerk MP4. The story of that same video is kept,
+    even when its file name sorts after the YouTube video's (so first-by-name would lose it)."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    youtube = Found(COUNCIL, date(2026, 10, 26), "Town Council", "p", "If5njrlpf7M")
+    mp4 = Found(
+        COUNCIL,
+        date(2026, 10, 26),
+        "Town Council",
+        "civicclerk",
+        "zmcclip01",
+        media_url="https://cpmedia.azureedge.net/superiorco/clip.mp4",
+    )
+    videos = {
+        "If5njrlpf7M": "https://www.youtube.com/watch?v=If5njrlpf7M",
+        "zmcclip01": "https://cpmedia.azureedge.net/superiorco/clip.mp4",
+    }
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "If5njrlpf7M"},
+        "0002-article": {"kind": "article", "status": "published", "meeting_id": "If5njrlpf7M"},
+        "0003-episode": {"kind": "episode", "status": "published", "meeting_id": "zmcclip01"},
+        "0004-article": {"kind": "article", "status": "published", "meeting_id": "zmcclip01"},
+    }
+    episode = fake.episode
+
+    def same_id(argv):
+        code = episode(argv)
+        if argv[0] in ("assemble", "story"):
+            flag = "--item" if argv[0] == "assemble" else "--article"
+            meeting_id = json.loads(
+                (Path(_opt(argv, flag)) / "item.json").read_text(encoding="utf-8")
+            )["meeting_id"]
+            Path(_opt(argv, "--out")).write_text(
+                json.dumps({"id": "2026-10-26-council", "video_url": videos[meeting_id]}),
+                encoding="utf-8",
+            )
+        return code
+
+    fake.episode = same_id
+    run_week(settings, [youtube, mp4], LAST, fake.steps())
+
+    stories = sorted(p.name for p in (site.episodes / "stories").glob("*.json"))
+    assert stories == ["zmcclip01.json"]
+
+
+def test_a_story_published_on_the_desk_reaches_the_site_when_its_meeting_failed(tmp_path):
+    """The no-facts branch publishes the story and marks the meeting failed; that published
+    story must still be built on the site."""
+    from civiccast_brief.weekly.run import publish_site
+
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, Fake(claims=0).steps())
+    assert report.failed == 1
+    entry = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))["meetings"][
+        COUNCIL_MEETING.key
+    ]
+    assert entry["status"] == "failed"
+    assert "article" in entry["done"]
+
+    published = Fake()
+    published.exported = {
+        "0001-article": {"kind": "article", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+    report = publish_site(settings, published.steps(), published="2026-11-13T15:00:00-07:00")
+
+    assert report.failed == 0, report.lines
+    assert (site.episodes / "stories" / "owzpzjzjwne.json").is_file()
+
+
+def test_a_broken_transcript_json_does_not_stop_the_publish(tmp_path):
+    """A failed meeting can leave a half-written transcript.json. Reading the run folders must
+    skip that entry, not raise and end the publish before the site is built."""
+    from civiccast_brief.weekly.run import publish_site
+
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    folder = next(settings.work.glob("2026-11-03-*"))
+    (folder / "transcript.json").write_text('{"video_id": "oWZ', encoding="utf-8")  # truncated
+
+    published = Fake()
+    published.exported = {
+        "0001-article": {"kind": "article", "status": "published", "meeting_id": "oWZpzjzjwnE"}
+    }
+    report = publish_site(settings, published.steps(), published="2026-11-13T15:00:00-07:00")
+
+    assert report.failed == 0, report.lines
+    assert any("no run of it is in this work folder" in line for line in report.lines)
+    # The publish went on to the end: nothing published is left to build, so it says so.
+    assert "site: not built: no episode is published yet; approve items on the desk" in report.lines
+
+
 def test_no_fallback_engine_means_no_flag_on_the_audio_step(tmp_path):
     site = Site(
         episodes=tmp_path / "site-in",

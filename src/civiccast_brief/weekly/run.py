@@ -42,6 +42,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.audio.errors import ToolError
+from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.writer import (
     ROUNDUP_ID,
@@ -57,6 +59,29 @@ from civiccast_brief.weekly.worker import AUDIO, CAPTIONS, WorkerFolder, audio_k
 
 Main = Callable[[Sequence[str]], int]
 STATE_NAME = "weekly-state.json"
+AUDIO_FILES = ("episode.mp3", "chapters.json", "transcript.vtt")
+#: 64 kbps: an MP3's bytes should match its duration at about this rate. A half copy keeps the
+#: header's full duration, so the ratio is the only sign the file is short.
+MP3_BYTES_PER_SECOND = 8000
+
+
+def audio_ready(audio: Path) -> bool:
+    """True when a finished render is all there and its MP3 is whole.
+
+    A render writes ``episode.mp3``, then ``chapters.json``, then ``transcript.vtt``, none of
+    them atomically: a run stopped between them leaves a folder that must be rendered again, and
+    a copy stopped halfway leaves an MP3 that still reports its full length."""
+    if not all((audio / name).is_file() for name in AUDIO_FILES):
+        return False
+    mp3 = audio / "episode.mp3"
+    try:
+        duration = probe_duration(mp3)
+    except ToolError:
+        return False
+    if duration <= 0:
+        return False
+    rate = mp3.stat().st_size / duration
+    return 0.9 * MP3_BYTES_PER_SECOND <= rate <= 1.1 * MP3_BYTES_PER_SECOND
 
 
 def _real(module: str) -> Main:
@@ -288,11 +313,13 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
         try:
             data, lines = meeting.documents()
         except Exception as exc:  # noqa: BLE001 - a portal or network failure must not stop the meeting
+            # Not done: no file was written, so the next run tries the portal again and the
+            # meeting is never handed a documents.json that does not exist.
             entry["documents"] = [f"documents not read: {exc}"]
         else:
             write_documents(folder, data)
             entry["documents"] = lines
-        done.append("documents")
+            done.append("documents")
     if "roster" not in done:
         entry["roster"] = _fill_roster(settings, meeting, folder)
         done.append("roster")
@@ -321,8 +348,9 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             agenda = folder / "agenda.txt"
             agenda.write_text(meeting.agenda.text(date.today()), encoding="utf-8", newline="\n")
             argv += ["--agenda", str(agenda)]
-        if "documents" in done:
-            argv += ["--documents", str(folder / DOCUMENTS_NAME)]
+        documents = folder / DOCUMENTS_NAME
+        if documents.is_file():
+            argv += ["--documents", str(documents)]
         if meeting.granicus_host:
             argv += [
                 "--granicus",
@@ -478,19 +506,34 @@ def _exported(folder: Path) -> list[tuple[Path, dict[str, Any]]]:
 
 
 def _run_folders(state: State) -> dict[str, dict[str, Any]]:
-    """Meeting id -> the run entry, for every finished meeting and roundup."""
+    """Meeting id -> the run entry, for every meeting and roundup that built an item.
+
+    A meeting does not have to be wholly ``done``: the no-facts branch publishes the story and
+    then marks the meeting failed, and that published story must still reach the site. Only an
+    entry with a folder, a readable ``recap.json`` and a built item qualifies."""
     by_id: dict[str, dict[str, Any]] = {}
     for entry in [*state.data["meetings"].values(), *state.data["roundups"].values()]:
         folder = entry.get("folder") or ""
-        if not folder or entry.get("status") != "done":
+        done = entry.get("done", [])
+        if not folder or ("article" not in done and "episode" not in done):
             continue
         recap_path = Path(folder) / "recap.json"
         if not recap_path.is_file():
             continue
-        recap = json.loads(recap_path.read_text(encoding="utf-8"))
+        try:
+            recap = json.loads(recap_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(recap, dict):
+            continue
         transcript = recap_path.with_name("transcript.json")
         if transcript.is_file():
-            meeting_id = str(json.loads(transcript.read_text(encoding="utf-8"))["video_id"])
+            # A failed meeting can leave a half-written transcript.json. It is skipped, not
+            # allowed to end the publish before the site is built.
+            try:
+                meeting_id = str(json.loads(transcript.read_text(encoding="utf-8"))["video_id"])
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
         else:
             meeting_id = f"roundup {recap.get('meeting_date', '')}"
         by_id[meeting_id] = entry
@@ -576,7 +619,7 @@ def _publish_stories(
         built_from[meeting_id] = meta.get("content_hash")
         state.save()
         log.append((f"{meeting_id}: built story {name}", False))
-    log += _drop_twice_published(folder, wanted)
+    log += _drop_twice_published(folder, wanted, state.data.get("built", {}))
     for old in folder.glob("*.json"):
         if old.name not in wanted:
             old.unlink()
@@ -600,30 +643,70 @@ def _refresh_names(
     return []
 
 
-def _drop_twice_published(folder: Path, wanted: set[str]) -> list[tuple[str, bool]]:
+def _episode_video(path: Path) -> str:
+    """The video a built episode file came from: its ``video_url`` (a YouTube watch link or the
+    meeting's own MP4), else its ``media_url``. Empty when the file or address is missing."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("video_url") or data.get("media_url") or "")
+
+
+def _story_video(data: dict[str, Any]) -> str:
+    """The video a built story file came from, the same address shape as an episode's."""
+    return str(data.get("video_url") or data.get("media_url") or "")
+
+
+def _drop_twice_published(
+    folder: Path, wanted: set[str], built: dict[str, str]
+) -> list[tuple[str, bool]]:
     """Keep one story per story id. Two published videos of one meeting (a city that uploads
     the same session twice) give the same id, and the site refuses a story id used twice, so
-    the later file (by name) is left off the site and the editor is told to kill one copy on
-    the desk."""
+    one file is left off the site and the editor is told to kill one copy on the desk.
+
+    The one kept is the story of the video the episode file on the site was built from: the
+    episode and its story carry the same ``video_url`` (a YouTube link or the meeting's own
+    MP4). The file is read after the episodes are written, so it is the episode this run left,
+    or the one built in an earlier run. Without a matching address the state's ``built`` map is
+    tried (meeting id -> episode name; an episode and its story share the id), and without an
+    episode the first file by name is kept, as before."""
     log: list[tuple[str, bool]] = []
-    kept: dict[str, str] = {}
+    by_id: dict[str, list[tuple[str, dict[str, Any]]]] = {}
     for name in sorted(wanted):
         path = folder / name
         try:
-            story_id = json.loads(path.read_text(encoding="utf-8")).get("id")
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, AttributeError):
             continue  # a missing or broken file is reported by the site build
-        if not isinstance(story_id, str):
+        if not isinstance(data, dict) or not isinstance(data.get("id"), str):
             continue
-        if story_id in kept:
-            path.unlink()  # built again next run, and left off again until one copy is killed
+        by_id.setdefault(data["id"], []).append((name, data))
+    for story_id, entries in by_id.items():
+        names = [name for name, _ in entries]
+        if len(names) < 2:
+            continue
+        keep = ""
+        site_video = _episode_video(folder.parent / f"{story_id}.json")
+        if site_video:
+            keep = next((name for name, data in entries if _story_video(data) == site_video), "")
+        if not keep:
+            from_episode = {
+                slug(meeting_id) for meeting_id, episode in built.items() if episode == story_id
+            }
+            keep = next((name for name in names if name.removesuffix(".json") in from_episode), "")
+        keep = keep or names[0]
+        for name in names:
+            if name == keep:
+                continue
+            (folder / name).unlink()  # built again next run, and left off again until killed
             why = (
-                f"{path.stem}: same meeting as {kept[story_id]} (story {story_id}); "
+                f"{Path(name).stem}: same meeting as {Path(keep).stem} (story {story_id}); "
                 "left off the site so it is not published twice. Kill one copy on the desk"
             )
             log.append((why, True))
-            continue
-        kept[story_id] = path.stem
     return log
 
 
@@ -712,19 +795,24 @@ def publish(
         folder = Path(entry["folder"])
         try:
             script_txt, script_json, audio = _desk_script(folder, entry, path, meta)
-            if not (audio / "episode.mp3").is_file() and settings.worker is not None:
-                words = script_txt.read_text(encoding="utf-8")
-                key = audio_key(words, site.audio_engine)
-                inbox = WorkerFolder(settings.worker)
-                if not inbox.copy_into(AUDIO, key, audio):
-                    inbox.want_audio(key, words, site.audio_engine)
-                    log.append((f"{meeting_id}: waiting for its audio from the PC worker", False))
-                    continue
-            if not (audio / "episode.mp3").is_file():
-                engine = ["--engine", site.audio_engine] if site.audio_engine else []
-                if site.audio_fallback_engine:
-                    engine += ["--fallback-engine", site.audio_fallback_engine]
-                _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
+            if not audio_ready(audio):
+                if settings.worker is not None:
+                    # The worker's .done marker means its three files are a finished render;
+                    # the cloud does not probe or re-render what the PC sent.
+                    words = script_txt.read_text(encoding="utf-8")
+                    key = audio_key(words, site.audio_engine)
+                    inbox = WorkerFolder(settings.worker)
+                    if not inbox.copy_into(AUDIO, key, audio):
+                        inbox.want_audio(key, words, site.audio_engine)
+                        log.append(
+                            (f"{meeting_id}: waiting for its audio from the PC worker", False)
+                        )
+                        continue
+                else:
+                    engine = ["--engine", site.audio_engine] if site.audio_engine else []
+                    if site.audio_fallback_engine:
+                        engine += ["--fallback-engine", site.audio_fallback_engine]
+                    _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
             out = folder / "episode.json"
             argv = [
                 "assemble",
@@ -740,18 +828,20 @@ def publish(
             if meeting_id in articles:
                 argv += ["--article", str(articles[meeting_id])]
             _call(steps.episode, argv, "episode assemble")
-        except StepFailed as exc:
+            episode = json.loads(out.read_text(encoding="utf-8"))
+            name = episode["id"]
+            shutil.copyfile(out, site.episodes / f"{name}.json")
+            for source, target in (
+                ("episode.mp3", f"{name}.mp3"),
+                ("chapters.json", f"{name}-chapters.json"),
+                ("transcript.vtt", f"{name}.vtt"),
+            ):
+                shutil.copyfile(audio / source, site.media / target)
+        except (StepFailed, OSError) as exc:
+            # One item's bad audio or missing file is logged; the other items and the site
+            # build still run.
             log.append((f"{meeting_id}: {exc}", True))
             continue
-        episode = json.loads(out.read_text(encoding="utf-8"))
-        name = episode["id"]
-        shutil.copyfile(out, site.episodes / f"{name}.json")
-        for source, target in (
-            ("episode.mp3", f"{name}.mp3"),
-            ("chapters.json", f"{name}-chapters.json"),
-            ("transcript.vtt", f"{name}.vtt"),
-        ):
-            shutil.copyfile(audio / source, site.media / target)
         built[meeting_id] = name
         built_from[meeting_id] = meta.get("content_hash")
         state.save()

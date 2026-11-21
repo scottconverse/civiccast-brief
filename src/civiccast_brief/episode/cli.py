@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from civiccast_brief.audio.errors import AudioError
 from civiccast_brief.episode.build import (
     EpisodeError,
     assemble,
@@ -84,7 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             published=args.published,
             article_dir=args.article,
         )
-    except (EpisodeError, ReviewError, OSError, KeyError, ValueError) as exc:
+    except (EpisodeError, ReviewError, AudioError, OSError, KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     args.out.write_text(json.dumps(episode, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
