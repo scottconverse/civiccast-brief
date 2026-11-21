@@ -506,6 +506,7 @@ def _skill(args: argparse.Namespace) -> int:
     report = None
     candidates = []
     evidence_recap = recap
+    chosen_story = None
     while attempts < 2:
         attempts += 1
         print(f"skill run {attempts} in {work}", file=sys.stderr)
@@ -541,6 +542,8 @@ def _skill(args: argparse.Namespace) -> int:
             print(f"skill write failed: {run.error}", file=sys.stderr)
             return 1
         article, story_claims = skill.article_from_skill(run.story, recap, segments, pages)
+        # Each run restarts the skill's claim ids at s01, so a draft keeps its own recap: the
+        # fallback below must judge a draft against the claims it was written with.
         evidence_recap = replace(recap, claims=(*recap.claims, *story_claims))
         # A person's name prints only when the roster or the documents hold it. The skill's
         # captions-only names are replaced with a role, and a record name takes the record's
@@ -550,7 +553,7 @@ def _skill(args: argparse.Namespace) -> int:
         report = check_article(
             evidence_recap, article, windows, pages, speakers, people, record, skill_evidence=True
         )
-        candidates.append((article, report))
+        candidates.append((article, report, evidence_recap, run.story))
         if report.passed and args.fixture is not None:
             fixture = golden.load_fixture_file(args.fixture)
             scored = golden.score(
@@ -577,9 +580,9 @@ def _skill(args: argparse.Namespace) -> int:
         # The skill's prose may state facts the checked claims do not hold. Drop those
         # paragraphs rather than publish them; the longest passing draft is kept.
         attempts = []
-        for candidate, _ in candidates:
+        for candidate, _, candidate_recap, candidate_story in candidates:
             kept, dropped = drop_unsupported(
-                evidence_recap,
+                candidate_recap,
                 candidate,
                 windows,
                 pages,
@@ -593,7 +596,7 @@ def _skill(args: argparse.Namespace) -> int:
                     kept,
                     dropped,
                     check_article(
-                        evidence_recap,
+                        candidate_recap,
                         kept,
                         windows,
                         pages,
@@ -602,11 +605,15 @@ def _skill(args: argparse.Namespace) -> int:
                         record,
                         skill_evidence=True,
                     ),
+                    candidate_recap,
+                    candidate_story,
                 )
             )
         passing = [a for a in attempts if a[2].passed]
         if passing:
-            article, dropped, report = max(passing, key=lambda a: story_words(a[0]))
+            article, dropped, report, evidence_recap, chosen_story = max(
+                passing, key=lambda a: story_words(a[0])
+            )
             for line in dropped.lines():
                 print(line, file=sys.stderr)
     article, moved = merge_announcements(article)
@@ -623,10 +630,12 @@ def _skill(args: argparse.Namespace) -> int:
     save_recap(evidence_recap, story_recap_path)
     print(f"wrote {story_recap_path}", file=sys.stderr)
     json_path, md_path = save_article(evidence_recap, article, args.out, pages, people)
-    if run is not None and run.story is not None:
+    editor_story = chosen_story if chosen_story is not None else (run.story if run else None)
+    if editor_story is not None:
         editor = args.out.with_suffix(".editor.txt")
         editor.write_text(
-            (run.story.editor_file + "\n\n" + run.story.claims).strip() + "\n", encoding="utf-8"
+            (editor_story.editor_file + "\n\n" + editor_story.claims).strip() + "\n",
+            encoding="utf-8",
         )
         print(f"wrote {editor}", file=sys.stderr)
     print(f"wrote {json_path} and {md_path}")

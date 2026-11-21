@@ -3,8 +3,13 @@ the ALSO heading, and the evidence the page publishes."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
+
 from civiccast_brief.article import skill
-from civiccast_brief.article.__main__ import skill_desk_rules
+from civiccast_brief.article.__main__ import main, skill_desk_rules
 from civiccast_brief.article.terms import load_record
 from civiccast_brief.article.writer import (
     Article,
@@ -16,11 +21,12 @@ from civiccast_brief.article.writer import (
     cited_recap,
     condense_announcements,
     drop_unsupported,
+    load_article,
     skill_lead_issue,
     split_sentences,
     top_news,
 )
-from civiccast_brief.script.recap import Claim, Recap
+from civiccast_brief.script.recap import Claim, Recap, save_recap
 
 RECAP = Recap(
     city="Superior",
@@ -328,3 +334,97 @@ def test_an_unsourced_last_sentence_does_not_drop_the_sourced_ones() -> None:
     kept, dropped = drop_unsupported(BUDGET, story, skill_evidence=True)
     assert [p.text for p in kept.paragraphs] == ["The budget totals $41,321,246 for 2027."]
     assert not dropped.paragraphs
+
+
+# ---------------------------------------------------------------- a retry keeps its own evidence
+
+RUN_ONE_STORY = """Council votes to rezone the Frontier Avenue property
+
+The vote was 8 to 0.
+
+The council voted 8 to 0 to rezone the Frontier Avenue property.
+
+The council voted 7 to 1 to annex 5.43 acres near the creek.
+
+The council voted 9 to 1 to request an independent audit.
+
+CLAIMS AND SOURCES
+
+Claim: The council voted 8 to 0 to rezone the Frontier Avenue property.
+Source (primary record): City Council captions, Nov. 12, 2026, 0:10:00. Supplied text.
+
+Claim: The council voted 7 to 1 to annex 5.43 acres near the creek.
+Source (primary record): City Council captions, Nov. 12, 2026, 0:20:00. Supplied text.
+
+Claim: The council voted 6 to 2 to request an independent audit.
+Source (primary record): City Council captions, Nov. 12, 2026, 0:30:00. Supplied text.
+
+EDITOR FILE: NOT FOR PUBLICATION
+
+CLAIM CHECK
+
+Check 1: the audit vote.
+Status: primary record.
+"""
+
+RUN_TWO_STORY = """Council receives the CFO report
+
+The vote was 6 to 0.
+
+The council received the budget report 6 to 0.
+
+CLAIMS AND SOURCES
+
+Claim: The council received the budget report 6 to 0.
+Source (primary record): City Council captions, Nov. 12, 2026, 1:10:00. Supplied text.
+
+EDITOR FILE: NOT FOR PUBLICATION
+
+CLAIM CHECK
+
+Check 1: the budget report.
+Status: primary record.
+"""
+
+
+def test_a_retry_judges_each_draft_against_its_own_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run 2 restarts its claim ids at s01, so run 2's recap must not judge run 1's prose.
+
+    Run 1 loses one paragraph to a wrong vote count; run 2 fails on a headline word ("CFO").
+    The fallback must trim run 1 against run 1's claims and keep the two supported paragraphs.
+    """
+    recap_path = tmp_path / "recap.json"
+    save_recap(
+        Recap(
+            city="Boulder",
+            body="City Council",
+            meeting_date="November 12, 2026",
+            video_id="v",
+            media_url="https://example.test/meeting.mp4",
+            claims=(),
+        ),
+        recap_path,
+    )
+    runs = [
+        skill.SkillRun(True, tmp_path / "skill", story=skill.parse_skill_story(RUN_ONE_STORY)),
+        skill.SkillRun(True, tmp_path / "skill", story=skill.parse_skill_story(RUN_TWO_STORY)),
+    ]
+    monkeypatch.setattr(skill, "run_skill", lambda **_kwargs: runs.pop(0))
+
+    out = tmp_path / "article"
+    assert main(["skill", "--recap", str(recap_path), "--out", str(out)]) == 0
+
+    saved = load_article(out.with_suffix(".json"))
+    assert [p.text for p in saved.paragraphs] == [
+        "The council voted 8 to 0 to rezone the Frontier Avenue property.",
+        "The council voted 7 to 1 to annex 5.43 acres near the creek.",
+    ]
+    story_recap = json.loads((tmp_path / "story-recap.json").read_text(encoding="utf-8"))
+    claim_texts = [claim["text"] for claim in story_recap["claims"]]
+    assert "The council voted 8 to 0 to rezone the Frontier Avenue property." in claim_texts
+    assert "The council received the budget report 6 to 0." not in claim_texts
+    editor = out.with_suffix(".editor.txt").read_text(encoding="utf-8")
+    assert "Check 1: the audit vote." in editor
+    assert "Check 1: the budget report." not in editor
