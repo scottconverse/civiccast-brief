@@ -1,15 +1,19 @@
 import itertools
 import json
+import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from civiccast_brief.audio import finish as finish_module
 from civiccast_brief.audio.engines import FakeEngine, LineTiming, RenderResult
 from civiccast_brief.audio.errors import FinishError
 from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg, tools_available
 from civiccast_brief.audio.finish import (
     SPEAKER_NAMES,
     Cue,
+    Loudness,
     chapter_marks,
     chapters_document,
     finish_episode,
@@ -212,6 +216,116 @@ def test_silent_program_cannot_be_normalised(tmp_path: Path) -> None:
     run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "2", str(silent)])
     with pytest.raises(FinishError, match="silent"):
         normalize_loudness(silent, tmp_path / "out.wav")
+
+
+# --- MP3 true-peak retry (stubbed ffmpeg) ---------------------------------------------------
+
+
+@dataclass
+class _FakeProc:
+    stderr: str = ""
+    stdout: str = ""
+
+
+_LOUDNORM_MEASUREMENTS = json.dumps(
+    {
+        "input_i": "-18.0",
+        "input_tp": "-2.0",
+        "input_lra": "3.0",
+        "input_thresh": "-28.0",
+        "target_offset": "0.0",
+    }
+)
+
+
+def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch, mp3_peaks: list[float]) -> list[list[str]]:
+    """Stub ffmpeg and the MP3 measurements; each write target holds its own file name."""
+    calls: list[list[str]] = []
+    remaining = list(mp3_peaks)
+
+    def fake_run(args: list[str], what: str = "ffmpeg") -> _FakeProc:
+        calls.append(args)
+        target = Path(args[-1])
+        if str(target) != "-":
+            target.write_text(target.name, encoding="utf-8")
+        return _FakeProc(stderr=_LOUDNORM_MEASUREMENTS)
+
+    def fake_measure(path: Path) -> Loudness:
+        return Loudness(-16.0, remaining.pop(0), 5.0)
+
+    monkeypatch.setattr(finish_module, "run_ffmpeg", fake_run)
+    monkeypatch.setattr(finish_module, "measure_loudness", fake_measure)
+    monkeypatch.setattr(finish_module, "probe_duration", lambda path: 3.0)
+    return calls
+
+
+def _true_peak_targets(calls: list[list[str]]) -> list[float]:
+    targets = []
+    for args in calls:
+        for arg in args:
+            if arg.startswith("loudnorm="):
+                match = re.search(r"TP=(-?[\d.]+)", arg)
+                assert match is not None
+                targets.append(float(match.group(1)))
+    return targets
+
+
+def _encode_count(calls: list[list[str]]) -> int:
+    return sum(1 for args in calls if "libmp3lame" in args)
+
+
+def _one_line_render(tmp_path: Path) -> RenderResult:
+    return RenderResult(
+        wav=tmp_path / "voice.wav",
+        engine="fake",
+        timing="exact",
+        lines=(LineTiming(1, "S1", 0.0, 1.0),),
+        duration=1.0,
+    )
+
+
+def test_finish_keeps_the_first_encode_when_the_mp3_peak_is_under_the_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _stub_ffmpeg(monkeypatch, [-1.4])
+    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+
+    assert _encode_count(calls) == 1
+    assert _true_peak_targets(calls) == [-1.5, -1.5]
+    assert files.loudness == Loudness(-16.0, -1.4, 5.0)
+    assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-1.mp3"
+
+
+def test_finish_retries_with_a_lower_true_peak_when_the_mp3_overshoots(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _stub_ffmpeg(monkeypatch, [0.2, -1.4])
+    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+
+    # Overshoot is 1.7 dB, so the retry targets -1.5 - 1.7 = -3.2 dBTP on both passes.
+    assert _true_peak_targets(calls) == pytest.approx([-1.5, -1.5, -3.2, -3.2])
+    assert _encode_count(calls) == 2
+    assert files.loudness == Loudness(-16.0, -1.4, 5.0)
+    assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-2.mp3"
+    assert (tmp_path / "work" / "master.wav").read_text(encoding="utf-8") == "master-2.wav"
+    assert not (tmp_path / "work" / "master-1.wav").exists()
+    assert not (tmp_path / "work" / "episode-1.mp3").exists()
+
+
+def test_finish_gives_up_after_two_retries_and_keeps_the_lowest_peak(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _stub_ffmpeg(monkeypatch, [0.2, 0.5, 0.3])
+    files = finish_episode(_one_line_render(tmp_path), parse_script("[S1] One.\n"), tmp_path)
+
+    # Two retries only: -1.5, then -3.2, then -3.2 - 2.0 (the second overshoot) = -5.2 dBTP.
+    assert _true_peak_targets(calls) == pytest.approx([-1.5, -1.5, -3.2, -3.2, -5.2, -5.2])
+    assert _encode_count(calls) == 3
+    # The first attempt had the lowest peak, so that is the one kept and reported.
+    assert files.loudness == Loudness(-16.0, 0.2, 5.0)
+    assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-1.mp3"
+    assert not (tmp_path / "work" / "master-3.wav").exists()
+    assert not (tmp_path / "work" / "episode-3.mp3").exists()
 
 
 def test_a_chapter_mark_title_starts_with_a_capital_letter() -> None:
