@@ -57,6 +57,46 @@ ROLE_WORDS = (
     "Chairperson",
 )
 _ROLE_WORD_SET = {word.lower() for word in ROLE_WORDS}
+
+
+#: The plural civic titles a story may print in front of a person's name. A closed list, so a
+#: surname that merely ends in "s" ("Deans", "Towns", "Chiefs") is still a name, checked as a
+#: person, and never skipped as if it were a title.
+_PLURAL_TITLES = frozenset(
+    {
+        "members",
+        "councilmembers",
+        "councilors",
+        "councillors",
+        "trustees",
+        "commissioners",
+    }
+)
+
+
+def _singular_role_word(word: str) -> str:
+    """A plural civic title as its singular, in the word's own case: "Members" -> "Member".
+
+    Only the closed ``_PLURAL_TITLES`` list is singularised this way; any other word is
+    returned unchanged, so a surname that ends in "s" is never read as a title.
+    """
+    return word[:-1] if word.lower() in _PLURAL_TITLES else word
+
+
+def _is_role_word(word: str) -> bool:
+    """Whether a word is a printed title or one of the closed plural titles ("Members")."""
+    return word.lower() in _ROLE_WORD_SET or word.lower() in _PLURAL_TITLES
+
+
+def _is_singular_role_word(word: str) -> bool:
+    """Whether a word is a singular printed title ("Member", "Trustee"), not a plural title."""
+    return word.lower() in _ROLE_WORD_SET
+
+
+def _is_plural_role_word(word: str) -> bool:
+    return word.lower() in _PLURAL_TITLES
+
+
 #: Lower-case joiners that may sit inside a printed title ("assistant superintendent of schools").
 _TITLE_JOINERS = frozenset({"of", "for", "and", "the", "in", "on"})
 #: The nouns a printed title ends with: the title is the words up to and including one of these.
@@ -625,7 +665,9 @@ def _role_key(role: str) -> str:
     # The captions write the seat three ways ("pro tem", "protem", "pro-tem").
     key = key.replace("protem", "pro tem")
     # And the councilor's title as the captions spell it.
-    return re.sub(r"\bcounc(?:e|il)l?or\b", "councilor", key)
+    key = re.sub(r"\bcounc(?:e|il)l?or\b", "councilor", key)
+    # A printed plural title is the same seat ("Council Members" -> "council member").
+    return " ".join(_singular_role_word(word) for word in key.split())
 
 
 _MEMBER_TITLE_RE = re.compile(r"\b(?:councilor|council member|councilmember|trustee)$")
@@ -939,6 +981,9 @@ def _label_from_title(title: str) -> str:
         return "the staff member"
     out: list[str] = []
     for index, word in enumerate(words):
+        # A plural title printed before one person labels that person in the singular:
+        # "Council Members X" -> "the council member".
+        word = _singular_role_word(word)
         proper = _ROMAN_RE.match(word) or (len(word) >= 2 and word.isupper())
         if word == "Title":
             following = words[index + 1] if index + 1 < len(words) else ""
@@ -988,7 +1033,7 @@ _SEAT_TAILS = frozenset(
 
 def _is_seat_title(title: str) -> bool:
     """Whether a printed title names a seat more than one member of the body can hold."""
-    words = _normal(title).split()
+    words = [_singular_role_word(word) for word in _normal(title).split()]
     if not words:
         return False
     if words[-1] in _SEAT_TAILS:
@@ -1140,7 +1185,7 @@ def spans(text: str) -> list[Span]:
         while index < len(words) and words[index][0].lower() in _OPENERS:
             index += 1
         role_words: list[str] = []
-        while index < len(words) and words[index][0].lower() in _ROLE_WORD_SET:
+        while index < len(words) and _is_role_word(words[index][0]):
             role_words.append(words[index][0])
             index += 1
         # A capitalised word inside a printed title is still part of it: "Chief Information
@@ -1148,7 +1193,7 @@ def spans(text: str) -> list[Span]:
         # "Frank Elmore". The title keeps running while a later role word closes it.
         while role_words:
             stop = index
-            while stop < len(words) and words[stop][0].lower() not in _ROLE_WORD_SET:
+            while stop < len(words) and not _is_role_word(words[stop][0]):
                 stop += 1
             if (
                 stop < len(words)
@@ -1167,12 +1212,22 @@ def spans(text: str) -> list[Span]:
         kept = words[index:]
         if not kept:
             continue
-        # A role word left in the name is a heading, not a person ("Board Member Davis"), and a
-        # name with no title in front must be one contiguous run.
-        if any(word[0].lower() in _ROLE_WORD_SET for word in kept):
+        # A singular role word left in the name is a heading, not a person ("Board Member
+        # Davis"), and a name with no title in front must be one contiguous run. A plural title
+        # is a title only in the run before a name; inside the name it is never skipped, so a
+        # surname that looks plural ("Deans", "Towns") is still checked as a person.
+        if any(_is_singular_role_word(word[0]) for word in kept):
             continue
         tokens = [word for word, _start, _end in kept]
         role = " ".join(role_words)
+        # A plural title only introduces a person when a name follows it. Otherwise it is a
+        # body's name: "Northwest Mayors and Commissioners Coalition" names no one.
+        if (
+            any(_is_plural_role_word(word) for word in role_words)
+            and len(tokens) == 1
+            and tokens[0].lower() in _NON_PERSON_TAIL
+        ):
+            continue
         # "Ordinance O-2026-59" is a document number, not a person.
         if any(len(t.strip("'’\\-")) <= 1 for t in tokens):
             continue

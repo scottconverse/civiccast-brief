@@ -1414,6 +1414,86 @@ def test_the_non_skill_path_still_names_a_seat_only_voter() -> None:
     assert "Mayor Pro Tem Jenn Kaaoush voted yes" in fixed.paragraphs[0].text
 
 
+# Boulder, Nov 19 2026: the skill draft said "Mayor Pro Tem Tara Winer and Council Members
+# Taishya Adams and Rob Kaplan voted no." The published story said "and Council Taishya Adams"
+# because the repair read the plural "Members" as part of the name.
+BOULDER_COUNCIL = load_people(
+    [
+        (
+            roster_from_dict(
+                {
+                    "city": "Boulder",
+                    "body": "City Council",
+                    "state": "CO",
+                    "members": [
+                        {
+                            "name": "Tara Winer",
+                            "first": "Tara",
+                            "last": "Winer",
+                            "role": "Mayor Pro Tem",
+                        },
+                        {
+                            "name": "Taishya Adams",
+                            "first": "Taishya",
+                            "last": "Adams",
+                            "role": "Council Member",
+                        },
+                        {
+                            "name": "Rob Kaplan",
+                            "first": "Rob",
+                            "last": "Kaplan",
+                            "role": "Council Member",
+                        },
+                        {
+                            "name": "Tina Marquis",
+                            "first": "Tina",
+                            "last": "Marquis",
+                            "role": "Council Member",
+                        },
+                    ],
+                }
+            ),
+            "cities/boulder/roster.json",
+        )
+    ],
+    {},
+    "",
+)
+
+
+def test_a_plural_title_stays_as_written_and_the_names_are_kept() -> None:
+    text = "Mayor Pro Tem Tara Winer and Council Members Taishya Adams and Rob Kaplan voted no."
+    out, changes = repair_text(text, BOULDER_COUNCIL)
+    assert out == text
+    assert changes == []
+
+
+def test_a_misspelled_name_after_a_plural_title_takes_the_record_spelling() -> None:
+    text = "Council Members Taishya Adms and Rob Kaplin voted no."
+    out, changes = repair_text(text, BOULDER_COUNCIL)
+    assert out == "Council Members Taishya Adams and Rob Kaplan voted no."
+    assert changes
+
+
+def test_a_name_after_a_plural_title_that_the_record_does_not_hold_is_not_printed() -> None:
+    text = "Council Members Tina Marquis and Bob Quorbex voted no."
+    out, changes = repair_text(text, BOULDER_COUNCIL)
+    assert "Quorbex" not in out
+    assert "Tina Marquis" in out
+    assert changes
+
+
+def test_the_other_plural_member_titles_keep_their_words() -> None:
+    for text in (
+        "Councilmembers Taishya Adams voted no.",
+        "Councilors Taishya Adams voted no.",
+        "Commissioners Taishya Adams voted no.",
+    ):
+        out, changes = repair_text(text, BOULDER_COUNCIL)
+        assert out == text, (text, out)
+        assert changes == [], (text, changes)
+
+
 def test_a_name_before_the_pro_tem_seat_is_never_printed_twice() -> None:
     # Boulder, 12 Nov 2026: "Tara Winer, the mayor pro tem, and council members" was rewritten
     # to "Tara Winer, the Mayor Pro Tem Tara Winer". The name already printed before the seat
@@ -1426,3 +1506,20 @@ def test_a_name_before_the_pro_tem_seat_is_never_printed_twice() -> None:
     assert dict(seat_fixes("The mayor pro tem, and the council voted.", PEOPLE)) == {
         "mayor pro tem": "Mayor Pro Tem Jenn Kaaoush"
     }
+
+
+def test_a_surname_that_ends_in_s_is_not_taken_for_a_plural_title() -> None:
+    # A plural title is a closed list. A real surname that merely ends in "s" (Deans, Towns,
+    # Chiefs) is still a name, exactly as before the plural-title fix: it must be checked as a
+    # person, not skipped as if it were a title.
+    from civiccast_brief.article.names import spans
+
+    for text, name in (
+        ("Dana Deans spoke.", "Dana Deans"),
+        ("Robin Officers spoke.", "Robin Officers"),
+        ("Sam Directors spoke.", "Sam Directors"),
+        ("Kim Managers spoke.", "Kim Managers"),
+        ("Lee Towns spoke.", "Lee Towns"),
+        ("Jo Chiefs spoke.", "Jo Chiefs"),
+    ):
+        assert [(span.name, span.role) for span in spans(text)] == [(name, "")], text
