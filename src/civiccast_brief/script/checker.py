@@ -21,6 +21,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from civiccast_brief.article.names import is_plural_civic_title
 from civiccast_brief.meeting.roster import Roster
 from civiccast_brief.script.numbers import NUMBER_WORDS, number_atoms
 from civiccast_brief.script.recap import DEFAULT_VIDEO_PLACE, Recap, named_place
@@ -401,19 +402,54 @@ def _normalise(text: str) -> str:
     return text.replace("St.", "Saint")
 
 
-def _proper_nouns(text: str) -> list[str]:
+def _proper_nouns(text: str, *, skip_plural_titles: bool = False) -> list[str]:
+    """The capitalised words a text treats as names.
+
+    ``skip_plural_titles`` drops a plural civic title ("Council Members", "Trustees") at any
+    position: a plural title describes a group and gives no one a specific office, so the claim
+    need not print it. A singular title ("Mayor", "Member") names an office and is checked.
+    """
     cleaned = _normalise(text)
     names = []
-    for match in _NAME_RE.finditer(cleaned):
+    matches = list(_NAME_RE.finditer(cleaned))
+    for index, match in enumerate(matches):
         before = cleaned[: match.start()].rstrip()
         opener = not before or before[-1] in ".!?:"
         word = match.group(0)
         if word.lower() in NUMBER_WORDS:
             continue  # a number word is checked as a number, not a name
+        if skip_plural_titles and (
+            is_plural_civic_title(word)
+            # "Council Members" is one plural title, so its modifier goes with it.
+            or _followed_by_plural_title(cleaned, matches, index)
+        ):
+            continue
         if opener and word.lower() in _COMMON_OPENERS:
             continue
         names.append(word)
     return names
+
+
+#: The only words that may join a plural title into one phrase: "Council Members",
+#: "Board Members". Any other word before a plural title is a name and is checked.
+_PLURAL_TITLE_MODIFIERS = frozenset({"council", "board"})
+
+
+def _followed_by_plural_title(text: str, matches: list[re.Match[str]], index: int) -> bool:
+    """Whether this word is a plural title's modifier ("Council", "Board") with a plural civic
+    title after it, with only space between.
+
+    Only those two words may be skipped. An invented or wrong word before a plural title
+    ("Quorbex Trustees") is a name and is still checked.
+    """
+    if matches[index].group(0).lower() not in _PLURAL_TITLE_MODIFIERS:
+        return False
+    if index + 1 >= len(matches):
+        return False
+    next_match = matches[index + 1]
+    if text[matches[index].end() : next_match.start()].strip():
+        return False
+    return is_plural_civic_title(next_match.group(0))
 
 
 def _claim_words(texts: list[str]) -> set[str]:
@@ -786,7 +822,7 @@ def _check_line(
             Issue(number, "error", "number", f"number {missing} is not in the cited claim(s)")
         )
     allowed_words = _claim_words(cited_texts) | SHOW_NAMES | _roster_name_words(roster, cited_texts)
-    for name in _proper_nouns(line.text):
+    for name in _proper_nouns(line.text, skip_plural_titles=True):
         word = name.lower()
         # "Boulder's" is the place "Boulder" the claim or the header names.
         if word not in allowed_words and _POSSESSIVE_RE.sub("", word) not in allowed_words:

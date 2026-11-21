@@ -429,3 +429,111 @@ def test_a_council_member_surname_still_counts_as_a_voter():
 
 def test_a_body_beside_a_named_voter_is_not_a_partial_vote():
     assert _partial_vote("Adams voted yes.", ["The council voted yes.", "Adams voted yes."]) == []
+
+
+CONSENT_RECAP = Recap(
+    city="Boulder",
+    body="City Council",
+    meeting_date="November 12, 2026",
+    video_id="n8OxJlE_2ME",
+    claims=(
+        Claim(
+            "c01",
+            "Consent agenda",
+            "The consent agenda was approved unanimously, with yes votes from Aaron Brockett, "
+            "Nicole Speer, Ryan Schuchard and Tara Winer.",
+            "0:08:10",
+            "yes votes from Aaron Brockett, Nicole Speer, Ryan Schuchard and Tara Winer",
+        ),
+        Claim("c02", "Video", "The video is on the city's YouTube channel.", "0:00:00", "YouTube"),
+    ),
+)
+
+
+def _consent_script(text: str) -> list[ScriptLine]:
+    return [
+        ScriptLine(
+            "S1", "CivicCast Brief, Boulder, November twelfth, twenty twenty-six.", ("c01",)
+        ),
+        ScriptLine("S2", text, ("c01",)),
+        ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c02",)),
+    ]
+
+
+def test_a_plural_civic_title_is_not_a_name_in_a_true_vote_line():
+    """The title "Members" is not a fact the claim must print; the voters' names still are."""
+    report = check_script(
+        CONSENT_RECAP,
+        _consent_script(
+            "The consent agenda was also approved unanimously, with yes votes from Aaron "
+            "Brockett and Council Members Nicole Speer, Ryan Schuchard and Tara Winer."
+        ),
+    )
+    assert report.passed, report.render()
+
+
+KAPLAN_RECAP = Recap(
+    city="Boulder",
+    body="City Council",
+    meeting_date="November 12, 2026",
+    video_id="n8OxJlE_2ME",
+    claims=(
+        Claim("c01", "Vote", "Rob Kaplan voted no.", "0:20:00", "Rob Kaplan voted no"),
+        Claim("c02", "Video", "The video is on the city's YouTube channel.", "0:00:00", "YouTube"),
+    ),
+)
+
+
+def test_a_singular_civic_title_gives_a_claim_an_office_to_meet():
+    """A singular title gives a specific office, so the cited claim must print it.
+
+    "Mayor Rob Kaplan voted no." is wrong when the claim says only "Rob Kaplan voted no."
+    """
+    report = check_script(
+        KAPLAN_RECAP,
+        [
+            ScriptLine("S1", "CivicCast Brief, Boulder, November twelfth, twenty twenty-six."),
+            ScriptLine("S2", "Mayor Rob Kaplan voted no.", ("c01",)),
+            ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c02",)),
+        ],
+    )
+    assert any(i.code == "name" and "'Mayor'" in i.message for i in report.errors), report.render()
+
+
+def test_an_invented_name_after_a_civic_title_still_fails():
+    report = check_script(
+        CONSENT_RECAP,
+        _consent_script(
+            "The consent agenda was approved with yes votes from Council Members Bob Quorbex."
+        ),
+    )
+    assert any(i.code == "name" and "Quorbex" in i.message for i in report.errors)
+
+
+def test_a_word_before_a_plural_title_is_still_a_name():
+    """Only "Council" and "Board" join a plural title; any other word before one is checked.
+
+    "Quorbex Trustees voted no." names an invented body, and nothing in the cited claim
+    prints "Quorbex", so the check must fail on it.
+    """
+    recap = Recap(
+        city="Boulder",
+        body="City Council",
+        meeting_date="November 12, 2026",
+        video_id="n8OxJlE_2ME",
+        claims=(
+            Claim("c01", "Vote", "The Trustees voted no on the ordinance.", "0:20:00", "voted no"),
+            Claim(
+                "c02", "Video", "The video is on the city's YouTube channel.", "0:00:00", "YouTube"
+            ),
+        ),
+    )
+    report = check_script(
+        recap,
+        [
+            ScriptLine("S1", "CivicCast Brief, Boulder, November twelfth, twenty twenty-six."),
+            ScriptLine("S2", "Quorbex Trustees voted no.", ("c01",)),
+            ScriptLine("S2", "Watch the meeting video on the city's YouTube channel.", ("c02",)),
+        ],
+    )
+    assert any(i.code == "name" and "Quorbex" in i.message for i in report.errors), report.render()

@@ -1738,12 +1738,26 @@ def video_link(recap: Recap, timestamp: str) -> str:
     return f"https://www.youtube.com/watch?v={recap.video_id}&t={seconds}s"
 
 
+def has_video_moment(timestamp: str) -> bool:
+    """Whether a claim's timestamp names a real point in the meeting video.
+
+    A claim taken from the meeting documents carries ``0:00:00``: the recap has no moment for
+    it, so it gets no video link. A genuine moment at the very start of the video (``0:00:01``
+    or later) is kept.
+    """
+    return seconds_of(timestamp) > 0
+
+
 def citations(recap: Recap, paragraph: Paragraph) -> list[dict[str, str]]:
-    """The video moments a paragraph rests on, in its claim order."""
+    """The video moments a paragraph rests on, in its claim order.
+
+    A claim with no real video moment (``0:00:00``, a fact from the documents) is not a video
+    moment and gets no entry: its document pages are cited separately.
+    """
     out = []
     for claim_id in paragraph.claim_ids:
         claim = recap.claim(claim_id)
-        if claim is not None:
+        if claim is not None and has_video_moment(claim.timestamp):
             out.append(
                 {
                     "claim_id": claim.id,
@@ -1895,20 +1909,20 @@ def render_markdown(
                 f"[{c['timestamp']}]({c['url']})" if c["url"] else c["timestamp"]
                 for c in citations(recap, paragraph)
             )
-            sources = f"Video: {links}" if links else "The meeting video"
+            sources = f"Video: {links}" if links else ""
             if paragraph.page_ids:
                 docs = ", ".join(
                     f"[{c['kind']} p. {c['page']}]({c['url']})"
                     for c in page_citations(paragraph, pages)
                 )
-                sources += f"; Documents: {docs}"
-            out += [f"{paragraph.text} ({sources})", ""]
+                sources = f"{sources}; Documents: {docs}" if sources else f"Documents: {docs}"
+            out += [f"{paragraph.text} ({sources or 'The meeting video'})", ""]
     if article.votes:
         out += ["## Votes", ""]
         for vote in article.votes:
             claim = recap.claim(vote.claim_id)
             link = ""
-            if claim is not None:
+            if claim is not None and has_video_moment(claim.timestamp):
                 url = video_link(recap, claim.timestamp)
                 link = f" ([{claim.timestamp}]({url}))" if url else f" ({claim.timestamp})"
             tally = f" {vote.tally}" if vote.tally else ""
@@ -1919,8 +1933,9 @@ def render_markdown(
     for quote in article.quotes:
         claim = recap.claim(quote.claim_id)
         if claim is not None:
+            stamp = f", {claim.timestamp}" if has_video_moment(claim.timestamp) else ""
             out += [
-                f'> "{quote_words(recap, quote, people)}" ({quote.speaker}, {claim.timestamp})',
+                f'> "{quote_words(recap, quote, people)}" ({quote.speaker}{stamp})',
                 "",
             ]
     out.append(f"*{note_for(article)}*")

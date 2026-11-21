@@ -125,6 +125,19 @@ def test_the_site_and_markdown_link_the_page_and_the_note_names_the_documents(do
         site_article(RECAP, story("d1p99"), pages)
 
 
+def test_a_document_only_paragraph_prints_documents_only(documents) -> None:
+    """With no real video moment, a paragraph reads "Documents:" and never "Video:"."""
+    pages = load_documents(documents)
+    recap = replace(RECAP, claims=(replace(RECAP.claims[0], timestamp="0:00:00"),))
+    markdown = render_markdown(recap, story("d1p24"), pages)
+    assert f"[minutes p. 24]({URL}#page=24)" in markdown
+    assert "Video:" not in markdown
+    published = published_dict(recap, story("d1p24"), pages)
+    paragraph = published["sections"][0]["paragraphs"][0]
+    assert paragraph["citations"] == []
+    assert paragraph["documents"][0]["page"] == 24
+
+
 def test_the_page_ids_survive_the_desk_round_trip() -> None:
     assert article_from_dict(article_to_dict(story("d1p24"))).sections[0].paragraphs[
         0
