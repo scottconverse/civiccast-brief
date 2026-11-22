@@ -344,6 +344,12 @@ def speakers_report(
 MIN_VOICE_TURNS = 2
 #: ... at least this share of its named turns name the same person.
 MIN_VOICE_SHARE = 0.8
+#: A voice refers to X by title only when its named turns of X are fewer than this many times
+#: its mentions of X. One misfiled mention must not veto a voice with many named turns: on
+#: Longmont's Fcdk3MPz8Ic, voice 25 had 12 named turns for Popkin and one mention, and voice 29
+#: five named turns for Kalkhofer and one mention, and both are the member speaking; on
+#: Louisville's ocXLcx3rYj4, voice 01 had two named turns for Baskett and one mention and is not.
+MIN_TURNS_PER_MENTION = 3
 #: The chair's voice says at least this many recognitions, and this share of them.
 MIN_CHAIR_RECOGNITIONS = 5
 MIN_CHAIR_SHARE = 0.2
@@ -1061,10 +1067,15 @@ def label_voices(
     # A voice that says a member's title and name is talking about that member, not being them.
     # Louisville, Nov. 12, 2026: voice 01 ran the meeting and said a mention of Commissioner
     # Basket, and two of its turns were named Basket by the next-turn rule.
-    refers_to: dict[str, set[str]] = {}
+    # Only a mention ("I agree with Council Member Popkin") marks the person as somebody the
+    # voice talks about. A hand-off ("Council member Popkin.") is the chair's line, but the
+    # diarizer often files it under the voice of the member who answers (Longmont, Nov. 2026),
+    # and counting those stopped real members' voices being named. Mentions are counted, not
+    # kept as a set, so one misfiled mention cannot veto a voice with many named turns.
+    mentions: dict[str, dict[str, int]] = {}
     for found in recognitions:
         name = found.get("matched")
-        if not name:
+        if not name or found.get("status") != _MENTION:
             continue
         turn = turns[found["turn"]]
         word = (found["spoken"].split() or [""])[0].casefold()
@@ -1078,7 +1089,13 @@ def label_voices(
         )
         voice = segments[said].voice
         if voice:
-            refers_to.setdefault(voice, set()).add(name)
+            counts_by_voice = mentions.setdefault(voice, {})
+            counts_by_voice[name] = counts_by_voice.get(name, 0) + 1
+
+    def refers(voice: str, name: str) -> bool:
+        named_turns = tally.get(voice, {}).get(name, 0)
+        return named_turns < MIN_TURNS_PER_MENTION * mentions.get(voice, {}).get(name, 0)
+
     voices: list[dict[str, Any]] = []
     named: dict[str, str] = {}
     for voice in sorted(tally):
@@ -1086,17 +1103,17 @@ def label_voices(
         total = sum(counts.values())
         top = max(sorted(counts), key=lambda n: counts[n])
         agree = total >= MIN_VOICE_TURNS and counts[top] / total >= MIN_VOICE_SHARE
-        refers = agree and top in refers_to.get(voice, set())
-        if agree and not refers:
+        refers_to_top = agree and refers(voice, top)
+        if agree and not refers_to_top:
             named[voice] = top
         voices.append(
             {
                 "voice": voice,
                 "named_turns": dict(sorted(counts.items())),
-                "name": top if agree and not refers else None,
+                "name": top if agree and not refers_to_top else None,
                 "status": (
                     "this voice refers to the person by title"
-                    if refers
+                    if refers_to_top
                     else "named"
                     if agree
                     else "named turns too few or disagree"
@@ -1166,7 +1183,7 @@ def label_voices(
             elif (
                 turn.speaker is not None
                 and (voice is None or voice == own)
-                and (voice is None or turn.speaker not in refers_to.get(voice, set()))
+                and (voice is None or not refers(voice, turn.speaker))
             ):
                 label = turn.speaker
             else:
