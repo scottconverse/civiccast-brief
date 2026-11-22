@@ -190,3 +190,55 @@ def test_a_self_introduction_is_listed_but_never_names_anyone():
     [intro] = report["introductions"]
     assert intro["voice"] == "voice 12" and intro["spoken"] == "Morgan Lundy"
     assert intro["status"].startswith("not named")
+
+
+def test_a_voice_that_says_a_members_title_and_name_is_never_named_that_member():
+    # Louisville Planning Commission, Nov. 12, 2026: voice 01 ran the meeting, said a mention of
+    # Commissioner Basket, and two of its turns were named Basket by the next-turn rule. Naming
+    # the whole voice Basket was false: the voice was talking about the member, not being them.
+    segments = lines(
+        ("And I agree with Council Member Crist on that.", False, "voice 01"),  # 0 mention
+        ("Council member Crist.", True, "voice 01"),  # 1 hand-off
+        ("Thank you, Mayor. I have a question.", True, "voice 01"),  # 2 named turn
+        ("Council member Crist.", True, "voice 01"),  # 3 hand-off
+        ("Thanks. One more question.", True, "voice 01"),  # 4 named turn
+    )
+    _turns, report = _label(segments)
+    voice = {v["voice"]: v for v in report["voices"]}["voice 01"]
+    assert voice["name"] is None
+    assert voice["status"] == "this voice refers to the person by title"
+    assert {s.speaker for s in segments} == {"unknown"}
+
+
+def test_a_voice_with_named_turns_is_named_when_it_never_says_the_members_name():
+    # The control: the same two named turns, but another voice says the recognitions, so the
+    # named voice never refers to the member by title. It is still named.
+    segments = lines(
+        ("Council member Crist.", True, "voice 02"),  # 0 hand-off
+        ("Thank you. I have a question.", True, "voice 03"),  # 1 named turn
+        ("Council member Crist.", True, "voice 02"),  # 2 hand-off
+        ("Thanks.", True, "voice 03"),  # 3 named turn
+    )
+    _turns, report = _label(segments)
+    voice = {v["voice"]: v for v in report["voices"]}["voice 03"]
+    assert voice["name"] == "Diane Crist"
+    assert voice["status"] == "named"
+    assert {s.speaker for s in segments if s.voice == "voice 03"} == {"Diane Crist"}
+
+
+def test_another_voice_mentioning_a_member_does_not_stop_that_members_voice_from_being_named():
+    segments = lines(
+        (
+            "I agree with Council Member Crist on that.",
+            False,
+            "voice 04",
+        ),  # 0 mention, another voice
+        ("Council member Crist.", True, "voice 02"),  # 1 hand-off
+        ("Thank you. I have a question.", True, "voice 03"),  # 2 named turn
+        ("Council member Crist.", True, "voice 02"),  # 3 hand-off
+        ("Thanks.", True, "voice 03"),  # 4 named turn
+    )
+    _turns, report = _label(segments)
+    voice = {v["voice"]: v for v in report["voices"]}["voice 03"]
+    assert voice["name"] == "Diane Crist"
+    assert {s.speaker for s in segments if s.voice == "voice 03"} == {"Diane Crist"}
