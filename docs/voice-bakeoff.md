@@ -2,6 +2,18 @@
 
 Status: rounds 1–3 done. Default voice: Dia2 (Scott, 2026-11-12). Step-Audio-EditX, picked on 2026-11-06, is a Linux program and was removed from the program on 2026-11-12.
 
+**Current status (2026-11-21).** The history below is kept as written. What runs today:
+
+- The live weekly runs on civiccastbrief.org call `--audio-engine gemini --audio-fallback-engine lfm3`.
+  Gemini TTS uses the voices Bodi (S1, male) and Sola (S2, female), with Gemini Flash-Lite TTS as
+  its own fallback model when Flash TTS is out of quota.
+- LFM3 Audio runs on the PC through `llama-tts` (llama.cpp), with male S1 and female S2 voices, and
+  needs no GPU box and no hosted quota.
+- `python -m civiccast_brief.audio` with no `--engine` still uses Dia2, and Chatterbox is still
+  available with `--engine chatterbox`. Both run on the GPU PC over ssh.
+- The hosts are Pat (S1) and Alex (S2). The earlier rounds below call them Maya and Theo, which were
+  their names then.
+
 Phase 1 compares five free, open-source voice engines on the same two-host script, written from the
 Longmont City Council regular session of October 20, 2026 (14 lines, 228 words). The script was
 checked claim by claim against the meeting transcript before rendering.

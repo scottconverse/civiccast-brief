@@ -2,6 +2,71 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
+## 0.4.0 — 2026-11-21
+
+### The podcast
+
+- The hosts are Pat (speaker S1) and Alex (speaker S2). A saved script that still names the old
+  hosts, or carries the old spoken line, still passes the check; that line is dropped before the
+  checks, the audio and the pages.
+- New voice engines. Gemini TTS is the weekly run's first engine (voices Bodi and Sola), with
+  Gemini Flash-Lite TTS as its own fallback model, then LFM3 through llama.cpp on the PC. The
+  `audio` command takes `--engine` and `--fallback-engine`; Dia2 is still the default when no
+  engine is named.
+- Finished episodes land at -16 LUFS integrated and under -1.5 dBTP true peak. An MP3 whose
+  decoded peak overshoots is re-mastered, and the episode's length and the chapter and transcript
+  times do not move.
+
+### Stories
+
+- Meeting stories are written the TownReporter way: the report-local-news skill runs in its own
+  folder with the record supplied, and its draft is checked claim by claim. The story leads with
+  the news, prints a name only when a roster or a document holds it, and may cite document pages
+  as well as video moments.
+- A story can cite "p." page ranges, and a run of document pages gets one link rather than one
+  link per page. One link per run of video moments works the same way.
+- The check keeps true vote lines, drops a link to a video moment that does not say what the
+  sentence claims, and judges each retry draft against the claims that draft was written with.
+- A weekly roundup story is built from the week's meeting stories (`article from-stories`), and a
+  roundup title is printed only when it passes the same check.
+
+### Names and transcripts
+
+- Each body's roster fills itself from the meeting's own records (the roll call in the minutes, a
+  member list on the agenda) before any speaker is named, and each member keeps the record that
+  printed them.
+- Speaker naming fixes: a voice is not named after a member it refers to by title; a mention is
+  counted separately from a named turn; the diarizer's misfiled hand-off does not take a member's
+  name; a stray diarized line does not take a voice's name; a lone surname that sounds like a
+  sitting member is not matched; a plural title stays in front of a checked name; a seat holder
+  prints once; a meeting's name fixes apply only to its own pages.
+- A portal record joins the channel video for the same meeting, and a document that failed to
+  fetch is retried on the next run.
+
+### The site
+
+- Every story card has a picture: a frame from the meeting's own media at the story's lead cited
+  moment, or an original topic graphic when there is no video. A broken download or a missing
+  ffmpeg leaves the graphic and never fails the build.
+- The episode player has a volume slider and a mute button, and the level is kept for the next
+  episode.
+
+### Running it
+
+- The weekly run scripts and the live cities' settings are in `ops/`, with a nightly backup script
+  and restore notes.
+- Weekly runs can cap publish retries, keep finished episodes, rebuild audio that is not whole,
+  and keep the right story when a meeting was posted twice.
+- VerdictLite config in `vlite.json`: it records each commit's verification and never blocks a
+  commit (observe mode).
+
+### Known limits
+
+- 56 of the 57 published caption files still label the hosts with the old names; the audio and
+  episode data use Pat and Alex.
+- Speaker-label checks could be replayed on only 3 of 46 published meetings, because the others
+  kept no voice data.
+
 ## 0.3.0 — 2026-11-17
 
 Eight Colorado town sites are live on [civiccastbrief.org](https://civiccastbrief.org): Longmont,

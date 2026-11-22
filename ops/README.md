@@ -16,11 +16,14 @@ The desk, runs and live folders are data, not code, and are not in this reposito
 
 ## Scripts
 
-- `weekly-city.ps1 -City <city> -Here <working folder>` — the weekly run: find new meetings, make
-  the episodes, build the site, upload new media to R2 (bucket `civiccast-brief-media`), and
-  deploy the site to Cloudflare Pages (`civiccast-brief-<city>`).
+- `weekly-city.ps1 -City <city> -Here <working folder>` — the weekly run: find the last 14 days'
+  meetings, make the episodes, build the site, upload new media to R2 (bucket
+  `civiccast-brief-media`), and deploy the site to Cloudflare Pages (`civiccast-brief-<city>`).
+  It runs the week with `--diarize --audio-engine gemini --audio-fallback-engine lfm3`.
 - `publish-city.ps1 -City <city> -Here <working folder> [-Repo <checkout>]` — rebuild and deploy one
-  city's site from what is already published, without a weekly run.
+  city's site from what is already published, without a weekly run. It uses the same
+  `--audio-engine gemini --audio-fallback-engine lfm3`; add no `--diarize` because it runs no
+  meeting.
 
 Both read the Cloudflare deploy token from Windows Credential Manager
 (`CivicCastBrief/cloudflare-deploy`) and the account ID from the user environment variable
