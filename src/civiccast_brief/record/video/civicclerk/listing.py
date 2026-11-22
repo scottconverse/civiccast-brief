@@ -7,6 +7,8 @@ reader at another CivicClerk town without changing code.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -23,6 +25,11 @@ CIVICCLERK_API = "https://{tenant}.api.civicclerk.com/v1"
 DEFAULT_TENANT = "erieco"
 DEFAULT_TOP = 50
 MAX_PAGES = 100
+#: Answers that say the API failed briefly, worth asking again (Nov. 22 2026: Superior's
+#: Events query answered 500 twice, then 200 a minute later).
+RETRY_STATUS: frozenset[int] = frozenset({500, 502, 503, 504})
+#: The waits between the three attempts. A connect or read timeout reads the same way.
+RETRY_WAITS_S: tuple[float, ...] = (5.0, 15.0)
 
 
 def civicclerk_api(tenant: str) -> str:
@@ -49,6 +56,29 @@ def events_url(base_url: str, first: date, last: date, *, top: int = DEFAULT_TOP
 
 def events_media_url(base_url: str, event_id: object) -> str:
     return f"{base_url.rstrip('/')}/EventsMedia/{event_id}"
+
+
+def _get(client: httpx.Client, url: str, sleep: Callable[[float], None]) -> httpx.Response:
+    """GET ``url`` again after a brief server failure, up to three attempts.
+
+    A 500, 502, 503 or 504, or a connect or read timeout, is waited out (5 s, then 15 s) and
+    asked again. The last failure comes back as it is: a bad status as the response, a timeout
+    as the exception, so the caller reports it the way it did before any retry.
+    """
+    attempts = len(RETRY_WAITS_S) + 1
+    for attempt in range(1, attempts + 1):
+        try:
+            response = client.get(url)
+        except (httpx.ConnectTimeout, httpx.ReadTimeout):
+            if attempt == attempts:
+                raise
+            sleep(RETRY_WAITS_S[attempt - 1])
+            continue
+        if response.status_code in RETRY_STATUS and attempt < attempts:
+            sleep(RETRY_WAITS_S[attempt - 1])
+            continue
+        return response
+    raise AssertionError("unreachable: the loop returns or raises on its last attempt")
 
 
 def _json_object(response: httpx.Response, what: str) -> dict[str, Any]:
@@ -100,11 +130,13 @@ class CivicClerkLister:
         *,
         base_url: str | None = None,
         top: int = DEFAULT_TOP,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.client = client
         self.tenant = tenant.strip()
         self.base_url = (base_url or civicclerk_api(self.tenant)).rstrip("/")
         self.top = top
+        self._sleep = sleep
 
     def list_videos(self, first: date, last: date) -> list[VideoListing]:
         """Events in the inclusive date range with a non-empty direct-MP4 videoUrl."""
@@ -116,7 +148,7 @@ class CivicClerkLister:
         videos: list[VideoListing] = []
         while url and url not in seen and len(seen) < MAX_PAGES:
             seen.add(url)
-            body = _json_object(self.client.get(url), "the CivicClerk Events API")
+            body = _json_object(_get(self.client, url, self._sleep), "the CivicClerk Events API")
             value = body.get("value")
             if not isinstance(value, list):
                 raise VideoError("the CivicClerk Events API answered no value list")
@@ -130,7 +162,7 @@ class CivicClerkLister:
                 if event_id is None:
                     continue
                 media = _json_object(
-                    self.client.get(events_media_url(self.base_url, event_id)),
+                    _get(self.client, events_media_url(self.base_url, event_id), self._sleep),
                     f"the CivicClerk media API for event {event_id}",
                 )
                 media_url = _direct_mp4(media.get("videoUrl"))
