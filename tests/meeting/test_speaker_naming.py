@@ -226,6 +226,45 @@ def test_a_voice_with_named_turns_is_named_when_it_never_says_the_members_name()
     assert {s.speaker for s in segments if s.voice == "voice 03"} == {"Diane Crist"}
 
 
+def test_a_hand_off_filed_under_the_members_voice_does_not_stop_that_voice_being_named():
+    # Longmont, Nov. 2026: the diarizer filed the chair's short hand-off ("Council member Crist.")
+    # under the voice of the member who answers. A hand-off is not a mention: it must not stop
+    # the member's voice from being named after its two named turns.
+    segments = lines(
+        ("Council member Crist.", False, "voice 05"),  # 0 hand-off, diarized as voice 05
+        ("Thank you, Mayor. I have a question.", True, "voice 05"),  # 1 named turn
+        ("Council member Crist.", True, "voice 05"),  # 2 hand-off, diarized as voice 05
+        ("Thanks. One more question.", True, "voice 05"),  # 3 named turn
+    )
+    _turns, report = _label(segments)
+    voice = {v["voice"]: v for v in report["voices"]}["voice 05"]
+    assert voice["name"] == "Diane Crist"
+    assert voice["status"] == "named"
+    assert {s.speaker for s in segments if s.voice == "voice 05"} == {"Diane Crist"}
+
+
+def test_a_voice_with_three_named_turns_and_one_mention_of_the_member_is_named_that_member():
+    # Longmont, Nov. 2026: voice 25 had twelve named turns for Popkin and one mention of him,
+    # and voice 29 five named turns for Kalkhofer and one mention. One misfiled line must not
+    # veto a well-supported voice: a voice refers to the member only when its named turns are
+    # fewer than three times its mentions.
+    segments = lines(
+        ("Council member Crist.", True, "voice 01"),  # 0 hand-off
+        ("Thank you, Mayor. First question.", True, "voice 05"),  # 1 named turn
+        ("Council member Crist.", True, "voice 01"),  # 2 hand-off
+        ("Second question.", True, "voice 05"),  # 3 named turn
+        ("Council member Crist.", True, "voice 01"),  # 4 hand-off
+        ("Third question.", True, "voice 05"),  # 5 named turn
+        ("I agree with Council Member Crist on that.", True, "voice 05"),  # 6 mention
+        ("Thank you.", True, "voice 01"),  # 7
+    )
+    _turns, report = _label(segments)
+    voice = {v["voice"]: v for v in report["voices"]}["voice 05"]
+    assert voice["name"] == "Diane Crist"
+    assert voice["status"] == "named"
+    assert {s.speaker for s in segments if s.voice == "voice 05"} == {"Diane Crist"}
+
+
 def test_another_voice_mentioning_a_member_does_not_stop_that_members_voice_from_being_named():
     segments = lines(
         (
