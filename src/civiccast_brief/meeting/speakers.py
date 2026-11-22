@@ -1058,6 +1058,27 @@ def label_voices(
         if voice and turn.speaker is not None:
             counts = tally.setdefault(voice, {})
             counts[turn.speaker] = counts.get(turn.speaker, 0) + 1
+    # A voice that says a member's title and name is talking about that member, not being them.
+    # Louisville, Nov. 12, 2026: voice 01 ran the meeting and said a mention of Commissioner
+    # Basket, and two of its turns were named Basket by the next-turn rule.
+    refers_to: dict[str, set[str]] = {}
+    for found in recognitions:
+        name = found.get("matched")
+        if not name:
+            continue
+        turn = turns[found["turn"]]
+        word = (found["spoken"].split() or [""])[0].casefold()
+        said = next(
+            (
+                p
+                for p in range(turn.last, turn.first - 1, -1)
+                if word and word in segments[p].text.casefold()
+            ),
+            turn.last,
+        )
+        voice = segments[said].voice
+        if voice:
+            refers_to.setdefault(voice, set()).add(name)
     voices: list[dict[str, Any]] = []
     named: dict[str, str] = {}
     for voice in sorted(tally):
@@ -1065,14 +1086,21 @@ def label_voices(
         total = sum(counts.values())
         top = max(sorted(counts), key=lambda n: counts[n])
         agree = total >= MIN_VOICE_TURNS and counts[top] / total >= MIN_VOICE_SHARE
-        if agree:
+        refers = agree and top in refers_to.get(voice, set())
+        if agree and not refers:
             named[voice] = top
         voices.append(
             {
                 "voice": voice,
                 "named_turns": dict(sorted(counts.items())),
-                "name": top if agree else None,
-                "status": "named" if agree else "named turns too few or disagree",
+                "name": top if agree and not refers else None,
+                "status": (
+                    "this voice refers to the person by title"
+                    if refers
+                    else "named"
+                    if agree
+                    else "named turns too few or disagree"
+                ),
             }
         )
     chair_found = chair_name(segments, chair, roster)
@@ -1135,7 +1163,11 @@ def label_voices(
             elif voice in introduced:
                 label = None
                 short_introduced += 1
-            elif turn.speaker is not None and (voice is None or voice == own):
+            elif (
+                turn.speaker is not None
+                and (voice is None or voice == own)
+                and (voice is None or turn.speaker not in refers_to.get(voice, set()))
+            ):
                 label = turn.speaker
             else:
                 label = None
