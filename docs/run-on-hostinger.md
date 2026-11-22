@@ -45,8 +45,9 @@ cd ~/civiccast-brief
 uv sync
 ```
 
-`uv sync` brings Python 3.12 when the server has none. The server does not need ffmpeg or a GPU:
-the Windows PC makes the audio.
+`uv sync` brings Python 3.12 when the server has none. The server needs no voice engine: the
+Windows PC makes the audio. It needs ffmpeg only for the story-card frame taken from a meeting's
+own media; without ffmpeg the site build uses the topic graphic for that story and still finishes.
 
 ### 2. station.json
 

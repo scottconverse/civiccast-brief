@@ -1,7 +1,7 @@
 # CivicCast Brief
 
 CivicCast Brief answers one question for a town: *what did my local government just do?* It reads a city's public meeting videos, agendas, packets and minutes, and makes a cited recap, a news story and a two-host podcast episode for each meeting.
-Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.3.0.
+Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.4.0.
 
 [Website](https://scottconverse.github.io/civiccast-brief/) · [Live sites](https://civiccastbrief.org): Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie, Colo. · [User manual](docs/user-manual.md) · [Set up a city](docs/set-up-a-city.md) · [Releases](https://github.com/scottconverse/civiccast-brief/releases)
 
@@ -25,15 +25,18 @@ captions through its existing paths.
 ## What it does
 
 1. Finds new meetings each week from PrimeGov, Granicus, YouTube channels, Cablecast, CivicWeb,
-   CivicClerk, CivicPlus, eScribe, Laserfiche WebLink, Vimeo, plain web pages, public Google Drive
-   folders and OneDrive shares.
-2. Makes a transcript with times. A speaker is named only when a city record prints the name.
-3. Writes a recap and a news story. A checker drops any claim, number or name that is not in the
-   meeting's own words or documents.
-4. Writes a two-host podcast script and renders it with Dia2, a free, open-source voice engine.
-   No hosted text-to-speech is used.
-5. Builds a static city site: stories, an audio player, transcript pages, board, topic and monthly
-   archive pages, search, a sitemap and a podcast feed.
+   CivicClerk, CivicPlus, eScribe, Laserfiche WebLink, Vimeo and plain web pages, plus public
+   Google Drive folders and OneDrive share links.
+2. Makes a transcript with times, from the source's own captions or, when it lists media but no
+   captions, by transcribing the audio on your own machine. A speaker is named only when a city
+   record prints the name.
+3. Fills each body's roster from the meeting's own records, then writes a recap and a news story.
+   A checker drops any claim, number or name that is not in the meeting's own words or documents.
+4. Writes a two-host podcast script for Pat and Alex and renders it with Gemini TTS, with LFM3 on
+   the PC as the fallback; Dia2 and Chatterbox are also available.
+5. Builds a static city site: stories with a picture on each card, an audio player with volume and
+   mute, transcript pages, board, topic and monthly archive pages, search, a sitemap and a
+   podcast feed.
 6. Deploys the site to Cloudflare Pages and the audio to R2, or copies both to any web server.
 
 Editors work in the desk, a local web app (double-click `desk.cmd`). An item that passes every check
@@ -49,19 +52,21 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/sco
 
 It installs the program and the tools it runs, then says what is still missing (Chrome, Ollama).
 Then run `.\desk.cmd` and follow [Set up a city](docs/set-up-a-city.md). You need Google Chrome,
-Ollama or a Claude subscription for the writing model, and an NVIDIA GPU for audio.
+Ollama for the default writing model, and Claude Code signed in to a Claude subscription for the
+weekly story writer. The audio runs on Gemini TTS (a Google API key) or LFM3 through llama.cpp on
+the PC; an NVIDIA GPU is needed only for the optional Dia2 and Chatterbox engines.
 
 ## Documentation
 
 - [User manual](docs/user-manual.md): new users, editors, technical users and the architecture.
 - [Set up a city](docs/set-up-a-city.md): install, city folder, weekly run, hosting, station.
-- [Voice bake-off](docs/voice-bakeoff.md): how Dia2 was picked.
+- [Voice bake-off](docs/voice-bakeoff.md): how the engines were compared, and what runs today.
 - [Email sign-up](docs/email-signup.md) and [podcast directories](docs/podcast-directories.md).
 - [Landing page source](website/README.md).
 
 ## Project status
 
-Version 0.3.0. Actively developed. The weekly run publishes eight live Colorado town sites
+Version 0.4.0. Actively developed. The weekly run publishes eight live Colorado town sites
 (Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie). Built and tested
 on Windows 11.
 

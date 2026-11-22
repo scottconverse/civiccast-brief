@@ -48,10 +48,11 @@ Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization 
 |---|---|---|
 | Python 3.12 and `uv` | everything | `uv sync` installs the project. |
 | `ffmpeg` on PATH | audio, Granicus audio | |
-| Ollama at `127.0.0.1:11434` with the writer model | recap, script | The default model is `deepseek-v4.1-flash:1017-cloud`. Pass `--model` to use another. |
+| Ollama at `127.0.0.1:11434` with the writer model | recap, script | The default model is `deepseek-v4.1-flash:1017-cloud`. Pass `--model` to use another. City Council's built-in pick is `claude:claude-opus-5-5`, so a Claude sign-in is also needed for it. |
+| Claude Code, signed in to a Claude subscription | the weekly story (`article skill`) | The report-local-news skill runs the `claude` CLI. `article skill --model` picks the CLI model or alias (default `opus`). |
 | yt-dlp, installed by CivicCast Brief | YouTube capture | Run `python -m civiccast_brief tools --test-video <URL>` once, with any public YouTube meeting video that has captions. It installs yt-dlp into `~/.civiccast-brief/record/runtimes/yt-dlp` and makes it active only after it fetches that video's captions. Not needed for a Granicus city. |
 | The `diarize` extra and a Hugging Face token | `--diarize` only | `uv sync --extra diarize`, and set `HF_TOKEN` to a free Hugging Face token that has accepted the pyannote model terms. Without `--diarize`, names come from the roll call only. |
-| A voice engine | audio | Dia2 (the default) or Chatterbox, on a Windows PC with an NVIDIA GPU, reached over ssh. Both run as plain Windows Python; none needs Linux. Dia2 setup: [voice-bakeoff.md](voice-bakeoff.md#dia2-setup). |
+| A voice engine | audio | Gemini TTS (a Google API key in `GEMINI_API_KEY` or Credential Manager `CivicCastBrief/gemini-api`), LFM3 through `llama-tts` on the PC, or Dia2 or Chatterbox on a separate Windows PC with an NVIDIA GPU, reached over ssh. The live weekly runs use Gemini first and LFM3 as the fallback; the plain `audio` command defaults to Dia2. Dia2 setup: [voice-bakeoff.md](voice-bakeoff.md#dia2-setup). |
 
 ## 1. Start the city folder
 
@@ -68,8 +69,8 @@ python -m civiccast_brief city find --name "Your City" --state CO --website http
 ```
 
 It prints each source it can read, with the bodies (council, boards, commissions) the source lists
-and how it was found. It also lists the platforms it found but cannot read yet (Legistar, BoardDocs,
-CivicClerk) so you can add those by hand later. School boards and charter schools are usually not
+and how it was found. It also lists the platforms it found but cannot read yet (Legistar) so you
+can add those by hand later. School boards and charter schools are usually not
 linked from a city's site. Add each with `--also "Body name | address"`, where the address is the
 page that links its agendas or its Google Drive folder:
 
@@ -93,6 +94,13 @@ For each body, this reads the newest meeting the source lists (agenda, packet or
 its date and a line of its text, or why it could not. Add `--body "Water Board"` to check only some
 bodies, and `--captions` to also read YouTube captions (slower; YouTube limits how fast you can ask).
 It saves the result to `city-check.json` and exits with an error when any body was not read.
+
+To fill the rosters before the first weekly run, `city rosters` writes each body's roster from its
+PrimeGov member list or its own page:
+
+```
+python -m civiccast_brief city rosters --city cities/longmont
+```
 
 The desk has this check too: **Sources > Check all sources**, or **Check** on one source's row. It
 reads each source once (without YouTube captions) and lists each body as READ, with the meeting's
@@ -162,6 +170,8 @@ place the city's meetings come from, with the bodies (council, boards) it covers
 | CivicClerk portal | the tenant, the part before `.portal.civicclerk.com`, or the portal address | `erieco`, `https://erieco.portal.civicclerk.com` |
 | eScribe meetings site | the tenant, the part after `pub-` and before `.escribemeetings.com`, or the site address | `bouldercounty`, `https://pub-bouldercounty.escribemeetings.com` |
 | Vimeo account | the public account name, the part after `vimeo.com/` | `svvsd` |
+| CivicPlus Agenda Center or Archive Center | the site's host, or the center's page address | `www.townoflyons.com` |
+| Laserfiche WebLink folder | the folder's address (read in Chrome) | `https://records.example.gov/WebLink/Browse.aspx?id=123` |
 
 A CivicClerk or eScribe source reads both the meeting's documents and its video: the public API
 or calendar lists the meetings, and its media endpoint gives a direct MP4 (and, for eScribe, the
@@ -345,6 +355,21 @@ name that is not in the cited claims, those captions or the meeting header. A fa
 written once more with the report; a part that still fails is dropped. Exit 1 means the saved story
 still fails (for example its headline). It saves `article.json` and `article.md` to read.
 
+The weekly run writes the story a second way, the TownReporter way: it runs the vendored
+report-local-news skill in its own folder with the record supplied, then checks the draft claim by
+claim. A name prints only when the roster or the documents hold it, and a paragraph that states a
+fact the checked claims do not hold is dropped:
+
+```
+python -m civiccast_brief.article skill --recap runs/2026-11-03/recap.json --city cities/yourcity --out runs/2026-11-03/article
+```
+
+A roundup's story is built from the week's meeting stories:
+
+```
+python -m civiccast_brief.article from-stories --recap runs/week/recap.json --story runs/a/article.json --story runs/b/article.json --out runs/week/article
+```
+
 ## 5. Review and publish on the editor desk
 
 ```
@@ -390,7 +415,7 @@ The buttons on an item page:
 - **Unpublish** (published items) takes the item off the site and holds it.
 - **Hold** and **Kill** take an item out of the export.
 - In the station, Publish, Save on a published item, Unpublish and Kill rebuild and deploy the site
-  about a minute later.
+  about half a minute later.
 - **Redraft** sends your note and the current draft to the writer (the city's model pick for that
   body) and puts the new draft in review. It runs the same checks as the weekly run: one rewrite
   with the check report, then anything still unsupported is cut. The writer works from the
@@ -427,9 +452,13 @@ drafts go to review, and rejected items are killed. Keep a copy of the file befo
 python -m civiccast_brief.audio runs/2026-11-03/script.txt --out runs/2026-11-03/audio
 ```
 
-The default voice is Dia2 (`dia2`). Add `--engine chatterbox` to use Chatterbox.
+The default voice is Dia2 (`dia2`). Name another engine with `--engine gemini`, `--engine lfm3`
+or `--engine chatterbox`, and add `--fallback-engine NAME` to retry with another engine if the
+first fails. The live weekly scripts use `--audio-engine gemini --audio-fallback-engine lfm3`.
+Gemini needs a Google API key; LFM3 needs `llama-tts` and the LFM3 model files on the PC; Dia2 and
+Chatterbox need the GPU PC.
 
-This writes `episode.mp3`, `chapters.json` and `transcript.vtt`.
+This writes `episode.mp3` (at -16 LUFS, under -1.5 dBTP), `chapters.json` and `transcript.vtt`.
 
 ## 7. Build the site
 
@@ -462,7 +491,9 @@ Optional `city.json` settings for the site:
 An episode can carry an `article` (headline, dek, sections, votes, quotes, topics). Every paragraph
 cites claims from `recap.claims` by position. Without an article the episode page shows the claim
 list. Pages: front page, story pages, `/boards/`, `/topics/`, `/archive/` (by month), `/podcast/`,
-`/search/`, `/about/` and `/how-this-is-made/`.
+`/search/`, `/about/`, `/how-this-is-made/`, a 404 page, `sitemap.xml` and `robots.txt`. Every
+story card gets a picture: a frame from the meeting's own media at the lead cited moment, or an
+original topic graphic. `site build --stills` takes those frames.
 
 Every page loads the Cloudflare Web Analytics beacon (no cookies). The About page and footer say so.
 
@@ -482,28 +513,33 @@ the `_headers` file that keeps Cloudflare from changing the pages.
 ## 9. Run every week
 
 Steps 3 to 7 run by themselves with one command. It reads the city's `sources.json`, finds the
-meetings of the last 7 days and runs each one that is new:
+meetings of the last `--days` days (7 by default; the live scripts use 14) and runs each one that
+is new:
 
 ```
-python -m civiccast_brief.weekly run --city cities/yourcity --work runs/weekly --db review.db --episodes site-in --media media --site-out site --base-url https://yourcity.example.org --media-base-url https://media.example.org
+python -m civiccast_brief.weekly run --city cities/yourcity --work runs/weekly --db review.db --days 14 --episodes site-in --media media --site-out site --base-url https://yourcity.example.org --media-base-url https://media.example.org --audio-engine gemini --audio-fallback-engine lfm3
 ```
 
 For each meeting, in date order:
 
-1. the portal's HTML agenda is saved as `agenda.txt`;
-2. `meeting run` makes the transcript, speakers and recap;
-3. `script write` writes the script. When the check fails, it writes once more with the check
+1. the portal's packet and minutes are saved as `documents.json`, and its HTML agenda as
+   `agenda.txt`;
+2. the body's roster is filled from that meeting's own records;
+3. `meeting run` makes the transcript, speakers and recap;
+4. `script write` writes the script. When the check fails, it writes once more with the check
    report, and then `script repair` drops the lines that fail;
-4. the episode goes on the editor desk, published at once when its checks passed;
-5. `article write` and `article stage` write the story and put it on the desk.
+5. the episode goes on the editor desk, published at once when its checks passed;
+6. `article skill` writes the story and `article stage` puts it on the desk.
 
 With two or more meetings done in the week, a roundup follows: a combined recap, its script, a
-written title and its episode on the desk.
+written title (when one passes the check), a story built from the week's stories, and its episode
+on the desk.
 
 Then the desk is exported, and every published episode that is not built yet gets its audio, its
 episode JSON (with the published story of the same meeting) and its media files, named after the
-episode. Last, the site is built into `--site-out`. Leave out all five site settings to stop after
-the desk.
+episode. Each published story is also written as a stand-alone story file, so it is on the site
+whether or not its meeting has an episode. Last, the site is built into `--site-out`. Leave out
+all five site settings to stop after the desk.
 
 **Which meetings run.** A portal meeting needs a YouTube video link; a channel video needs a title
 that reads as a meeting and names one of the source's bodies. The same video from two sources is
@@ -533,8 +569,8 @@ schtasks /Create /TN "CivicCast Brief weekly" /SC WEEKLY /D TUE /ST 06:00 /TR "C
 ## 10. A cloud station with a Windows PC worker
 
 A station on a cloud server cannot do two of the weekly steps: YouTube asks a data-center address
-to sign in before it hands over captions, and the server has no GPU for the voice. A Windows PC on
-a home connection does those two steps, and the cloud station does the rest.
+to sign in before it hands over captions, and the server has no voice engine set up. A Windows PC
+on a home connection does those two steps, and the cloud station does the rest.
 
 **On the cloud station.** Add a `"worker"` folder to `station.json`, and give the job and publish
 commands the same folder as `--worker`:

@@ -27,7 +27,7 @@ Episodes already in the feed when a city is first added are never emailed. A rea
 ## Set up a city
 
 1. Add the city to `CITIES` in `worker/signup/wrangler.jsonc` (title, site, feed) and deploy the Worker.
-2. Add `"signup_url": "https://signup.civiccastbrief.org/subscribe"` and `"email_signup": true` to the city's `city.json` and rebuild the site. The form, the "By email" band on the front page and the page's security policy follow from those two settings. `signup_url` alone shows nothing; `email_signup` without `signup_url` is refused.
+2. Add `"signup_url": "https://signup.civiccastbrief.org/subscribe"` and `"email_signup": true` to the city's `city.json` and rebuild the site. `signup_url` shows the form at the bottom of every page and in the page's security policy; `email_signup` adds the "By email" band on the front page. `email_signup` without `signup_url` is refused by the site build.
 
 ## Look and privacy
 

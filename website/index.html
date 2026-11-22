@@ -43,7 +43,7 @@
 <main id="main">
   <section class="hero" id="top">
     <div class="wrap">
-      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Version 0.3.0 · open source · Windows 11</p>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Version 0.4.0 · open source · Windows 11</p>
       <h1>What did your city government <em>just do?</em></h1>
       <p class="lede">CivicCast Brief reads a city's public meeting videos, agendas, packets and minutes, then writes a
         <strong>news story</strong>, a <strong>recap</strong> and a <strong>two-host podcast episode</strong> for each
@@ -52,13 +52,13 @@
         <a class="btn btn-primary" href="https://longmont.civiccastbrief.org">See the live Longmont site <span class="arrow" aria-hidden="true">→</span></a>
         <a class="btn btn-ghost" href="#start">Install on Windows</a>
       </div>
-      <p class="cta-note">Self-hosted · Apache-2.0 · free open-source voices, no hosted text-to-speech</p>
+      <p class="cta-note">Self-hosted · Apache-2.0 · Gemini TTS, with a local LFM3 voice as the backup</p>
 
       <div class="showcase">
         <figure class="browser">
           <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>longmont.civiccastbrief.org</span></div>
           <img src="assets/shots/site-home.webp" width="1600" height="1000"
-            alt="The Longmont CivicCast Brief front page: the lead story about the urban renewal authority's 8-0 vote, topic buttons, and a podcast panel listing four episodes.">
+            alt="The Longmont CivicCast Brief front page: a weekly roundup lead story about museum visits, topic buttons, and a podcast panel listing four episodes.">
         </figure>
         <figure class="phone">
           <img src="assets/shots/site-phone.webp" width="780" height="1688" loading="lazy"
@@ -71,7 +71,7 @@
       <ul class="wrap">
         <li><b>Cited to the second</b><span>Each paragraph links to its moment in the meeting video, or to the packet page it came from.</span></li>
         <li><b>Named only from records</b><span>A speaker gets a name only when a city record prints it. Everyone else stays unknown.</span></li>
-        <li><b>Voices on your own GPU</b><span>Dia2 runs on your NVIDIA card. Nothing is sent to a hosted voice service.</span></li>
+        <li><b>Voices that keep working</b><span>Weekly episodes use Gemini Flash TTS, then Flash-Lite, then LFM3 on the CPU. Dia2 can run on a Windows PC with an NVIDIA GPU.</span></li>
         <li><b>A real city, every week</b><span>Longmont, Colorado runs on it now, from meeting video to published site.</span></li>
       </ul>
     </div>
@@ -87,7 +87,7 @@
         <ul class="problem-list">
           <li><span class="n">1</span><p><strong>Summaries you can check.</strong>A recap is only useful if a reader can see where each sentence came from.</p></li>
           <li><span class="n">2</span><p><strong>No made-up facts.</strong>A claim, number or name that is not in the meeting's own words or documents is dropped.</p></li>
-          <li><span class="n">3</span><p><strong>Cheap enough for one town.</strong>A static site, a feed and audio made on one Windows PC, with no paid voice service.</p></li>
+          <li><span class="n">3</span><p><strong>Cheap enough for one town.</strong>A static site, a feed and audio made on one Windows PC, with a local CPU voice as the backup.</p></li>
         </ul>
       </div>
       <figure class="quote-card">
@@ -110,42 +110,42 @@
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://longmont.civiccastbrief.org/">Longmont</a></h3>
-          <p>City Council and 6 city boards. 11 meetings since Sept. 22.</p>
+          <p>City Council and city boards and commissions.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://boulder.civiccastbrief.org/">Boulder</a></h3>
-          <p>4 city advisory boards. 4 meetings since Oct. 28.</p>
+          <p>City Council and advisory boards.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://louisville.civiccastbrief.org/">Louisville</a></h3>
-          <p>City Council. 2 meetings since Nov. 2.</p>
+          <p>City Council and Planning Commission.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://lafayette.civiccastbrief.org/">Lafayette</a></h3>
-          <p>City Council. 1 meeting since Nov. 2.</p>
+          <p>City Council.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://lyons.civiccastbrief.org/">Lyons</a></h3>
-          <p>Board of Trustees. 2 meetings since Nov. 2.</p>
+          <p>Board of Trustees.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://nederland.civiccastbrief.org/">Nederland</a></h3>
-          <p>Board of Trustees and Planning Commission. 6 meetings since Sept. 15.</p>
+          <p>Board of Trustees and Planning Commission.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://superior.civiccastbrief.org/">Superior</a></h3>
-          <p>Town Council. 3 meetings since Sept. 28.</p>
+          <p>Town Council.</p>
         </div>
         <div class="card">
           <span class="tag tag-ok">Live</span>
           <h3><a href="https://erie.civiccastbrief.org/">Erie</a></h3>
-          <p>Town Council, Planning Commission and Urban Renewal Authority. 11 meetings since Sept. 22.</p>
+          <p>Town Council, Planning Commission and Urban Renewal Authority.</p>
         </div>
       </div>
     </div>
@@ -155,7 +155,7 @@
     <div class="wrap">
       <p class="kicker">How it works</p>
       <h2>One weekly run, from meeting video to published page.</h2>
-      <p class="intro">The weekly run finds the last seven days of meetings and takes each new one through every step.
+      <p class="intro">The weekly run finds the last 14 days of meetings and takes each new one through every step.
         It records each step, so running it again retries only what failed.</p>
       <ol class="steps">
         <li><h3>Find</h3><p><code>city find</code> finds a city's meeting sources, with no AI model. You tick what to keep.</p></li>
@@ -195,7 +195,7 @@
         <article class="cap">
           <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7v4M16 7v4M4 10v1M20 10v1"/><path d="M8 21h8"/></svg></div>
           <h3>A two-host podcast</h3>
-          <p>Each meeting gets an episode with chapters and a transcript, read by the Dia2 voice engine on your own GPU. The feed follows the Apple Podcasts and Spotify formats.</p>
+          <p>Each meeting gets an episode with chapters and a transcript, read by Gemini Flash TTS, with Flash-Lite and a local LFM3 CPU voice as fallbacks. The feed follows the Apple Podcasts and Spotify formats.</p>
         </article>
         <article class="cap">
           <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
@@ -263,7 +263,7 @@
         <div class="arch-scroll">
         <svg viewBox="0 0 1100 420" role="img" aria-labelledby="arch-t arch-d">
           <title id="arch-t">CivicCast Brief architecture</title>
-          <desc id="arch-d">Public records (meeting video and captions, agenda, packet and minutes, member lists) feed the weekly run. The weekly run makes a transcript with speakers, a recap, and a story and podcast script, using a writing model through claude -p or Ollama. Checks pass items to the editor desk. Published items get audio from Dia2, a static site and feed, and are deployed to Cloudflare Pages and R2 or any folder, where readers and podcast apps reach them.</desc>
+          <desc id="arch-d">Public records (meeting video and captions, agenda, packet and minutes, member lists) feed the weekly run. The weekly run makes a transcript with speakers, a recap, and a story and podcast script, using a writing model through claude -p or Ollama. Checks pass items to the editor desk. Published items get audio from Gemini TTS or a local voice engine, a static site and feed, and are deployed to Cloudflare Pages and R2 or any folder, where readers and podcast apps reach them.</desc>
           <defs>
             <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
             <marker id="ak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-k" d="M0 0L10 5L0 10z"/></marker>
@@ -317,7 +317,7 @@
           <path class="ln-k" d="M782 198H810" marker-end="url(#ak)"/>
 
           <rect class="box-k" x="812" y="80" width="254" height="56" rx="10"/>
-          <text class="t" x="828" y="104">Audio</text><text class="s" x="828" y="123">Dia2 on an NVIDIA GPU, chapters</text>
+          <text class="t" x="828" y="104">Audio</text><text class="s" x="828" y="123">Gemini or local voice, chapters</text>
           <rect class="box-k" x="812" y="170" width="254" height="56" rx="10"/>
           <text class="t" x="828" y="194">Static site and feed</text><text class="s" x="828" y="213">stories, search, archives</text>
           <rect class="box" x="812" y="260" width="254" height="56" rx="10"/>
@@ -331,7 +331,7 @@
         </div>
       </div>
       <div class="arch-notes">
-        <p><b>Python 3.12 with uv.</b> One package with a command per step: meeting, script, article, review, audio, site, weekly and station.</p>
+        <p><b>Python 3.12 with uv.</b> One package with a command per step: city, meeting, script, article, review, audio, site, weekly and station.</p>
         <p><b>No API key.</b> Claude is called through <code>claude -p</code> on a subscription; other bodies can use any model in Ollama.</p>
         <p><b>Diagrams in the manual.</b> The <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md#4-architecture">architecture section</a> has the pipeline, the parts, an item's life on the desk and the station with a PC worker.</p>
       </div>
@@ -354,7 +354,8 @@
           <ul>
             <li>Windows 11 and Google Chrome</li>
             <li>Ollama, or a Claude subscription, for writing</li>
-            <li>An NVIDIA GPU for audio</li>
+            <li>A Gemini API key, or the local LFM3 model, for audio; Gemini sends the script to Google</li>
+            <li>An NVIDIA GPU only if you choose the Dia2 voice engine</li>
           </ul>
         </div>
       </div>
@@ -374,7 +375,11 @@
     --base-url https://yourcity.example.org `
     --media-base-url https://media.example.org</code></pre>
         </div>
-        <p class="cta-note" style="margin-top:14px">Every option is in
+        <p class="cta-note" style="margin-top:14px">Start with the manual for
+          <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md#1-new-users">new users</a>
+          or <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md#3-technical-users">technical users</a>,
+          or read the <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/user-manual.md#4-architecture">architecture</a>.
+          Every option is in
           <a href="https://github.com/scottconverse/civiccast-brief/blob/main/docs/set-up-a-city.md">Set up a city</a>.</p>
       </div>
     </div>
@@ -408,7 +413,7 @@
     <div class="wrap">
       <p class="kicker">Status</p>
       <h2>Early, working, and honest about the gaps.</h2>
-      <p class="intro">Version 0.3.0. The whole pipeline runs every week for eight real Colorado towns. Some outside services are not connected yet.</p>
+      <p class="intro"><a href="https://github.com/scottconverse/civiccast-brief/releases/tag/v0.4.0">Version 0.4.0</a>. The whole pipeline runs every week for eight real Colorado towns. Some outside services are not connected yet.</p>
       <div class="status">
         <div class="col yes">
           <h3>Works today</h3>
@@ -426,7 +431,7 @@
             <li>No Apple Podcasts or Spotify listing. The feed is ready for both.</li>
             <li>Email sign-up code exists but is not connected to a sending account, and is not on the Longmont site.</li>
             <li>The Hostinger guide has not been run on a Linux server.</li>
-            <li>Built and tested for Windows. Audio needs an NVIDIA GPU.</li>
+            <li>Built and tested for Windows. The Dia2 voice engine needs an NVIDIA GPU; the weekly voice runs on Gemini or LFM3 on the CPU.</li>
             <li>One meeting at a time: no beats, opinion pieces or records requests.</li>
           </ul>
         </div>
