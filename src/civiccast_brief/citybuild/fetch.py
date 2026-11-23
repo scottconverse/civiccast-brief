@@ -10,6 +10,7 @@ request instead of asking again.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,6 +20,12 @@ import httpx
 
 from civiccast_brief.record import pacing
 from civiccast_brief.record.adapters.primegov import MAX_REDIRECTS, decode_html
+from civiccast_brief.record.video.civicclerk.listing import (
+    RETRY_STATUS as CIVICCLERK_RETRY_STATUS,
+)
+from civiccast_brief.record.video.civicclerk.listing import (
+    RETRY_WAITS_S as CIVICCLERK_RETRY_WAITS_S,
+)
 
 TIMEOUT_S = 30.0
 MAX_BYTES = 8_000_000
@@ -26,6 +33,8 @@ MAX_BYTES = 8_000_000
 #: Zoning Board of Adjustment packet for 9 October 2024 is 15.7 MB). The same as the browser's.
 DOCUMENT_BYTES = 150_000_000
 _YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com")
+#: The CivicClerk API hosts. Their document GETs are asked again after a brief server failure.
+_CIVICCLERK_HOST_SUFFIX = ".api.civicclerk.com"
 
 
 class FetchError(RuntimeError):
@@ -57,6 +66,7 @@ class Fetcher:
     log: Callable[[str], None] = lambda _line: None
     max_bytes: int = MAX_BYTES
     asked: list[str] = field(default_factory=list)
+    sleep: Callable[[float], None] = time.sleep
 
     def __post_init__(self) -> None:
         if self.client is None:
@@ -76,7 +86,8 @@ class Fetcher:
                 pacing.pacer().wait(what="the city search")
             except pacing.PaceHeld as exc:
                 raise FetchError(f"{url}: {exc}") from exc
-        return self._send("GET", url, youtube=youtube, limit=max_bytes)
+        retry = host.endswith(_CIVICCLERK_HOST_SUFFIX)
+        return self._send("GET", url, youtube=youtube, limit=max_bytes, retry=retry)
 
     def post_json(self, url: str, data: Any) -> Page:
         """POST ``data`` as JSON to ``url``, for a meeting calendar that is asked that way."""
@@ -90,34 +101,50 @@ class Fetcher:
         youtube: bool = False,
         data: Any = None,
         limit: int | None = None,
+        retry: bool = False,
     ) -> Page:
         limit = self.max_bytes if limit is None else limit
-        self.asked.append(url)
-        self.log(f"{method} {url}")
-        assert self.client is not None
-        extra: dict[str, Any] = {} if data is None else {"json": data}
-        try:
-            with self.client.stream(method, url, **extra) as response:
-                if youtube and response.status_code == pacing.RATE_LIMIT_STATUS:
-                    pacing.pacer().rate_limited(what="the city search", marker="HTTP 429")
-                    raise FetchError(f"{url}: YouTube answered 429; YouTube requests now wait")
-                if response.status_code != 200:
-                    raise FetchError(f"{url} answered HTTP {response.status_code}")
-                chunks: list[bytes] = []
-                total = 0
-                for chunk in response.iter_bytes():
-                    total += len(chunk)
-                    if total > limit:
-                        raise FetchError(f"{url} is larger than {limit} bytes")
-                    chunks.append(chunk)
-                return Page(
-                    url=str(response.url),
-                    status=response.status_code,
-                    content=b"".join(chunks),
-                    content_type=response.headers.get("content-type", ""),
-                )
-        except httpx.HTTPError as exc:
-            raise FetchError(f"{url} could not be reached: {exc}") from exc
+        attempts = len(CIVICCLERK_RETRY_WAITS_S) + 1 if retry else 1
+        for attempt in range(1, attempts + 1):
+            self.asked.append(url)
+            self.log(f"{method} {url}")
+            assert self.client is not None
+            extra: dict[str, Any] = {} if data is None else {"json": data}
+            try:
+                with self.client.stream(method, url, **extra) as response:
+                    if youtube and response.status_code == pacing.RATE_LIMIT_STATUS:
+                        pacing.pacer().rate_limited(what="the city search", marker="HTTP 429")
+                        raise FetchError(f"{url}: YouTube answered 429; YouTube requests now wait")
+                    if response.status_code != 200:
+                        if (
+                            retry
+                            and response.status_code in CIVICCLERK_RETRY_STATUS
+                            and attempt < attempts
+                        ):
+                            self.sleep(CIVICCLERK_RETRY_WAITS_S[attempt - 1])
+                            continue
+                        raise FetchError(f"{url} answered HTTP {response.status_code}")
+                    chunks: list[bytes] = []
+                    total = 0
+                    for chunk in response.iter_bytes():
+                        total += len(chunk)
+                        if total > limit:
+                            raise FetchError(f"{url} is larger than {limit} bytes")
+                        chunks.append(chunk)
+                    return Page(
+                        url=str(response.url),
+                        status=response.status_code,
+                        content=b"".join(chunks),
+                        content_type=response.headers.get("content-type", ""),
+                    )
+            except (httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                if retry and attempt < attempts:
+                    self.sleep(CIVICCLERK_RETRY_WAITS_S[attempt - 1])
+                    continue
+                raise FetchError(f"{url} could not be reached: {exc}") from exc
+            except httpx.HTTPError as exc:
+                raise FetchError(f"{url} could not be reached: {exc}") from exc
+        raise AssertionError("unreachable: the loop returns or raises on its last attempt")
 
     def try_get(self, url: str) -> Page | None:
         """GET ``url``, or None when it cannot be read."""
