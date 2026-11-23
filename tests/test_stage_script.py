@@ -116,8 +116,21 @@ def test_the_script_refuses_a_pages_project_that_is_not_the_test_project():
     assert "civiccast-brief-test" in (out.stdout + out.stderr)
 
 
-def test_the_script_refuses_an_r2_prefix_outside_test():
-    out = run_stage(*PLAN, "-Tier", "Test", "-City", "superior", "-R2Prefix", "superior/")
+def test_the_script_refuses_an_r2_prefix_outside_test(tmp_path: Path):
+    source = make_fake_source(tmp_path)
+    out = run_stage(
+        *PLAN,
+        "-Tier",
+        "Test",
+        "-City",
+        "superior",
+        "-R2Prefix",
+        "superior/",
+        "-Source",
+        str(source),
+        "-OutRoot",
+        str(tmp_path / "out"),
+    )
     assert out.returncode != 0
     assert "test/" in (out.stdout + out.stderr)
 
