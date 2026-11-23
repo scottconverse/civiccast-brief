@@ -27,6 +27,11 @@
 # The Cloudflare credential is read exactly as ops\publish-city.ps1 reads it. It is never
 # printed or logged.
 #
+# The Cloudflare account id comes from the user environment variable CIVICCAST_CF_ACCOUNT_ID,
+# else a CLOUDFLARE_ACCOUNT_ID already set, else the first CLOUDFLARE_ACCOUNT_ID = '<32 hex>'
+# line in a weekly-*.ps1 in the city folder. The id is not a secret, but only its length and
+# source are printed. A Test run with no id stops before any upload.
+#
 # ASCII only: Windows PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI.
 
 [CmdletBinding()]
@@ -515,6 +520,18 @@ if ((Get-Content -LiteralPath $headersPath -Raw) -notmatch 'X-Robots-Tag:\s*noin
 }
 Say 'the built site sends X-Robots-Tag: noindex on every page'
 
+try {
+    $account = Resolve-StageCloudflareAccountId `
+        -UserValue ([Environment]::GetEnvironmentVariable('CIVICCAST_CF_ACCOUNT_ID', 'User')) `
+        -CityFolder $Source
+} catch {
+    Stop-Stage $_.Exception.Message
+}
+# The id is an identifier, not a secret, but only its length and source are printed.
+Say "Cloudflare account id: $($account.Id.Length) characters from $($account.Source)"
+$env:CLOUDFLARE_ACCOUNT_ID = $account.Id
+Remove-Variable account
+
 Step 'upload changed media to R2'
 Set-Location -LiteralPath (Join-Path $Repo 'worker\signup')
 $token = & $Python -c "import sys; from civiccast_brief.record.credentials import read_windows_credential as r; sys.stdout.write(r('CivicCastBrief/cloudflare-deploy') or '')"
@@ -522,7 +539,6 @@ if ($token) {
     $env:CLOUDFLARE_API_TOKEN = $token
     Say 'using the saved Cloudflare deploy token'
 }
-$env:CLOUDFLARE_ACCOUNT_ID = [Environment]::GetEnvironmentVariable('CIVICCAST_CF_ACCOUNT_ID', 'User')
 Remove-Variable token
 
 $types = @{ '.mp3' = 'audio/mpeg'; '.json' = 'application/json'; '.vtt' = 'text/vtt' }

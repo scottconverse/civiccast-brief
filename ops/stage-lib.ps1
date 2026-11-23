@@ -253,3 +253,51 @@ function Assert-StageSource {
         }
     }
 }
+
+
+function Resolve-StageCloudflareAccountId {
+    <# Find the Cloudflare account id a Test run uploads and deploys with.
+
+       Order: (1) the user environment variable CIVICCAST_CF_ACCOUNT_ID, (2) a
+       CLOUDFLARE_ACCOUNT_ID already in the process environment, (3) the first
+       CLOUDFLARE_ACCOUNT_ID = '<32 hex>' line in a weekly-*.ps1 file sitting directly
+       in the city folder. Only that folder is read, with no recursion, and the file is
+       never changed.
+
+       The id is an identifier, not a secret, but callers must print only its length and
+       the source name, never the value. Returns an object: Id, Source.
+
+       Throws when no id is found, so a Test run stops before any upload. #>
+    param(
+        [string]$UserValue = '',
+        [string]$CityFolder = ''
+    )
+    if ($UserValue -match '^[0-9a-fA-F]{32}$') {
+        return [pscustomobject]@{
+            Id     = $UserValue
+            Source = 'the user environment variable CIVICCAST_CF_ACCOUNT_ID'
+        }
+    }
+    if ($env:CLOUDFLARE_ACCOUNT_ID -match '^[0-9a-fA-F]{32}$') {
+        return [pscustomobject]@{
+            Id     = $env:CLOUDFLARE_ACCOUNT_ID
+            Source = 'the CLOUDFLARE_ACCOUNT_ID environment variable'
+        }
+    }
+    if ($CityFolder -and (Test-Path -LiteralPath $CityFolder -PathType Container)) {
+        foreach ($file in Get-ChildItem -LiteralPath $CityFolder -File -Filter 'weekly-*.ps1' |
+                Sort-Object Name) {
+            $text = [System.IO.File]::ReadAllText($file.FullName)
+            $match = [regex]::Match($text, "CLOUDFLARE_ACCOUNT_ID\s*=\s*'([0-9a-fA-F]{32})'")
+            if ($match.Success) {
+                return [pscustomobject]@{
+                    Id     = $match.Groups[1].Value
+                    Source = "the weekly script $($file.Name)"
+                }
+            }
+        }
+    }
+    throw ("No Cloudflare account id found: set the user environment variable " +
+        'CIVICCAST_CF_ACCOUNT_ID, set CLOUDFLARE_ACCOUNT_ID, or keep a ' +
+        "CLOUDFLARE_ACCOUNT_ID = '<32 hex>' line in a weekly-*.ps1 file in the city folder.")
+}
