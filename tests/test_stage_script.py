@@ -248,7 +248,10 @@ EPISODE = """{
     ("tier_media_base", "expected"),
     [
         ("http://127.0.0.1:3200/media", "http://127.0.0.1:3200/media/"),
-        ("https://media.civiccastbrief.org/test/superior", "https://media.civiccastbrief.org/test/superior/"),
+        (
+            "https://media.civiccastbrief.org/test/superior",
+            "https://media.civiccastbrief.org/test/superior/",
+        ),
     ],
 )
 def test_the_copy_rewrites_only_the_live_city_media_prefix(
@@ -265,7 +268,7 @@ def test_the_copy_rewrites_only_the_live_city_media_prefix(
     )
 
     out = run_pwsh(
-        f". $env:STAGE_LIB; "
+        ". $env:STAGE_LIB; "
         "Set-StageEpisodeMediaBase -Folder $env:EPISODES -City superior "
         "-MediaBaseUrl $env:MEDIA_BASE",
         env={
@@ -305,25 +308,23 @@ def test_the_guard_finds_the_live_address_in_every_built_page_type(tmp_path: Pat
     (site / "episodes" / "x" / "index.html").write_text(
         '<audio src="https://media.civiccastbrief.org/superior/x.mp3">', encoding="utf-8"
     )
-    (site / "search.json").write_text('["https://media.civiccastbrief.org/superior/x.mp3"]', encoding="utf-8")
+    (site / "search.json").write_text(
+        '["https://media.civiccastbrief.org/superior/x.mp3"]', encoding="utf-8"
+    )
     (site / "clean.json").write_text(
         '["https://media.civiccastbrief.org/test/superior/x.mp3"]', encoding="utf-8"
     )
-    (site / "notes.txt").write_text(
-        "https://superior.civiccastbrief.org/", encoding="utf-8"
-    )
+    (site / "notes.txt").write_text("https://superior.civiccastbrief.org/", encoding="utf-8")
 
     out = run_pwsh(
-        f". $env:STAGE_LIB; "
-        "@(Find-StageLiveAddress -Root $env:SITE -City superior).Count",
+        ". $env:STAGE_LIB; @(Find-StageLiveAddress -Root $env:SITE -City superior).Count",
         env={"STAGE_LIB": str(LIB), "SITE": str(site)},
     )
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.strip().splitlines()[-1] == "5"
 
     clean_out = run_pwsh(
-        f". $env:STAGE_LIB; "
-        "@(Find-StageLiveAddress -Root $env:SITE -City superior).Count",
+        ". $env:STAGE_LIB; @(Find-StageLiveAddress -Root $env:SITE -City superior).Count",
         env={
             "STAGE_LIB": str(LIB),
             "SITE": str(tmp_path / "clean"),
@@ -340,7 +341,7 @@ def test_the_noindex_header_goes_inside_the_root_rule(tmp_path: Path):
         encoding="utf-8",
     )
     out = run_pwsh(
-        f". $env:STAGE_LIB; Set-StageNoindexHeader -Path $env:HEADERS",
+        ". $env:STAGE_LIB; Set-StageNoindexHeader -Path $env:HEADERS",
         env={"STAGE_LIB": str(LIB), "HEADERS": str(headers)},
     )
     assert out.returncode == 0, out.stdout + out.stderr
@@ -359,7 +360,7 @@ def test_the_noindex_header_creates_the_root_rule_when_it_is_missing(tmp_path: P
     headers = tmp_path / "_headers"
     headers.write_text("/assets/*\n  Cache-Control: max-age=3600\n", encoding="utf-8")
     out = run_pwsh(
-        f". $env:STAGE_LIB; Set-StageNoindexHeader -Path $env:HEADERS; "
+        ". $env:STAGE_LIB; Set-StageNoindexHeader -Path $env:HEADERS; "
         "Set-StageNoindexHeader -Path $env:HEADERS",
         env={"STAGE_LIB": str(LIB), "HEADERS": str(headers)},
     )
@@ -382,9 +383,9 @@ def test_the_run_verdict_collects_source_problem_lines(tmp_path: Path):
         encoding="utf-8",
     )
     out = run_pwsh(
-        f". $env:STAGE_LIB; "
+        ". $env:STAGE_LIB; "
         "$v = Get-StageRunVerdict -ExitCode 5 -LogPath $env:LOG; "
-        "Write-Output \"passed=$($v.Passed) code=$($v.ExitCode) count=$($v.Problems.Count)\"; "
+        'Write-Output "passed=$($v.Passed) code=$($v.ExitCode) count=$($v.Problems.Count)"; '
         "$v.Problems | ForEach-Object { Write-Output $_ }",
         env={"STAGE_LIB": str(LIB), "LOG": str(log)},
     )
