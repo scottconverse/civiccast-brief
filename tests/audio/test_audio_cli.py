@@ -155,7 +155,7 @@ def _patch_finish(monkeypatch, error: Exception | None = None) -> None:
         if error is not None:
             raise error
         return SimpleNamespace(
-            loudness=SimpleNamespace(integrated_lufs=-16.0, true_peak_dbtp=-1.0),
+            loudness=SimpleNamespace(integrated_lufs=-18.0, true_peak_dbtp=-1.0),
             chapters={},
             chapters_json=out / "chapters.json",
             mp3=out / "episode.mp3",

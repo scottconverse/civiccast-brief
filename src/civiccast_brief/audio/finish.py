@@ -1,7 +1,7 @@
 """Audio finishing: intro and outro stitching, loudness, MP3, chapters.json and WebVTT.
 
 Loudness is set by one constant gain over the whole stitched program, followed by a lookahead
-limiter (`alimiter`). The targets are -16 LUFS integrated and -1.5 dBTP true peak, measured on
+limiter (`alimiter`). The targets are -18 LUFS integrated and -1.5 dBTP true peak, measured on
 the delivered MP3.
 
 The gain does not come from loudnorm. loudnorm only applies a constant gain when its linear mode
@@ -25,7 +25,7 @@ slowest search (MP3_COMPRESSION_LEVEL), which cuts that overshoot from about 3 d
 1 dB at the same bitrate. The MP3 is measured with ebur128 after encoding; if its true peak is
 over -1.5 dBTP the ceiling is lowered by the overshoot and the master re-rendered from the
 stitched program (never from a previously limited master, so gain reduction does not compound).
-The master is held at MASTER_TARGET_LUFS so the decoded MP3 lands near -16 LUFS; the peak ceiling
+The master is held at MASTER_TARGET_LUFS so the decoded MP3 lands near -18 LUFS; the peak ceiling
 takes priority when both cannot be met. Neither the gain nor the limiter changes the length.
 
 MP3 is mono at 44.1 kHz, LAME at 64 kbps. The output is one voice at a time, so a single channel
@@ -54,10 +54,10 @@ from civiccast_brief.audio.errors import FinishError
 from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg
 from civiccast_brief.audio.lines import SPEAKERS, Line, Script
 
-TARGET_LUFS = -16.0
+TARGET_LUFS = -18.0
 TARGET_TRUE_PEAK_DBTP = -1.5
-# LAME loses ~0.3-0.4 LU, so a master aimed a little hot lands the decoded MP3 near -16 LUFS.
-MASTER_TARGET_LUFS = -15.7
+# LAME loses ~0.3-0.4 LU, so a master aimed a little hot lands the decoded MP3 near -18 LUFS.
+MASTER_TARGET_LUFS = -17.7
 LOUDNESS_TOLERANCE_LU = 0.5
 # Peak must clear the target by this much, so codec noise cannot land exactly on the boundary.
 MP3_PEAK_MARGIN_DB = 0.1
@@ -227,7 +227,7 @@ def encode_mp3(master: Path, out_mp3: Path) -> None:
 
 def pick_attempt(attempts: list[tuple[Path, Path, Loudness]]) -> tuple[Path, Path, Loudness]:
     """The peak ceiling wins: prefer attempts at or under the target after the MP3 margin, then
-    the one nearest -16 LUFS. With none under it, publish the lowest peak and warn: the voices are
+    the one nearest -18 LUFS. With none under it, publish the lowest peak and warn: the voices are
     already paid for, and a 0.1 dB miss must not throw a finished episode away."""
     ceiling = TARGET_TRUE_PEAK_DBTP - MP3_PEAK_MARGIN_DB
     under_ceiling = [attempt for attempt in attempts if attempt[2].true_peak_dbtp <= ceiling]

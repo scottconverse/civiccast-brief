@@ -2,6 +2,11 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
+## Unreleased
+
+- Episodes are mastered at -18 LUFS (was -16) so the limiter no longer turns speech down by more
+  than 3 dB; one constant gain is applied to the whole episode.
+
 ## 0.4.0 — 2026-11-21
 
 ### The podcast

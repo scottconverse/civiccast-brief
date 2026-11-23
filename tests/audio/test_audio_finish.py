@@ -16,6 +16,7 @@ from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg, tools_avail
 from civiccast_brief.audio.finish import (
     SAMPLE_RATE,
     SPEAKER_NAMES,
+    TARGET_LUFS,
     Cue,
     Loudness,
     chapter_marks,
@@ -178,7 +179,7 @@ def test_fake_episode_has_consistent_timing_chapters_and_transcript(tmp_path: Pa
 
     # Loudness of the delivered MP3, measured by ffmpeg ebur128.
     measured = measure_loudness(files.mp3)
-    assert abs(measured.integrated_lufs - (-16.0)) <= 1.0
+    assert abs(measured.integrated_lufs - TARGET_LUFS) <= 1.0
     assert measured.true_peak_dbtp <= -1.0
 
 
@@ -219,7 +220,7 @@ def test_silent_program_cannot_be_normalised(tmp_path: Path) -> None:
     run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "2", str(silent)])
     with pytest.raises(FinishError, match="silent"):
         finish_module.solve_limiter_gain(
-            silent, tmp_path / "out.wav", ceiling_db=-1.5, target_lufs=-15.7
+            silent, tmp_path / "out.wav", ceiling_db=-1.5, target_lufs=-17.7
         )
 
 
@@ -346,7 +347,7 @@ def _stub_mastering(monkeypatch: pytest.MonkeyPatch, measurements: list[Loudness
 def test_master_keeps_the_first_attempt_when_it_meets_both_targets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    ceilings = _stub_mastering(monkeypatch, [Loudness(-16.1, -1.7, 4.0)])
+    ceilings = _stub_mastering(monkeypatch, [Loudness(-18.1, -1.7, 4.0)])
     work = tmp_path / "work"
     work.mkdir()
     master, mp3, loudness = finish_module.master_for_mp3(
@@ -354,7 +355,7 @@ def test_master_keeps_the_first_attempt_when_it_meets_both_targets(
     )
 
     assert ceilings == [-1.5]
-    assert loudness == Loudness(-16.1, -1.7, 4.0)
+    assert loudness == Loudness(-18.1, -1.7, 4.0)
     assert (tmp_path / "episode.mp3").read_text(encoding="utf-8") == "episode-1.mp3"
     assert master.read_text(encoding="utf-8") == "master-1.wav"
     assert mp3 == tmp_path / "episode.mp3"
@@ -364,7 +365,7 @@ def test_master_lowers_the_ceiling_by_the_mp3_overshoot_and_keeps_the_passing_at
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # First attempt overshoots by 2.6 dB above the -1.6 dB peak margin; the retry passes.
-    ceilings = _stub_mastering(monkeypatch, [Loudness(-16.0, 1.0, 5.0), Loudness(-16.2, -1.8, 4.0)])
+    ceilings = _stub_mastering(monkeypatch, [Loudness(-18.0, 1.0, 5.0), Loudness(-18.2, -1.8, 4.0)])
     work = tmp_path / "work"
     work.mkdir()
     _, _mp3, loudness = finish_module.master_for_mp3(
@@ -387,10 +388,10 @@ def test_master_gives_up_and_publishes_the_lowest_peak_with_a_warning(
     _stub_mastering(
         monkeypatch,
         [
-            Loudness(-16.0, -1.0, 5.0),
-            Loudness(-16.4, -1.2, 4.5),
-            Loudness(-17.0, -1.4, 4.0),
-            Loudness(-16.8, -1.3, 4.2),
+            Loudness(-18.0, -1.0, 5.0),
+            Loudness(-18.4, -1.2, 4.5),
+            Loudness(-19.0, -1.4, 4.0),
+            Loudness(-18.8, -1.3, 4.2),
         ],
     )
     work = tmp_path / "work"
@@ -412,7 +413,7 @@ def test_the_peak_margin_is_kept_when_an_attempt_is_chosen(
     # -1.5 dBTP meets the public ceiling but not the margin the MP3 needs; the -1.6 one wins.
     _stub_mastering(
         monkeypatch,
-        [Loudness(-16.0, -1.5, 5.0), Loudness(-16.4, -1.6, 4.5)],
+        [Loudness(-18.0, -1.5, 5.0), Loudness(-18.4, -1.6, 4.5)],
     )
     work = tmp_path / "work"
     work.mkdir()
@@ -427,9 +428,9 @@ def test_pick_attempt_prefers_a_peak_under_the_ceiling_then_the_loudest_close_to
     tmp_path: Path,
 ) -> None:
     attempts = [
-        (tmp_path / "m1", tmp_path / "e1", Loudness(-15.0, -0.5, 5.0)),
-        (tmp_path / "m2", tmp_path / "e2", Loudness(-16.4, -1.8, 4.0)),
-        (tmp_path / "m3", tmp_path / "e3", Loudness(-16.1, -1.6, 4.2)),
+        (tmp_path / "m1", tmp_path / "e1", Loudness(-17.0, -0.5, 5.0)),
+        (tmp_path / "m2", tmp_path / "e2", Loudness(-18.4, -1.8, 4.0)),
+        (tmp_path / "m3", tmp_path / "e3", Loudness(-18.1, -1.6, 4.2)),
     ]
     _, mp3, _ = finish_module.pick_attempt(attempts)
     assert mp3.name == "e3"
@@ -443,7 +444,7 @@ def test_finish_episode_delivers_an_mp3_within_both_targets(tmp_path: Path) -> N
     files = finish_episode(render, script, out)
 
     measured = measure_loudness(files.mp3)
-    assert abs(measured.integrated_lufs - (-16.0)) <= 0.5
+    assert abs(measured.integrated_lufs - TARGET_LUFS) <= 0.5
     assert measured.true_peak_dbtp <= -1.5
 
 
