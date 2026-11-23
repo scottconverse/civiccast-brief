@@ -346,7 +346,7 @@ def test_cli_uses_lfm3_when_the_gemini_render_fails(tmp_path: Path, capsys, monk
 
     def finish_episode(render, script, out, *, intro=None, outro=None):
         return SimpleNamespace(
-            loudness=SimpleNamespace(integrated_lufs=-16.0, true_peak_dbtp=-1.0),
+            loudness=SimpleNamespace(integrated_lufs=-18.0, true_peak_dbtp=-1.0),
             chapters={},
             chapters_json=out / "chapters.json",
             mp3=out / "episode.mp3",

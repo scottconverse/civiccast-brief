@@ -458,7 +458,7 @@ first fails. The live weekly scripts use `--audio-engine gemini --audio-fallback
 Gemini needs a Google API key; LFM3 needs `llama-tts` and the LFM3 model files on the PC; Dia2 and
 Chatterbox need the GPU PC.
 
-This writes `episode.mp3` (at -16 LUFS, under -1.5 dBTP), `chapters.json` and `transcript.vtt`.
+This writes `episode.mp3` (at -18 LUFS, under -1.5 dBTP), `chapters.json` and `transcript.vtt`.
 
 ## 7. Build the site
 

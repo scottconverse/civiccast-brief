@@ -550,7 +550,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A["audio command<br/>--engine NAME"] --> B{"Did the primary<br/>engine render?"}
-    B -->|yes| H["finish the episode<br/>-16 LUFS, under -1.5 dBTP"]
+    B -->|yes| H["finish the episode<br/>-18 LUFS, under -1.5 dBTP"]
     B -->|no| C{"Is --fallback-engine<br/>set?"}
     C -->|no| X["the run fails<br/>and the error is printed"]
     C -->|yes| D["render with the fallback engine"]
