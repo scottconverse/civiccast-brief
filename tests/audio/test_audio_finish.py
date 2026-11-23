@@ -1,6 +1,7 @@
 import array
 import itertools
 import json
+import math
 import re
 import wave
 from dataclasses import dataclass
@@ -21,7 +22,6 @@ from civiccast_brief.audio.finish import (
     chapters_document,
     finish_episode,
     measure_loudness,
-    normalize_loudness,
     parse_ebur128_summary,
     vtt_document,
     vtt_timestamp,
@@ -218,7 +218,9 @@ def test_silent_program_cannot_be_normalised(tmp_path: Path) -> None:
     silent = tmp_path / "silent.wav"
     run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "2", str(silent)])
     with pytest.raises(FinishError, match="silent"):
-        normalize_loudness(silent, tmp_path / "out.wav")
+        finish_module.solve_limiter_gain(
+            silent, tmp_path / "out.wav", ceiling_db=-1.5, target_lufs=-15.7
+        )
 
 
 # --- true-peak limiter and MP3 headroom (stubbed ffmpeg) ------------------------------------
@@ -323,9 +325,6 @@ def _stub_mastering(monkeypatch: pytest.MonkeyPatch, measurements: list[Loudness
     ceilings: list[float] = []
     remaining = list(measurements)
 
-    def fake_normalize(program: Path, out_wav: Path, *, true_peak: float = -1.5) -> None:
-        out_wav.write_text("normalised", encoding="utf-8")
-
     def fake_solve(program: Path, out_wav: Path, *, ceiling_db: float, target_lufs: float) -> float:
         ceilings.append(ceiling_db)
         out_wav.write_text(out_wav.name, encoding="utf-8")
@@ -337,7 +336,6 @@ def _stub_mastering(monkeypatch: pytest.MonkeyPatch, measurements: list[Loudness
     def fake_measure(path: Path) -> Loudness:
         return remaining.pop(0)
 
-    monkeypatch.setattr(finish_module, "normalize_loudness", fake_normalize)
     monkeypatch.setattr(finish_module, "solve_limiter_gain", fake_solve)
     monkeypatch.setattr(finish_module, "encode_mp3", fake_encode)
     monkeypatch.setattr(finish_module, "measure_loudness", fake_measure)
@@ -447,6 +445,49 @@ def test_finish_episode_delivers_an_mp3_within_both_targets(tmp_path: Path) -> N
     measured = measure_loudness(files.mp3)
     assert abs(measured.integrated_lufs - (-16.0)) <= 0.5
     assert measured.true_peak_dbtp <= -1.5
+
+
+def _write_tone_program(path: Path, segments: list[tuple[float, float]]) -> None:
+    """A mono 16-bit WAV of 1 kHz sines. Each segment is (amplitude, seconds), in order."""
+    frames = array.array("h")
+    for amplitude, seconds in segments:
+        for index in range(round(seconds * SAMPLE_RATE)):
+            value = amplitude * math.sin(2 * math.pi * 1000 * index / SAMPLE_RATE)
+            frames.append(round(value * 32767))
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SAMPLE_RATE)
+        wav.writeframes(frames.tobytes())
+
+
+def _window_rms_db(path: Path, start_s: float, end_s: float) -> float:
+    with wave.open(str(path), "rb") as wav:
+        frames = array.array("h", wav.readframes(wav.getnframes()))
+    window = frames[round(start_s * SAMPLE_RATE) : round(end_s * SAMPLE_RATE)]
+    return 10 * math.log10(sum(value * value for value in window) / len(window) / 32768**2)
+
+
+@needs_ffmpeg
+def test_a_quiet_opening_gets_the_same_gain_as_the_rest_of_the_program(
+    tmp_path: Path,
+) -> None:
+    """One constant gain for the whole program.
+
+    A 1 kHz sine at 0.03 full scale for 2 s, a full-scale burst for 1 s (which put the program at
+    0 dBFS true peak, where loudnorm fell back to its time-varying dynamic gain and lifted the
+    opening by several dB), then 0.12 full scale to 8 s. Both measured windows stay below the
+    limiter ceiling after the gain, so only the gain itself is compared.
+    """
+    program = tmp_path / "program.wav"
+    _write_tone_program(program, [(0.03, 2.0), (0.99, 1.0), (0.12, 5.0)])
+    work = tmp_path / "work"
+    work.mkdir()
+    master, _, _ = finish_module.master_for_mp3(program, work, tmp_path / "episode.mp3")
+
+    opening = _window_rms_db(master, 0.2, 1.8) - _window_rms_db(program, 0.2, 1.8)
+    rest = _window_rms_db(master, 5.0, 7.5) - _window_rms_db(program, 5.0, 7.5)
+    assert opening == pytest.approx(rest, abs=0.3)
 
 
 def test_a_chapter_mark_title_starts_with_a_capital_letter() -> None:

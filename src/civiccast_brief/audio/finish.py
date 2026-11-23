@@ -1,26 +1,32 @@
 """Audio finishing: intro and outro stitching, loudness, MP3, chapters.json and WebVTT.
 
-Loudness is measured twice with ffmpeg's loudnorm, which targets -16 LUFS integrated, -1.5 dBTP
-true peak and 11 LU loudness range (set explicitly; loudnorm's own default range is 7 LU). The
-second pass uses linear gain when the peak ceiling allows it and loudnorm's dynamic gain when it
-does not. Neither mode changes the length, so the transcript and chapter times stay valid.
+Loudness is set by one constant gain over the whole stitched program, followed by a lookahead
+limiter (`alimiter`). The targets are -16 LUFS integrated and -1.5 dBTP true peak, measured on
+the delivered MP3.
 
-loudnorm alone cannot reach both targets on this speech. The material's true peak sits within a
-few tenths of a dB of full scale while its integrated loudness is about -20 LUFS, so the peak
-ceiling binds before the loudness target, and a 64 kbps LAME encode then lifts the decoded true
-peak above the master's again. Two changes handle that. LAME runs at its slowest search
-(MP3_COMPRESSION_LEVEL), which cuts the decoded peak overshoot from about 3 dB to well under
-1 dB at the same bitrate. And the master gets a lookahead limiter (`alimiter`) after loudnorm: it
-shaves only the samples above its ceiling and is a no-op when the peaks are already below it. Its
-delay compensation is on (`latency=true`). Without it the limiter outputs its lookahead delay
-first: every real episode came out 219 samples (5.0 ms at 44.1 kHz) later than the loudnorm
-output, which would slide the audio against the chapter and transcript times. With it, the
-output samples sit at the same positions as the input and the length is unchanged. The
-MP3 is measured with ebur128 after encoding; if its true peak is over -1.5 dBTP the ceiling is
-lowered by the overshoot and the master re-rendered from the loudnorm output (never from a
-previously limited master, so gain reduction does not compound). The master is held at
-MASTER_TARGET_LUFS so the decoded MP3 lands near -16 LUFS; the peak ceiling takes priority when
-both cannot be met. Neither step changes the length.
+The gain does not come from loudnorm. loudnorm only applies a constant gain when its linear mode
+is allowed, and that needs headroom below its peak ceiling; our voices peak at 0 dBFS, so every
+real episode fell back to loudnorm's dynamic mode. Dynamic loudnorm varies its gain over time:
+measured on three episodes it added 5.2 to 5.8 dB to the first five seconds and 2.4 to 2.9 dB
+after 0:20, although the raw voices are not clipped in their opening. The start of each program
+therefore came out louder than the rest. One constant gain cannot do that. `solve_limiter_gain`
+finds it by measuring rather than arithmetic, because the limiter is nonlinear: it renders the
+program at a gain, measures the limited WAV, and corrects the gain until the master sits at
+MASTER_TARGET_LUFS.
+
+The limiter shaves only the samples above its ceiling and is a no-op when the peaks are already
+below it. Its delay compensation is on (`latency=true`). Without it the limiter outputs its
+lookahead delay first: every real episode came out 219 samples (5.0 ms at 44.1 kHz) later than
+its input, which would slide the audio against the chapter and transcript times. With it, the
+output samples sit at the same positions as the input and the length is unchanged.
+
+A 64 kbps LAME encode then lifts the decoded true peak above the master's. LAME runs at its
+slowest search (MP3_COMPRESSION_LEVEL), which cuts that overshoot from about 3 dB to well under
+1 dB at the same bitrate. The MP3 is measured with ebur128 after encoding; if its true peak is
+over -1.5 dBTP the ceiling is lowered by the overshoot and the master re-rendered from the
+stitched program (never from a previously limited master, so gain reduction does not compound).
+The master is held at MASTER_TARGET_LUFS so the decoded MP3 lands near -16 LUFS; the peak ceiling
+takes priority when both cannot be met. Neither the gain nor the limiter changes the length.
 
 MP3 is mono at 44.1 kHz, LAME at 64 kbps. The output is one voice at a time, so a single channel
 carries it, and 64 kbps is 8 KB per second: a 90-second episode is about 720 KB, where 128 kbps
@@ -57,9 +63,10 @@ LOUDNESS_TOLERANCE_LU = 0.5
 MP3_PEAK_MARGIN_DB = 0.1
 MAX_LIMIT_ATTEMPTS = 4
 MAX_GAIN_STEPS = 6
+# ebur128's absolute gate is -70 LUFS, so nothing audible measures at or below this.
+SILENCE_LUFS = -70.0
 LIMITER_ATTACK_MS = 5
 LIMITER_RELEASE_MS = 50
-TARGET_LRA = 11.0
 SAMPLE_RATE = 44100
 MP3_BITRATE = "64k"
 # LAME's slowest search produces less quantization noise, so the decoded true peak overshoots
@@ -137,61 +144,6 @@ def stitch(voice: Path, intro: Path | None, outro: Path | None, out_wav: Path) -
     )
 
 
-def _loudnorm_measurements(stderr: str) -> dict[str, str]:
-    start, end = stderr.rfind("{"), stderr.rfind("}")
-    if start < 0 or end < start:
-        raise FinishError("loudnorm printed no measurements")
-    try:
-        data = json.loads(stderr[start : end + 1])
-    except json.JSONDecodeError as exc:
-        raise FinishError("loudnorm measurements were not valid JSON") from exc
-    needed = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
-    missing = [key for key in needed if key not in data]
-    if missing:
-        raise FinishError(f"loudnorm measurements lack {missing}")
-    return data
-
-
-def normalize_loudness(
-    program: Path, out_wav: Path, *, true_peak: float = TARGET_TRUE_PEAK_DBTP
-) -> None:
-    """Two-pass loudnorm to TARGET_LUFS and true_peak dBTP. Writes 16-bit mono WAV.
-
-    The measure pass and the apply pass use the same true-peak target.
-    """
-    measure_graph = f"loudnorm=I={TARGET_LUFS}:TP={true_peak}:LRA={TARGET_LRA}:print_format=json"
-    first = run_ffmpeg(
-        ["-nostats", "-i", str(program), "-af", measure_graph, "-f", "null", "-"],
-        what="loudness measurement",
-    )
-    measured = _loudnorm_measurements(first.stderr)
-    if measured["input_i"] in ("-inf", "inf"):
-        raise FinishError("the program is silent; there is nothing to normalise")
-    graph = (
-        f"loudnorm=I={TARGET_LUFS}:TP={true_peak}:LRA={TARGET_LRA}"
-        f":measured_I={measured['input_i']}:measured_TP={measured['input_tp']}"
-        f":measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}"
-        f":offset={measured['target_offset']}:linear=true:print_format=summary"
-    )
-    run_ffmpeg(
-        [
-            "-nostats",
-            "-i",
-            str(program),
-            "-af",
-            graph,
-            "-ar",
-            str(SAMPLE_RATE),
-            "-ac",
-            "1",
-            "-c:a",
-            "pcm_s16le",
-            str(out_wav),
-        ],
-        what="loudness normalisation",
-    )
-
-
 def limiter_filter(gain_db: float, ceiling_db: float) -> str:
     """Volume by gain_db, then a lookahead limiter whose sample peak never passes ceiling_db.
 
@@ -238,7 +190,10 @@ def solve_limiter_gain(
 
     Limiting is nonlinear, so the gain is found by measuring, not by arithmetic.
     """
-    gain_db = target_lufs - measure_loudness(program).integrated_lufs
+    source_lufs = measure_loudness(program).integrated_lufs
+    if source_lufs <= SILENCE_LUFS:
+        raise FinishError("the program is silent; there is nothing to normalise")
+    gain_db = target_lufs - source_lufs
     for _ in range(MAX_GAIN_STEPS):
         apply_peak_limiter(program, out_wav, gain_db=gain_db, ceiling_db=ceiling_db)
         measured = measure_loudness(out_wav).integrated_lufs
@@ -288,13 +243,12 @@ def pick_attempt(attempts: list[tuple[Path, Path, Loudness]]) -> tuple[Path, Pat
 
 
 def master_for_mp3(program: Path, work: Path, out_mp3: Path) -> tuple[Path, Path, Loudness]:
-    """Normalise and limit a stitched program, then encode. Returns (master, mp3 files, loudness).
+    """Apply one gain and the limiter to a stitched program, then encode. Returns
+    (master, mp3 files, loudness).
 
     The limiter ceiling is lowered by however far the decoded MP3's true peak overshoots, and
-    each attempt is re-rendered from the loudnorm output so gain reduction never compounds.
+    each attempt is re-rendered from the stitched program so gain reduction never compounds.
     """
-    normalised = work / "normalised.wav"
-    normalize_loudness(program, normalised)
     master = work / "master.wav"
     ceiling = TARGET_TRUE_PEAK_DBTP
     attempts: list[tuple[Path, Path, Loudness]] = []
@@ -302,7 +256,7 @@ def master_for_mp3(program: Path, work: Path, out_mp3: Path) -> tuple[Path, Path
         attempt_master = work / f"master-{number + 1}.wav"
         attempt_mp3 = work / f"episode-{number + 1}.mp3"
         solve_limiter_gain(
-            normalised, attempt_master, ceiling_db=ceiling, target_lufs=MASTER_TARGET_LUFS
+            program, attempt_master, ceiling_db=ceiling, target_lufs=MASTER_TARGET_LUFS
         )
         encode_mp3(attempt_master, attempt_mp3)
         loudness = measure_loudness(attempt_mp3)
