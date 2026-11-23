@@ -505,3 +505,105 @@ def test_a_failed_dev_run_serves_but_never_passes(tmp_path: Path):
                 timeout=10,
                 check=False,
             )
+
+
+ACCOUNT = "0123456789abcdef0123456789abcdef"
+OTHER_ACCOUNT = "fedcba9876543210fedcba9876543210"
+
+
+def make_weekly_account_stub(root: Path, account: str) -> Path:
+    """A city folder holding a weekly script that sets the Cloudflare account id."""
+    folder = root / "weekly-superior"
+    folder.mkdir()
+    (folder / "weekly-x.ps1").write_text(
+        f"$env:CLOUDFLARE_ACCOUNT_ID = '{account}'\n", encoding="utf-8"
+    )
+    return folder
+
+
+def resolve_account(
+    *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return run_pwsh(
+        ". $env:STAGE_LIB; "
+        "$a = Resolve-StageCloudflareAccountId " + " ".join(args) + "; "
+        'Write-Output "$($a.Id) $($a.Source)"',
+        env={
+            "STAGE_LIB": str(LIB),
+            "CIVICCAST_CF_ACCOUNT_ID": "",
+            "CLOUDFLARE_ACCOUNT_ID": "",
+            **(env or {}),
+        },
+    )
+
+
+def test_the_library_finds_the_account_id_in_a_weekly_script(tmp_path: Path):
+    folder = make_weekly_account_stub(tmp_path, ACCOUNT)
+    out = resolve_account("-CityFolder $env:TOWN", env={"TOWN": str(folder)})
+    assert out.returncode == 0, out.stdout + out.stderr
+    last = out.stdout.strip().splitlines()[-1]
+    assert last.startswith(ACCOUNT + " ")
+    assert "weekly-x.ps1" in last
+
+
+def test_the_environment_variable_wins_over_the_weekly_script(tmp_path: Path):
+    folder = make_weekly_account_stub(tmp_path, ACCOUNT)
+    out = resolve_account(
+        "-CityFolder $env:TOWN",
+        env={"TOWN": str(folder), "CLOUDFLARE_ACCOUNT_ID": OTHER_ACCOUNT},
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    last = out.stdout.strip().splitlines()[-1]
+    assert last.startswith(OTHER_ACCOUNT + " ")
+    assert "environment variable" in last
+
+
+def test_the_user_environment_variable_wins_over_everything(tmp_path: Path):
+    folder = make_weekly_account_stub(tmp_path, OTHER_ACCOUNT)
+    out = resolve_account(
+        "-UserValue $env:USER_ID -CityFolder $env:TOWN",
+        env={
+            "TOWN": str(folder),
+            "USER_ID": ACCOUNT,
+            "CLOUDFLARE_ACCOUNT_ID": OTHER_ACCOUNT,
+        },
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    last = out.stdout.strip().splitlines()[-1]
+    assert last.startswith(ACCOUNT + " ")
+    assert "CIVICCAST_CF_ACCOUNT_ID" in last
+
+
+def test_a_test_run_without_an_account_id_stops_before_upload(tmp_path: Path):
+    source = make_fake_source(tmp_path)
+    stub = make_weekly_stub(tmp_path, exit_code=0, problem="none")
+    marker = tmp_path / "npx-called.txt"
+    npx = tmp_path / "npx.cmd"
+    npx.write_text(f'@echo off\r\necho called > "{marker}"\r\nexit /b 0\r\n')
+
+    out = run_stage(
+        "-Tier",
+        "Test",
+        "-City",
+        "superior",
+        "-Repo",
+        str(ROOT),
+        "-Python",
+        sys.executable,
+        "-Source",
+        str(source),
+        "-OutRoot",
+        str(tmp_path / "stage"),
+        "-WeeklyCommand",
+        str(stub),
+        env={
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+            "CIVICCAST_CF_ACCOUNT_ID": "",
+            "CLOUDFLARE_ACCOUNT_ID": "",
+        },
+    )
+    text = out.stdout + out.stderr
+    assert out.returncode != 0, text
+    assert "No Cloudflare account id found" in text
+    assert "== upload changed media" not in text
+    assert not marker.exists(), "npx was called; the upload ran without an account id"

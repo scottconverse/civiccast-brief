@@ -95,10 +95,16 @@ the exit code and the run log path.
 4. Scans every `.html`, `.xml` and `.json` in the built site and refuses to upload or
    deploy if any still names `https://<city>.civiccastbrief.org` or
    `https://media.civiccastbrief.org/<city>/`.
-5. Uploads only media whose bytes changed, to
+5. Resolves the Cloudflare account id before uploading. In order: the user environment
+   variable `CIVICCAST_CF_ACCOUNT_ID`, then a `CLOUDFLARE_ACCOUNT_ID` already set in the
+   environment, then the first `CLOUDFLARE_ACCOUNT_ID = '<32 hex>'` line in a
+   `weekly-*.ps1` file sitting directly in the city working folder (read only, no
+   recursion). Only the id's length and where it came from are printed. If no id is
+   found, the script stops before any upload.
+6. Uploads only media whose bytes changed, to
    `civiccast-brief-media/test/<city>/<file>`, served at
    `https://media.civiccastbrief.org/test/<city>/<file>`.
-6. Deploys to Pages project `civiccast-brief-test`, branch `<city>`.
+7. Deploys to Pages project `civiccast-brief-test`, branch `<city>`.
 
 The Test site is a separate Pages project and branch, so it cannot appear in the live
 home page or a live feed. It is noindex, and its media lives under `test/`, never under
@@ -111,6 +117,9 @@ the live `<city>/` prefix.
 - The stage copy must not be inside `C:\dev\civiccast-brief-scratch`, and must not be
   the live folder or inside it.
 - No scheduled task named `CivicCast Brief weekly*` may be running.
+- A Test run must resolve a Cloudflare account id before it uploads anything; with none
+  it stops before the first upload. The id is an identifier, not a secret, and only its
+  length and source are printed.
 - Port 3000 is refused.
 - Only the PID this script started is ever named for stopping. The script stops
   nothing else.
