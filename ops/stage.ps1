@@ -561,9 +561,16 @@ foreach ($file in Get-ChildItem -LiteralPath $MediaDir -File | Sort-Object Name)
         Say "skipped $($file.Name): no content type for $($file.Extension)"
         continue
     }
-    $out = & npx.cmd wrangler r2 object put "$Bucket/$key" --file $file.FullName --content-type $type --remote 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Stop-Stage "upload failed for $($Bucket)/$key`: $($out | Out-String)"
+    # Invoke-Native runs the upload with stderr treated as ordinary output, so a wrangler
+    # warning cannot become a terminating error. Success is the exit code alone.
+    $uploadLog = Join-Path $Stage 'stage-upload.log'
+    $outLines = [System.Collections.Generic.List[string]]::new()
+    $uploadCode = Invoke-Native -LogPath $uploadLog -Script {
+        & npx.cmd wrangler r2 object put "$Bucket/$key" --file $file.FullName --content-type $type --remote 2>&1 |
+            ForEach-Object { $outLines.Add("$_"); $_ }
+    }
+    if ($uploadCode -ne 0) {
+        Stop-Stage "upload failed for $($Bucket)/$key`: $($outLines | Out-String)"
     }
     Say "uploaded $Bucket/$key"
     $uploaded++
@@ -573,9 +580,13 @@ Say "media: $uploaded file(s) uploaded"
 Step 'deploy'
 try { Assert-StagePagesProject -Project $PagesProject } catch { Stop-Stage $_.Exception.Message }
 Say "deploying $SiteDir to $PagesProject, branch $City"
-$out = & npx.cmd wrangler pages deploy $SiteDir --project-name $PagesProject --branch $City --commit-dirty=true 2>&1
-$deployCode = $LASTEXITCODE
-$out | ForEach-Object { Write-Host "    $_" }
+# Invoke-Native runs the deploy with stderr treated as ordinary output, so a wrangler
+# warning ("Pages now has wrangler.jsonc support") cannot become a terminating error.
+# Success is the exit code alone; Invoke-Native echoes every line.
+$deployLog = Join-Path $Stage 'stage-deploy.log'
+$deployCode = Invoke-Native -LogPath $deployLog -Script {
+    & npx.cmd wrangler pages deploy $SiteDir --project-name $PagesProject --branch $City --commit-dirty=true 2>&1
+}
 if ($deployCode -ne 0) {
     Stop-Stage "deploy failed (exit $deployCode)"
 }
