@@ -11,7 +11,8 @@
 With --city and no --model, the recap and the judge use the city's model picks (models.json).
 
 Writes transcript.json, speakers.json and recap.json (plus draft.json, verify-report.json and
-summary.json) under DIR. Exit 0 when every stage finished; 1 when capture or the pipeline failed.
+summary.json) under DIR. Exit 0 when every stage finished; 1 when capture or the pipeline failed;
+3 when the video is a live event that has not started yet (nothing to run; try a later week).
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ from civiccast_brief.meeting import capture as capture_mod
 from civiccast_brief.meeting import direct as direct_mod
 from civiccast_brief.meeting import granicus as granicus_mod
 from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
+
+#: Exit code for a scheduled live event or premiere that has not aired yet: not a failure, and
+#: the weekly run records it as "not run" so a later week picks the video up again.
+LIVE_NOT_STARTED_EXIT = 3
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
 from civiccast_brief.script import llm
 
@@ -107,6 +112,10 @@ def _run(args: argparse.Namespace) -> int:
             title=args.title,
             meeting_date=args.meeting_date,
         )
+    except capture_mod.LiveNotStarted as exc:
+        # A scheduled stream that has not aired: nothing to report yet, so not a failure.
+        print(f"not run: {exc}", file=sys.stderr)
+        return LIVE_NOT_STARTED_EXIT
     except (
         capture_mod.CaptureError,
         granicus_mod.GranicusError,

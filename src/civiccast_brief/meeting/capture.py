@@ -29,8 +29,26 @@ CAPTION_TIMEOUT_S = 900
 Runner = Callable[..., proc.ProcessResult]
 
 
+LIVE_NOT_STARTED_REASON = "the video is a live event that has not started yet"
+
+#: yt-dlp's messages for a scheduled stream or premiere that has not aired yet. There is no
+#: meeting to report until it airs, so a later week picks the video up again.
+_NOT_STARTED_MARKERS = (
+    "this live event will begin",
+    "this live event starts",
+    "live event starts",
+    "premieres in",
+    "premiere will begin",
+    "will begin in",
+)
+
+
 class CaptureError(RuntimeError):
     """The caption fetch failed, with the reason from the caption command."""
+
+
+class LiveNotStarted(CaptureError):
+    """The video is a live event or premiere that has not started yet; nothing to capture."""
 
 
 @dataclass
@@ -66,6 +84,12 @@ def ytdlp(explicit: str | None = None) -> YtDlp:
         return YtDlp(python=manager.interpreter(), js_runtime=manager.javascript())
     except RuntimeNotInstalled as exc:
         raise CaptureError(f"yt-dlp is not set up yet: {exc}") from exc
+
+
+def live_not_started(stderr: str | None) -> bool:
+    """Whether yt-dlp said the video is a scheduled live event or premiere not yet aired."""
+    text = (stderr or "").lower()
+    return any(marker in text for marker in _NOT_STARTED_MARKERS)
 
 
 def _caption_file(work: Path, video_id: str) -> Path | None:
@@ -124,6 +148,9 @@ def capture_captions(
     if caption is None:
         try:
             caption = _ytdlp_captions(video_id, work_dir, python, runner)
+        except LiveNotStarted:
+            # Nothing has aired yet, so there is no transcript panel to read either.
+            raise
         except CaptureError as exc:
             try:
                 caption = panel.read_panel(video_id, work_dir, browser)
@@ -172,6 +199,8 @@ def _ytdlp_captions(video_id: str, work_dir: Path, python: str | None, runner: R
         # Spec 8.3's second request: the town uploaded its own captions.
         result = _run(runner, command.uploaded_argv(argv), video_id)
     if not result.ok:
+        if live_not_started(result.stderr):
+            raise LiveNotStarted(LIVE_NOT_STARTED_REASON)
         detail = {
             "returncode": result.returncode,
             "stderr_tail": result.last_stderr_line(),
