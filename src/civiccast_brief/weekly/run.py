@@ -44,6 +44,7 @@ from typing import Any
 
 from civiccast_brief.audio.errors import ToolError
 from civiccast_brief.audio.ffmpeg import probe_duration
+from civiccast_brief.episode.build import meeting_slug, meeting_suffix
 from civiccast_brief.meeting.capture import LIVE_NOT_STARTED_REASON
 from civiccast_brief.meeting.cli import LIVE_NOT_STARTED_EXIT
 from civiccast_brief.review.store import ReviewStore
@@ -587,6 +588,122 @@ def _desk_script(
     return desk / "script.txt", desk / "script.json", desk / "audio"
 
 
+def _needs_new_id(built: dict[str, str], ids: dict[str, str], meeting_id: str) -> bool:
+    """Whether a built episode's file must be built again to sit at its planned id.
+
+    True when the plan gives the meeting another id, and when its file's name is shared with a
+    meeting the plan now names differently: that one file can hold only one of the two episodes."""
+    name = built.get(meeting_id)
+    if name is None:
+        return False
+    planned = ids.get(meeting_id, name)
+    if planned != name:
+        return True
+    return any(
+        other != meeting_id and other_name == name and ids.get(other, other_name) != name
+        for other, other_name in built.items()
+    )
+
+
+def _same_day_ids(
+    items: list[tuple[Path, dict[str, Any]]],
+    runs: dict[str, dict[str, Any]],
+    built: dict[str, str],
+    city_slug: str,
+) -> dict[str, str]:
+    """Meeting id -> the id its episode and story get, for a day that holds two meetings.
+
+    ``episode_slug`` names a meeting by its date, city and body. A body that meets twice on one
+    day (Longmont's Board of Education, Nov 11 2026: a Regular Meeting and a Study Session) would
+    give both meetings one id, and the site would refuse it. The second meeting's id takes the
+    session kind its title names: "2026-11-11-longmont-board-of-education-study-session".
+
+    Only a day whose meetings have different titles is split. Two videos of one meeting carry
+    one title and keep one id, so the one-copy guard still treats them as one meeting.
+
+    The meeting that keeps the plain id is the one already built (the state's ``built`` map says
+    which file each meeting's episode went to), else the first by video id: the same answer on
+    every run, whatever order the desk lists them in. An id a meeting already has is kept, so a
+    later run does not move a page that is already on the site."""
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for _path, meta in items:
+        if meta.get("kind") not in ("episode", "article") or meta.get("status") != "published":
+            continue
+        meeting_id = str(meta.get("meeting_id") or "")
+        if not meeting_id or meeting_id.startswith("roundup "):
+            continue
+        entry = runs.get(meeting_id)
+        if entry is None:
+            continue
+        folder = Path(entry["folder"])
+        recap_path = folder / "recap.json"
+        if not recap_path.is_file():
+            continue
+        try:
+            recap = json.loads(recap_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(recap, dict):
+            continue
+        title = str(entry.get("title") or "")
+        if not title:
+            try:
+                data = json.loads((folder / "transcript.json").read_text(encoding="utf-8"))
+                title = str(data.get("title") or "")
+            except (OSError, ValueError, AttributeError):
+                title = ""
+        try:
+            base = meeting_slug(
+                str(recap.get("meeting_date") or ""),
+                str(recap.get("body") or ""),
+                str(recap.get("video_id") or meeting_id),
+                city_slug,
+            )
+        except ValueError:
+            continue
+        found.setdefault(base, []).append(
+            (
+                meeting_id,
+                title,
+                meeting_suffix(title, str(recap.get("body") or ""), meeting_id, city_slug),
+            )
+        )
+
+    plan: dict[str, str] = {}
+    for base, meetings in found.items():
+        if len(meetings) < 2:
+            continue
+        meetings.sort(key=lambda m: m[0])
+        # One title is one meeting, however many videos it was uploaded as.
+        by_title: dict[str, list[tuple[str, str, str]]] = {}
+        for meeting in meetings:
+            key = " ".join(meeting[1].lower().split())
+            by_title.setdefault(key, []).append(meeting)
+        if len(by_title) < 2:
+            continue
+        one_per_meeting = [members[0] for members in by_title.values()]
+        one_per_meeting.sort(key=lambda m: m[0])
+        wanted: dict[str, str] = {}
+        for meeting_id, _title, suffix in one_per_meeting:
+            name = built.get(meeting_id)
+            # Keep the page the site already has. Both meetings of a day built under one id
+            # before this fix: only the first by video id keeps it, the other moves aside.
+            if name in (base, f"{base}-{suffix}") and name not in wanted.values():
+                wanted[meeting_id] = name
+        for meeting_id, _title, suffix in one_per_meeting:
+            if meeting_id in wanted:
+                continue
+            candidate = base if base not in wanted.values() else f"{base}-{suffix}"
+            if candidate in wanted.values():  # two titles whose words came out the same
+                candidate = f"{base}-{meeting_suffix('', '', meeting_id)}"
+            wanted[meeting_id] = candidate
+        for members in by_title.values():
+            name = wanted[members[0][0]]
+            for meeting_id, _title, _suffix in members:
+                plan[meeting_id] = name
+    return plan
+
+
 def _publish_stories(
     steps: Steps,
     site: Site,
@@ -594,6 +711,7 @@ def _publish_stories(
     items: list[tuple[Path, dict[str, Any]]],
     runs: dict[str, dict[str, Any]],
     published: str,
+    ids: dict[str, str],
 ) -> list[tuple[str, bool]]:
     """Write each published story as a stand-alone story file in ``<episodes>/stories``.
 
@@ -616,7 +734,11 @@ def _publish_stories(
         name = f"{slug(meeting_id)}.json"
         wanted.add(name)
         out = folder / name
-        if out.is_file() and built_from.get(meeting_id) == meta.get("content_hash"):
+        if (
+            out.is_file()
+            and built_from.get(meeting_id) == meta.get("content_hash")
+            and (meeting_id not in ids or _file_id(out) == ids[meeting_id])
+        ):
             log += _refresh_names(steps, out, runs.get(meeting_id), meeting_id)
             continue
         entry = runs.get(meeting_id)
@@ -633,6 +755,8 @@ def _publish_stories(
             "--published", published,
             "--out", str(out),
         ]  # fmt: skip
+        if meeting_id in ids:
+            argv += ["--slug", ids[meeting_id]]
         try:
             _call(steps.episode, argv, "episode story")
         except StepFailed as exc:
@@ -663,6 +787,15 @@ def _refresh_names(
     except StepFailed as exc:
         return [(f"{meeting_id}: {exc}", True)]
     return []
+
+
+def _file_id(path: Path) -> str:
+    """The ``id`` a built site file carries, or "" when it is missing or unreadable."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return str(data.get("id") or "") if isinstance(data, dict) else ""
 
 
 def _episode_video(path: Path) -> str:
@@ -801,11 +934,18 @@ def publish(
     if city_file.is_file():
         shutil.copyfile(city_file, site.episodes / CITY_FILE)
     log += _drop_unpublished_episodes(site, state, items)
+    ids = _same_day_ids(items, runs, built, site.slug)
     for path, meta in items:
         meeting_id = str(meta.get("meeting_id"))
         if meta.get("kind") != "episode":
             continue
-        if meeting_id in built and built_from.get(meeting_id) == meta.get("content_hash"):
+        if (
+            meeting_id in built
+            and built_from.get(meeting_id) == meta.get("content_hash")
+            # A file shared with another meeting of the day may hold that meeting, and a file
+            # under the old id must move to its own: both are built again.
+            and not _needs_new_id(built, ids, meeting_id)
+        ):
             built_file = site.episodes / f"{built[meeting_id]}.json"
             if built_file.is_file():
                 log += _refresh_names(steps, built_file, runs.get(meeting_id), meeting_id)
@@ -849,6 +989,8 @@ def publish(
             ]  # fmt: skip
             if meeting_id in articles:
                 argv += ["--article", str(articles[meeting_id])]
+            if meeting_id in ids:
+                argv += ["--slug", ids[meeting_id]]
             _call(steps.episode, argv, "episode assemble")
             episode = json.loads(out.read_text(encoding="utf-8"))
             name = episode["id"]
@@ -868,7 +1010,7 @@ def publish(
         built_from[meeting_id] = meta.get("content_hash")
         state.save()
         log.append((f"{meeting_id}: built episode {name}", False))
-    log.extend(_publish_stories(steps, site, state, items, runs, published))
+    log.extend(_publish_stories(steps, site, state, items, runs, published, ids))
     has_stories = any((site.episodes / STORIES_DIR).glob("*.json"))
     if not has_stories and not any(
         p.name not in (CITY_FILE, ROSTER_FILE) for p in site.episodes.glob("*.json")

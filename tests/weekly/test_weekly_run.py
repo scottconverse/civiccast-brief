@@ -85,18 +85,19 @@ class Fake:
 
     def episode(self, argv):
         self.calls.append(("episode", list(argv)))
+        slug = _opt(argv, "--slug") if "--slug" in argv else None
         if argv[0] == "assemble":
             meeting_id = json.loads((Path(_opt(argv, "--item")) / "item.json").read_text())[
                 "meeting_id"
             ]
-            Path(_opt(argv, "--out")).write_text(
-                json.dumps({"id": f"ep-{meeting_id}"}), encoding="utf-8"
-            )
+            name = slug or f"ep-{meeting_id}"
+            Path(_opt(argv, "--out")).write_text(json.dumps({"id": name}), encoding="utf-8")
         if argv[0] == "story":
             meeting_id = json.loads((Path(_opt(argv, "--article")) / "item.json").read_text())[
                 "meeting_id"
             ]
-            Path(_opt(argv, "--out")).write_text(json.dumps({"id": f"st-{meeting_id}"}))
+            name = slug or f"st-{meeting_id}"
+            Path(_opt(argv, "--out")).write_text(json.dumps({"id": name}))
         return 1 if self._failing("episode") else 0
 
     def article(self, argv):
@@ -755,6 +756,141 @@ def test_one_meeting_published_twice_reaches_the_site_once(tmp_path):
         for line in report.lines
     ), report.lines
     assert fake.calls[-1][0] == "site"  # the site is still built
+
+
+class _SameDayFake(Fake):
+    """A run whose meetings all carry one body: Longmont's Board of Education, Nov 11 2026."""
+
+    def meeting(self, argv):
+        code = super().meeting(argv)
+        out = Path(_opt(argv, "--out"))
+        recap = json.loads((out / "recap.json").read_text(encoding="utf-8"))
+        recap["body"] = "Board of Education"
+        (out / "recap.json").write_text(json.dumps(recap), encoding="utf-8")
+        return code
+
+
+def test_two_meetings_of_one_body_on_one_day_get_their_own_ids(tmp_path):
+    # Nov 11 2026: a Regular Meeting and a Study Session, two Vimeo videos of one board.
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    regular = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Regular Meeting", "p", "VID00000002"
+    )
+    study = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Study Session (Audio Only)", "p",
+        "VID00000003",
+    )  # fmt: skip
+    fake = _SameDayFake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000002"},
+        "0002-article": {"kind": "article", "status": "published", "meeting_id": "VID00000002"},
+        "0003-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000003"},
+        "0004-article": {"kind": "article", "status": "published", "meeting_id": "VID00000003"},
+    }
+    report = run_week(
+        settings, [regular, study], LAST, fake.steps(), published="2026-11-11T09:00:00-07:00"
+    )
+
+    assert report.failed == 0, report.lines
+    assert not any("same meeting as" in line for line in report.lines), report.lines
+    base = "2026-11-03-longmont-board-of-education"  # the fake's meeting date
+    assembled = {_opt(a, "--item"): _opt(a, "--slug") for s, a in fake.calls if a[0] == "assemble"}
+    assert assembled == {
+        str(settings.work / "exported" / "0001-episode"): base,
+        str(settings.work / "exported" / "0003-episode"): f"{base}-study-session",
+    }
+    assert sorted(p.name for p in site.episodes.glob("2026-*.json")) == [
+        f"{base}-study-session.json",
+        f"{base}.json",
+    ]
+    stories = {
+        json.loads(p.read_text(encoding="utf-8"))["id"]
+        for p in (site.episodes / "stories").glob("*.json")
+    }
+    assert stories == {base, f"{base}-study-session"}  # both stories, two ids, none dropped
+
+    # A second run leaves both ids alone: neither is built again.
+    again = _SameDayFake()
+    again.exported = fake.exported
+    second = run_week(settings, [regular, study], LAST, again.steps())
+    assert second.failed == 0, second.lines
+    assert not any(a[0] in ("assemble", "story") for _s, a in again.calls)
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["built"]["VID00000002"] == base
+    assert state["built"]["VID00000003"] == f"{base}-study-session"
+
+
+def test_the_meeting_already_on_the_site_keeps_the_plain_id(tmp_path):
+    """The built map decides which of a day's meetings keeps the unsuffixed id."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    regular = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Regular Meeting", "p", "VID00000002"
+    )
+    study = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Study Session", "p", "VID00000003"
+    )
+    settings.work.mkdir(parents=True)
+    (settings.work / STATE_NAME).write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "meetings": {},
+                "roundups": {},
+                "built": {"VID00000003": "2026-11-03-longmont-board-of-education"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake = _SameDayFake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000002"},
+        "0003-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000003"},
+    }
+    run_week(settings, [regular, study], LAST, fake.steps())
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    base = "2026-11-03-longmont-board-of-education"
+    assert state["built"]["VID00000003"] == base  # already on the site: keeps the plain id
+    assert state["built"]["VID00000002"] == f"{base}-regular-meeting"
+
+
+def test_two_meetings_built_under_one_id_before_the_fix_are_split(tmp_path):
+    """The failed Nov 23 2026 stage left both meetings' episodes named by the one shared id."""
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site)
+    regular = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Regular Meeting", "p", "VID00000002"
+    )
+    study = Found(
+        COUNCIL, date(2026, 11, 11), "Board of Education Study Session", "p", "VID00000003"
+    )
+    base = "2026-11-03-longmont-board-of-education"
+    settings.work.mkdir(parents=True)
+    (settings.work / STATE_NAME).write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "meetings": {},
+                "roundups": {},
+                "built": {"VID00000002": base, "VID00000003": base},
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake = _SameDayFake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000002"},
+        "0003-episode": {"kind": "episode", "status": "published", "meeting_id": "VID00000003"},
+    }
+    report = run_week(settings, [regular, study], LAST, fake.steps())
+
+    assert report.failed == 0, report.lines
+    # Both are built again, so the shared file cannot keep the wrong meeting's episode.
+    assembled = sorted(_opt(a, "--slug") for _s, a in fake.calls if a[0] == "assemble")
+    assert assembled == [base, f"{base}-study-session"]
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["built"] == {"VID00000002": base, "VID00000003": f"{base}-study-session"}
 
 
 def test_a_meeting_posted_twice_is_in_the_roundup_once(tmp_path):
