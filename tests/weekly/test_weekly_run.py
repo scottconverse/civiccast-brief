@@ -285,6 +285,44 @@ def test_a_failure_is_recorded_the_next_meeting_still_runs_and_a_rerun_resumes(t
     assert "2026-11-05 Planning and Zoning Commission: done in an earlier run" in report.lines
 
 
+class NotStartedFake(Fake):
+    """The first meeting run says the video has not started; the next one runs normally."""
+
+    def __init__(self):
+        super().__init__()
+        self.not_started = 1
+
+    def meeting(self, argv):
+        if self.not_started:
+            self.not_started -= 1
+            self.calls.append(("meeting", list(argv)))
+            return 3
+        return super().meeting(argv)
+
+
+def test_a_live_event_that_has_not_started_is_not_run_and_is_retried_later(tmp_path):
+    fake = NotStartedFake()
+    settings = _settings(tmp_path)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+
+    assert report.failed == 0
+    assert (
+        "2026-11-03 City Council Regular Session: not run: "
+        "the video is a live event that has not started yet" in report.lines
+    )
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"][COUNCIL_MEETING.key]["status"] == "not run"
+    # Nothing after the meeting ran.
+    assert fake.names() == [("meeting", "run")]
+
+    # The next week picks the video up again now that it has aired.
+    again = Fake()
+    report = run_week(settings, [COUNCIL_MEETING], LAST, again.steps())
+    assert report.failed == 0
+    assert "2026-11-03 City Council Regular Session: done" in report.lines
+    assert [step for step, _ in again.calls if step == "meeting"] == ["meeting"]
+
+
 def test_a_failed_story_does_not_redo_the_steps_before_it(tmp_path):
     settings = _settings(tmp_path)
     fake = Fake(fail={"article": 1})

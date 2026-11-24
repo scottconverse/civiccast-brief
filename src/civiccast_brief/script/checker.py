@@ -188,6 +188,7 @@ _COMMON_OPENERS = frozenset(
         "three",
         "to",
         "today",
+        "tonight",
         "too",
         "tune",
         "two",

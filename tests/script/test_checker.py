@@ -190,6 +190,28 @@ def test_intro_and_outro_may_use_the_recap_header_without_a_claim():
     assert report.passed, report.render()
 
 
+def test_tonight_at_a_sentence_start_is_not_a_name():
+    lines = good_script()
+    lines[0] = ScriptLine(
+        "S1",
+        "Welcome to CivicCast Brief. I'm Pat. Tonight we're covering the Longmont City Council "
+        "meeting on October twentieth, twenty twenty-six.",
+    )
+    report = check_script(RECAP, lines)
+    assert report.passed, report.render()
+
+
+def test_an_unknown_name_at_a_sentence_start_still_fails():
+    lines = good_script()
+    lines[0] = ScriptLine(
+        "S1",
+        "Welcome to CivicCast Brief. I'm Pat. Zorbax we're covering the Longmont City Council "
+        "meeting on October twentieth, twenty twenty-six.",
+    )
+    codes = errors_by_code(lines)
+    assert (1, "name") in codes
+
+
 def test_intro_may_not_add_facts_beyond_the_header():
     lines = good_script()
     lines[0] = ScriptLine(

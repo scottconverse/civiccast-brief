@@ -44,6 +44,8 @@ from typing import Any
 
 from civiccast_brief.audio.errors import ToolError
 from civiccast_brief.audio.ffmpeg import probe_duration
+from civiccast_brief.meeting.capture import LIVE_NOT_STARTED_REASON
+from civiccast_brief.meeting.cli import LIVE_NOT_STARTED_EXIT
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.writer import (
     ROUNDUP_ID,
@@ -174,6 +176,10 @@ class State:
 
 class Waiting(Exception):
     """A step waits for the PC worker; the meeting is tried again on the next run."""
+
+
+class NotStarted(Exception):
+    """The video is a live event or premiere that has not aired; try it on a later week."""
 
 
 class StepFailed(Exception):
@@ -385,7 +391,13 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             argv.append("--diarize")
         # argparse would read a leading-dash id as an option; -- keeps it positional.
         argv += ["--", meeting.video]
-        _call(steps.meeting, argv, "meeting run")
+        code = steps.meeting(argv)
+        if code == LIVE_NOT_STARTED_EXIT:
+            # A scheduled stream or premiere that has not aired: nothing to report yet, so the
+            # meeting is "not run" and a later week tries the video again.
+            raise NotStarted(LIVE_NOT_STARTED_REASON)
+        if code != 0:
+            raise StepFailed("meeting run failed")
         done.append("recap")
     if "script" not in done and not _recap_facts(folder):
         # Boulder, Nov 15 2026: the recap failed in every window and the podcast was a
@@ -913,6 +925,11 @@ def run_week(
             entry.update(status="waiting", error=str(exc))
             state.save()
             report.add(f"{meeting.day} {meeting.title}: {exc}")
+            continue
+        except NotStarted as exc:
+            entry.update(status="not run", error=str(exc))
+            state.save()
+            report.add(f"{meeting.day} {meeting.title}: not run: {exc}")
             continue
         except StepFailed as exc:
             _record(state, entry, str(exc))

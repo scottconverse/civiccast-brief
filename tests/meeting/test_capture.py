@@ -71,6 +71,67 @@ def test_a_failed_ytdlp_becomes_a_capture_error_with_the_bot_check(tmp_path):
     assert "not a bot" in str(raised.value)
 
 
+def test_a_live_event_that_has_not_started_is_not_a_failure(tmp_path):
+    runner = FakeRunner(
+        tmp_path,
+        returncode=1,
+        stderr="ERROR: [youtube] AhbV6EgmQJE: This live event will begin in a few moments",
+        write=False,
+    )
+
+    class NoPanel:
+        def transcript_panel(self, url):
+            pytest.fail("the transcript panel was read for a stream that has not started")
+
+    with pytest.raises(C.LiveNotStarted) as raised:
+        C.capture_captions("abc123XYZ_-", tmp_path, python="py", runner=runner, browser=NoPanel())
+    assert str(raised.value) == C.LIVE_NOT_STARTED_REASON
+    assert "live event that has not started yet" in str(raised.value)
+
+
+def test_a_premiere_that_has_not_started_is_not_a_failure(tmp_path):
+    runner = FakeRunner(tmp_path, returncode=1, stderr="ERROR: Premieres in 2 hours", write=False)
+    with pytest.raises(C.LiveNotStarted):
+        C.capture_captions("abc123XYZ_-", tmp_path, python="py", runner=runner)
+
+
+def test_a_real_caption_failure_is_still_a_capture_error(tmp_path):
+    runner = FakeRunner(
+        tmp_path,
+        returncode=1,
+        stderr="ERROR: unable to download video data: HTTP Error 403",
+        write=False,
+    )
+    with pytest.raises(C.CaptureError) as raised:
+        C.capture_captions("abc123XYZ_-", tmp_path, python="py", runner=runner)
+    assert not isinstance(raised.value, C.LiveNotStarted)
+
+
+# ----- The meeting command's exit code -------------------------------------------------------
+
+
+def test_the_meeting_command_exits_3_for_a_stream_that_has_not_started(tmp_path, monkeypatch):
+    from civiccast_brief.meeting import cli
+
+    def not_started(*a, **k):
+        raise C.LiveNotStarted(C.LIVE_NOT_STARTED_REASON)
+
+    monkeypatch.setattr(cli, "run", not_started)
+    code = cli.main(["run", "abc123XYZ_-", "--out", str(tmp_path)])
+    assert code == cli.LIVE_NOT_STARTED_EXIT == 3
+
+
+def test_the_meeting_command_still_exits_1_for_a_caption_failure(tmp_path, monkeypatch):
+    from civiccast_brief.meeting import cli
+
+    def failed(*a, **k):
+        raise C.CaptureError("caption fetch failed for abc: yt-dlp failed")
+
+    monkeypatch.setattr(cli, "run", failed)
+    code = cli.main(["run", "abc123XYZ_-", "--out", str(tmp_path)])
+    assert code == 1
+
+
 def test_ytdlp_that_writes_no_caption_file_is_a_plain_error(tmp_path):
     runner = FakeRunner(tmp_path, write=False)
     with pytest.raises(C.CaptureError, match="wrote no caption file"):
