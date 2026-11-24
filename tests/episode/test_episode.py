@@ -514,6 +514,50 @@ def test_an_episode_id_has_only_what_the_site_accepts():
     assert B.episode_slug(council, "longmont") == "2026-11-03-longmont-city-council"
 
 
+def test_a_second_meeting_of_one_body_on_a_day_takes_its_session_kind():
+    """Nov 11 2026: Longmont's Board of Education held a Regular Meeting and a Study Session.
+    Both were Vimeo videos, so both ids came out "2026-11-11-longmont-board-of-education"."""
+    body = "Board of Education"
+    assert (
+        B.meeting_suffix(
+            "2026-11-11 Board of Education Study Session (Audio Only)",
+            body,
+            "vimeo-svvsd-1246360665",
+            "longmont",
+        )
+        == "study-session"
+    )
+    assert (
+        B.meeting_suffix(
+            "2026-11-11 Board of Education Regular Meeting",
+            body,
+            "vimeo-svvsd-1246050052",
+            "longmont",
+        )
+        == "regular-meeting"
+    )
+    # A title with no session kind left gives a short suffix from the video id.
+    assert (
+        B.meeting_suffix("2026-11-11 Board of Education", body, "vimeo-svvsd-1246360665")
+        == "46360665"
+    )
+    # No title at all is the same fallback.
+    assert B.meeting_suffix("", body, "vimeo-svvsd-1246360665") == "46360665"
+
+
+def test_a_story_can_be_given_its_own_id(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    _, article_dir = _published_article(tmp_path, meeting_dir, _story())
+    story = B.assemble_story(
+        article_dir=article_dir,
+        meeting_dir=meeting_dir,
+        city_slug="example",
+        published="2026-10-21T09:00:00-06:00",
+        slug="2026-10-20-example-city-council-regular-meeting",
+    )
+    assert story["id"] == "2026-10-20-example-city-council-regular-meeting"
+
+
 def test_a_written_title_starts_with_a_capital(tmp_path, meeting, monkeypatch):
     """The 10 November 2026 roundup went live as 'city council advances ordinance ...'."""
     meeting_dir, audio = meeting

@@ -12,6 +12,8 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - A meeting whose video is a scheduled live stream or premiere that has not started yet is
   reported as "not run: the video is a live event that has not started yet" (no longer a failure
   or exit 1) and is picked up again on a later week once it has aired.
+- A second meeting of the same body on the same day now gets its own episode id instead of being
+  left off the site.
 
 ## 0.4.0 — 2026-11-21
 

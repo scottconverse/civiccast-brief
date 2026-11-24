@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--published", required=True, help="publish time, ISO 8601 with offset")
     a.add_argument("--out", type=Path, required=True, help="episode JSON file to write")
     a.add_argument("--article", type=Path, help="exported, published article item folder")
+    a.add_argument("--slug", help="id to use instead of the one computed from the recap")
     t = commands.add_parser(
         "story", help="write one stand-alone story file (no audio) from a published article"
     )
@@ -44,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--city", required=True, help="city slug, e.g. longmont")
     t.add_argument("--published", required=True, help="publish time if the item has none")
     t.add_argument("--out", type=Path, required=True, help="story JSON file to write")
+    t.add_argument("--slug", help="id to use instead of the one computed from the recap")
     n = commands.add_parser(
         "names", help="set a built site file's name fixes from the meeting's current records"
     )
@@ -68,6 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 meeting_dir=args.meeting,
                 city_slug=args.city,
                 published=args.published,
+                slug=args.slug,
             )
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(
@@ -84,6 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             city_slug=args.city,
             published=args.published,
             article_dir=args.article,
+            slug=args.slug,
         )
     except (EpisodeError, ReviewError, AudioError, OSError, KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)

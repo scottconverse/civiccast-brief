@@ -386,12 +386,46 @@ def episode_slug(recap: Recap, city_slug: str) -> str:
     Only lowercase letters, digits and hyphens, which is what the site accepts: "Longmont Urban
     Renewal Authority (LURA)" is "longmont-urban-renewal-authority-lura", and the city's name is
     not said twice ("2026-11-10-longmont-urban-renewal-authority-lura")."""
-    if recap.video_id == ROUNDUP_ID:
+    return meeting_slug(recap.meeting_date, recap.body, recap.video_id, city_slug)
+
+
+def meeting_slug(meeting_date: str, body: str, video_id: str, city_slug: str) -> str:
+    """``episode_slug`` from a recap's fields, for a caller holding the recap as data."""
+    if video_id == ROUNDUP_ID:
         kind = "weekly-roundup"
     else:
-        kind = re.sub(r"[^a-z0-9]+", "-", recap.body.lower()).strip("-")
+        kind = re.sub(r"[^a-z0-9]+", "-", body.lower()).strip("-")
         kind = kind.removeprefix(f"{city_slug}-") or kind
-    return f"{_iso_date(recap.meeting_date)}-{city_slug}-{kind}"
+    return f"{_iso_date(meeting_date)}-{city_slug}-{kind}"
+
+
+#: The date a meeting title often starts with: "2026-11-11 Board of Education Regular Meeting".
+_LEADING_DATE = re.compile(r"^\s*\d{4}-\d{2}-\d{2}\s*")
+_PARENTHESES = re.compile(r"\([^)]*\)")
+
+
+def meeting_suffix(title: str, body: str, video_id: str, city_slug: str = "") -> str:
+    """The session kind a meeting's title names, as an id suffix: "study-session".
+
+    A second meeting of one body on one day has its own title ("2026-11-11 Board of Education
+    Study Session (Audio Only)") but the same body, date and city as the first, so its id needs
+    the words that tell them apart. The date, the body's words, the city's words and any
+    parenthetical note ("(Audio Only)") are dropped; what is left is the session kind. A title
+    with nothing left gives a short suffix from the video id instead. Only lowercase letters,
+    digits and hyphens."""
+    text = _PARENTHESES.sub(" ", _LEADING_DATE.sub("", title))
+    said = {
+        word
+        for phrase in (body, city_slug.replace("-", " "))
+        for word in phrase.lower().split()
+        if word
+    }
+    kept = [word.lower() for word in re.findall(r"[A-Za-z0-9]+", text) if word.lower() not in said]
+    suffix = "-".join(kept)
+    if suffix:
+        return suffix
+    digits = re.sub(r"[^a-z0-9]", "", video_id.lower())
+    return digits[-8:] or "meeting"
 
 
 def assemble_story(
@@ -400,11 +434,13 @@ def assemble_story(
     meeting_dir: Path,
     city_slug: str,
     published: str,
+    slug: str | None = None,
 ) -> dict[str, Any]:
     """A published story as a stand-alone site file: no audio, no script. The story is checked
     again against the recap, exactly as when it is added to an episode.
 
-    ``published`` is used when the item has no publish time of its own.
+    ``published`` is used when the item has no publish time of its own. ``slug`` overrides the
+    id computed from the recap: the run gives a second same-day meeting of one body its own.
     """
     recap, data = _meeting(meeting_dir)
     if recap.video_id == ROUNDUP_ID:
@@ -415,7 +451,7 @@ def assemble_story(
     meta = json.loads((article_dir / "item.json").read_text(encoding="utf-8"))
     published_at = str(meta.get("published_at") or "")
     return {
-        "id": episode_slug(recap, city_slug),
+        "id": slug or episode_slug(recap, city_slug),
         "city": city_slug,
         "approved": True,
         "approved_by": f"editor desk, {published_at or published}",
@@ -464,8 +500,11 @@ def assemble(
     city_slug: str,
     published: str,
     article_dir: Path | None = None,
+    slug: str | None = None,
 ) -> dict[str, Any]:
-    """One site episode from an exported, approved item. Refuses if anything was changed."""
+    """One site episode from an exported, approved item. Refuses if anything was changed.
+
+    ``slug`` overrides the id computed from the recap, as ``assemble_story``'s does."""
     meta = json.loads((item_dir / "item.json").read_text(encoding="utf-8"))
     # "approved"/"approved_at" are from exports made before the editor desk.
     published_at = meta.get("published_at") or meta.get("approved_at")
@@ -484,7 +523,7 @@ def assemble(
     chapters = json.loads((audio_dir / "chapters.json").read_text(encoding="utf-8"))
     roundup = recap.video_id == ROUNDUP_ID
     day = _iso_date(recap.meeting_date)
-    slug = episode_slug(recap, city_slug)
+    slug = slug or episode_slug(recap, city_slug)
     base = media_base_url.rstrip("/")
     names = meta.get("speakers") or {}
     segments = [] if roundup else transcript_mod.from_json(data)
