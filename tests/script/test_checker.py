@@ -212,6 +212,29 @@ def test_an_unknown_name_at_a_sentence_start_still_fails():
     assert (1, "name") in codes
 
 
+def test_the_closing_line_openers_are_not_names():
+    lines = good_script()
+    lines[-1] = ScriptLine(
+        "S2",
+        "You can watch the meeting video on the city's YouTube channel. That's the CivicCast "
+        "Brief, folks. We'll see you next time. Take care, everyone.",
+        ("c03",),
+    )
+    report = check_script(RECAP, lines)
+    assert report.passed, report.render()
+
+
+def test_an_unknown_name_at_a_sentence_start_in_the_closing_line_still_fails():
+    lines = good_script()
+    lines[-1] = ScriptLine(
+        "S2",
+        "You can watch the meeting video on the city's YouTube channel. Zorbax see you next time.",
+        ("c03",),
+    )
+    codes = errors_by_code(lines)
+    assert (5, "name") in codes
+
+
 def test_intro_may_not_add_facts_beyond_the_header():
     lines = good_script()
     lines[0] = ScriptLine(
