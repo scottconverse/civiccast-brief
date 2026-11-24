@@ -7,6 +7,8 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - Episodes are mastered at -18 LUFS (was -16) so the limiter no longer turns speech down by more
   than 3 dB; one constant gain is applied to the whole episode.
 - The script check treats a sentence-opening "Tonight" as an opener, not a name.
+- The script check also accepts "Take", "We'll", "We've", "You'll", "You've", "They'll",
+  "They've", "I'll" and "I've" as sentence openers, not names.
 - A meeting whose video is a scheduled live stream or premiere that has not started yet is
   reported as "not run: the video is a live event that has not started yet" (no longer a failure
   or exit 1) and is picked up again on a later week once it has aired.
