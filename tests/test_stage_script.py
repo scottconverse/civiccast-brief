@@ -607,3 +607,68 @@ def test_a_test_run_without_an_account_id_stops_before_upload(tmp_path: Path):
     assert "No Cloudflare account id found" in text
     assert "== upload changed media" not in text
     assert not marker.exists(), "npx was called; the upload ran without an account id"
+
+
+def make_npx_that_warns_on_stderr(root: Path, exit_code: int) -> Path:
+    """A fake npx whose stderr carries the warning real wrangler prints.
+
+    A native command writing to stderr is not a failure; only the exit code is.
+    """
+    npx = root / "npx.cmd"
+    npx.write_text(
+        f"@echo off\r\necho Pages now has wrangler.jsonc support 1>&2\r\nexit /b {exit_code}\r\n",
+        encoding="ascii",
+    )
+    return npx
+
+
+def run_test_stage_through_deploy(
+    tmp_path: Path, npx_exit: int
+) -> subprocess.CompletedProcess[str]:
+    """A Test run that reaches the deploy step with a fake npx and no media to upload."""
+    source = make_fake_source(tmp_path)
+    # No media files, so the upload loop never calls npx and the test stays offline.
+    (source / "live" / "media" / "x.mp3").unlink()
+    stub = make_weekly_stub(tmp_path, exit_code=0, problem="none")
+    make_npx_that_warns_on_stderr(tmp_path, npx_exit)
+    return run_stage(
+        "-Tier",
+        "Test",
+        "-City",
+        "superior",
+        "-Repo",
+        str(ROOT),
+        "-Python",
+        sys.executable,
+        "-Source",
+        str(source),
+        "-OutRoot",
+        str(tmp_path / "stage"),
+        "-WeeklyCommand",
+        str(stub),
+        env={
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+            "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
+            "CIVICCAST_CF_ACCOUNT_ID": "",
+            "PYTHONPATH": str(ROOT / "src"),
+        },
+    )
+
+
+def test_a_stderr_warning_from_the_deploy_does_not_stop_the_stage(tmp_path: Path):
+    out = run_test_stage_through_deploy(tmp_path, npx_exit=0)
+    text = out.stdout + out.stderr
+    assert out.returncode == 0, text
+    assert "== deploy" in text
+    assert "Pages now has wrangler.jsonc support" in text
+    assert "PASS: Test stage" in text
+    assert "live source folder unchanged" in text
+
+
+def test_a_failed_deploy_still_stops_the_stage(tmp_path: Path):
+    out = run_test_stage_through_deploy(tmp_path, npx_exit=1)
+    text = out.stdout + out.stderr
+    assert out.returncode != 0, text
+    assert "== deploy" in text
+    assert "deploy failed (exit 1)" in text
+    assert "PASS: Test stage" not in text
