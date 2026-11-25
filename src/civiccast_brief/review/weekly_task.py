@@ -90,26 +90,48 @@ def _command(argument: str) -> str:
     return f'-m civiccast_brief.review run-due --cities "{argument}"'
 
 
+def quiet_python(python: str | Path) -> str:
+    """``pythonw.exe`` beside the given python when it exists, so no console flashes hourly.
+
+    The task runs only to write each city's ``desk.db``; with no console window nobody sees a
+    flash every hour. Any other python (no ``pythonw.exe`` beside it) is used as given."""
+    path = Path(python)
+    if path.name.lower() == "python.exe":
+        quiet = path.with_name("pythonw.exe")
+        if quiet.is_file():
+            return str(quiet)
+    return str(python)
+
+
 def install_script(python: str | Path, cities_dir: str | Path) -> str:
-    """The PowerShell that registers the task for the current user, with no password."""
+    """The PowerShell that registers the task for the current user, with no password.
+
+    The trigger names this user and the principal is interactive with limited rights, so a
+    non-elevated user may register it. The hourly trigger carries no ``-RepetitionDuration``:
+    Task Scheduler then repeats with no end, which it accepts as ``PT1H``."""
     action = f"New-ScheduledTaskAction -Execute {_ps(python)} -Argument {_ps(_command(cities_dir))}"
     return "\n".join(
         [
             "$ErrorActionPreference = 'Stop'",
+            '$me = "$env:USERDOMAIN\\$env:USERNAME"',
             f"$action = {action}",
-            "$logon = New-ScheduledTaskTrigger -AtLogOn",
+            "$logon = New-ScheduledTaskTrigger -AtLogOn -User $me",
             (
                 "$hourly = New-ScheduledTaskTrigger -Once -At (Get-Date)"
                 " -RepetitionInterval (New-TimeSpan -Hours 1)"
-                " -RepetitionDuration ([TimeSpan]::MaxValue)"
             ),
             (
                 "$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable"
                 " -MultipleInstances IgnoreNew"
             ),
             (
+                "$principal = New-ScheduledTaskPrincipal -UserId $me"
+                " -LogonType Interactive -RunLevel Limited"
+            ),
+            (
                 f"Register-ScheduledTask -TaskName {_ps(TASK_NAME)} -Action $action"
-                " -Trigger @($logon, $hourly) -Settings $settings -Force | Out-Null"
+                " -Trigger @($logon, $hourly) -Settings $settings -Principal $principal"
+                " -Force | Out-Null"
             ),
         ]
     )
@@ -171,8 +193,11 @@ def _call(runner: TaskRunner, script: str) -> str:
 def install(
     python: str | Path, cities_dir: str | Path, runner: TaskRunner = run_powershell
 ) -> None:
-    """Register the hourly task for the current user, replacing one with the same name."""
-    _call(runner, install_script(python, cities_dir))
+    """Register the hourly task for the current user, replacing one with the same name.
+
+    ``pythonw.exe`` beside ``python`` runs the task when it exists, so no console window
+    flashes every hour."""
+    _call(runner, install_script(quiet_python(python), cities_dir))
 
 
 def status(runner: TaskRunner = run_powershell) -> TaskStatus:

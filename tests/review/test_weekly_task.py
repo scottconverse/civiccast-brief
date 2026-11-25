@@ -21,12 +21,49 @@ def test_install_builds_the_exact_powershell_argv_for_the_current_user() -> None
     weekly_task.install(r"C:\Python\python.exe", r"C:\cities", runner)
 
     script = r"""$ErrorActionPreference = 'Stop'
+$me = "$env:USERDOMAIN\$env:USERNAME"
 $action = New-ScheduledTaskAction -Execute 'C:\Python\python.exe' -Argument '-m civiccast_brief.review run-due --cities "C:\cities"'
-$logon = New-ScheduledTaskTrigger -AtLogOn
-$hourly = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration ([TimeSpan]::MaxValue)
+$logon = New-ScheduledTaskTrigger -AtLogOn -User $me
+$hourly = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName 'CivicCast Brief weekly' -Action $action -Trigger @($logon, $hourly) -Settings $settings -Force | Out-Null"""
+$principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName 'CivicCast Brief weekly' -Action $action -Trigger @($logon, $hourly) -Settings $settings -Principal $principal -Force | Out-Null"""
     assert calls == [[*PREFIX, script]]
+
+
+def test_the_trigger_names_this_user_and_needs_no_administrator() -> None:
+    script = weekly_task.install_script("python.exe", r"C:\cities")
+
+    # A trigger with no -User means any user's logon, which a non-elevated user may not set up.
+    assert "-AtLogOn -User $me" in script
+    assert "-Principal $principal" in script
+    assert "-LogonType Interactive -RunLevel Limited" in script
+    # Task Scheduler rejects P99999999DT23H59M59S; no duration means it repeats with no end.
+    assert "RepetitionDuration" not in script
+    assert "-RepetitionInterval (New-TimeSpan -Hours 1)" in script
+
+
+def test_a_pythonw_beside_python_runs_the_task_with_no_console_window(tmp_path) -> None:
+    (tmp_path / "python.exe").write_text("")
+    (tmp_path / "pythonw.exe").write_text("")
+    calls: list[list[str]] = []
+
+    def runner(argv):
+        calls.append(list(argv))
+        return 0, "", ""
+
+    weekly_task.install(str(tmp_path / "python.exe"), r"C:\cities", runner)
+
+    assert f"-Execute '{tmp_path / 'pythonw.exe'}'" in calls[0][-1]
+    assert "python.exe'" not in calls[0][-1]
+
+
+def test_without_a_pythonw_beside_it_the_given_python_is_used(tmp_path) -> None:
+    (tmp_path / "python.exe").write_text("")
+    python = str(tmp_path / "python.exe")
+
+    assert weekly_task.quiet_python(python) == python
+    assert weekly_task.quiet_python(r"C:\Python\python3.exe") == r"C:\Python\python3.exe"
 
 
 def test_a_path_with_a_space_and_a_single_quote_is_escaped_not_injected() -> None:
