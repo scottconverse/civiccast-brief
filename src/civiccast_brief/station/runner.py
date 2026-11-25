@@ -137,6 +137,8 @@ class StationStatus:
     runs: list[Run]
     #: When the queued publish run starts, or None when none is queued.
     publish_at: datetime | None = None
+    #: False when the schedule is off: the job runs only when asked (Run now).
+    scheduled: bool = True
 
 
 #: Runs one command; calls ``output`` with each line; returns the exit code.
@@ -183,6 +185,7 @@ class Station:
         clock: Callable[[], datetime] = _now,
         runner: CommandRunner = run_command,
         publish: Sequence[Sequence[str]] = (),
+        scheduled: bool = True,
     ) -> None:
         if not steps:
             raise StationError("the job has no commands")
@@ -190,6 +193,8 @@ class Station:
         self.steps = _commands(steps)
         self.publish_steps = _commands(publish)
         self.schedule = schedule
+        #: False keeps the scheduler from starting the weekly run; Run now still runs.
+        self.scheduled = scheduled
         self.cwd = Path(cwd)
         self.clock = clock
         self.runner = runner
@@ -251,7 +256,38 @@ class Station:
             last=last,
             runs=runs,
             publish_at=ready.astimezone(self.schedule.zone) if ready else None,
+            scheduled=self.scheduled,
         )
+
+    def reconfigure(
+        self,
+        *,
+        steps: Sequence[Sequence[str]] | None = None,
+        schedule: Schedule | None = None,
+        scheduled: bool | None = None,
+    ) -> None:
+        """Change the job, its schedule or whether the schedule runs, while the station is up.
+
+        Turning the schedule on starts from now: the first run is the next slot, not a slot that
+        passed while the schedule was off."""
+        if steps is not None:
+            self.steps = _commands(steps)
+        if schedule is not None:
+            self.schedule = schedule
+        if scheduled is not None:
+            turning_on = scheduled and not self.scheduled
+            self.scheduled = scheduled
+            if turning_on:
+                self._set_since(self.clock())
+        self._wake.set()
+
+    def _set_since(self, when: datetime) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO station_meta (key, value) VALUES ('since', ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (when.isoformat(),),
+            )
 
     # ----- the publish queue -------------------------------------------------------------------
 
@@ -475,7 +511,7 @@ class Station:
 
     def tick(self) -> int | None:
         """Start the scheduled run, or else a queued publish, when due. The scheduler calls this."""
-        if self.due():
+        if self.scheduled and self.due():
             return self.run_once("schedule")
         if self.publish_due():
             return self.run_once("publish")

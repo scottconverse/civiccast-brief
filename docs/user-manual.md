@@ -340,6 +340,11 @@ episodes, writes each published story as a stand-alone story file, assembles epi
 the site. `weekly-state.json` records each step, so running the same command again retries only
 what failed. Exit 0 means everything finished.
 
+The desk started with `--city` has a **Weekly job** page (in the nav) that sets this run's
+schedule from a form, saved in `weekly.json` in the city folder; **Run now** runs it at once.
+That job finds the week's meetings and writes and stages each brief on the desk for review.
+Building and deploying the site stay with the weekly command's site options.
+
 Before a change reaches the live sites, run it through Dev and then Test with
 `ops\stage.ps1`: Dev builds a copy of a city on this PC and serves it on `127.0.0.1` only (test-tone
 audio unless `-RealVoice`), and Test adds real voices, uploads media under `test/<city>/` in R2 and

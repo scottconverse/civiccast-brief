@@ -1,23 +1,69 @@
 {% extends "base.html" %}
 {% set nav = "runs" %}
-{% block head %}{% if job.running or job.publish_at %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block head %}{% if job and (job.running or job.publish_at) %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
 {% block content %}
 <h2>Weekly job</h2>
 {% if notice %}<p class="notice{% if notice_bad %} error{% endif %}" role="{{ 'alert' if notice_bad else 'status' }}">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if job and not editable %}
+<p>Schedule: {{ job.schedule }}. <span class="muted">Set in station.json.</span></p>
+{% elif no_city %}
+<p class="muted">The weekly job needs the desk started with a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to set a schedule and
+run it.</p>
+{% elif editable %}
+<form method="post" action="{{ root }}/runs/schedule" novalidate>
+  <input type="hidden" name="token" value="{{ token }}">
+  <fieldset>
+    <legend>Schedule</legend>
+    <p><label><input type="checkbox" name="enabled" value="1" {% if schedule_form.get("enabled") %}checked{% endif %}> Run every week</label></p>
+    <p><label for="day">Day</label><br>
+      <select id="day" name="day" {% if error_field == "day" %}aria-invalid="true"{% endif %}>
+        {% for d in weekdays %}<option value="{{ d }}" {% if schedule_form.get("day") == d %}selected{% endif %}>{{ d|capitalize }}</option>{% endfor %}
+      </select></p>
+    <p><label for="time">Time</label><br>
+      <input id="time" type="time" name="time" value="{{ schedule_form.get("time", "") }}"
+             {% if error_field == "time" %}aria-invalid="true"{% endif %}></p>
+    {% if error_field == "time" %}<p class="field-error">Write the time as 06:00.</p>{% endif %}
+    <p><label for="timezone">Time zone</label><br>
+      <input id="timezone" type="text" name="timezone" value="{{ schedule_form.get("timezone", "") }}" placeholder="America/Denver"
+             {% if error_field == "timezone" %}aria-invalid="true"{% endif %}></p>
+    {% if error_field == "timezone" %}<p class="field-error">That is not a time zone, such as America/Denver.</p>{% endif %}
+    <p><label for="days">Days back</label><br>
+      <input id="days" type="number" name="days" min="1" max="60" value="{{ schedule_form.get("days", "") }}"
+             {% if error_field == "days" %}aria-invalid="true"{% endif %}></p>
+    {% if error_field == "days" %}<p class="field-error">Days back must be from 1 to 60.</p>{% endif %}
+    <p><label><input type="checkbox" name="diarize" value="1" {% if schedule_form.get("diarize") %}checked{% endif %}> Label speakers by voice (diarize)</label></p>
+    {% if error_field == "day" %}<p class="field-error">Choose a day of the week.</p>{% endif %}
+    <button type="submit" class="primary" data-busy="Saving…">Save the schedule</button>
+  </fieldset>
+</form>
+<details>
+  <summary>What the job runs</summary>
+  <p>Work folder <code>{{ work }}</code></p>
+  <pre>{{ command }}</pre>
+</details>
+{% endif %}
+{% if job %}
+{% if editable %}
+<p>It finds the week's meetings and stages each brief on this desk for review. Building and
+deploying the site stays with the weekly command's site options.</p>
+{% else %}
 <p>It runs {{ job.schedule }}: it finds the week's meetings, makes each brief, and publishes it.</p>
+{% endif %}
 <dl class="facts">
   <dt>Now</dt>
   <dd>{% if job.running %}<strong>Running</strong> since {{ job.running.started_at|when }} &middot; <a href="{{ root }}/runs/{{ job.running.id }}">watch its output</a>{% else %}Idle{% endif %}</dd>
   <dt>Last run</dt>
   <dd>{% if job.last %}<span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% if job.last.seconds is not none %}, took {{ job.last.seconds|duration }}{% endif %} &middot; <a href="{{ root }}/runs/{{ job.last.id }}">output</a>{% else %}None yet{% endif %}</dd>
   <dt>Next run</dt>
-  <dd>{{ job.next_at|when }}</dd>
+  <dd>{% if job.scheduled %}{{ job.next_at|when }}{% else %}<span class="muted">Off; use Run now.</span>{% endif %}</dd>
   {% if job.publish_at %}<dt>Publish</dt>
   <dd><strong>Queued</strong>: the site goes out at {{ job.publish_at|when }}{% if job.running %}, or when this run ends{% endif %}.</dd>{% endif %}
 </dl>
 <form method="post" action="{{ root }}/runs/now" class="actions">
   <input type="hidden" name="token" value="{{ token }}">
-  <button type="submit" class="primary" data-busy="Starting…"{% if job.running %} disabled{% endif %}>Run now</button>
+  <button type="submit" data-busy="Starting…"{% if job.running %} disabled{% endif %}>Run now</button>
   {% if job.running %}<span class="muted">A run is going; Run now comes back when it ends.</span>{% endif %}
 </form>
 {% if job.runs %}
@@ -36,5 +82,6 @@
   {% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endif %}
 {% endblock %}

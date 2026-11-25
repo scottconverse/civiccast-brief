@@ -2,6 +2,14 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
+## Unreleased
+
+### The desk
+
+- The plain desk (`desk.cmd`) has a **Weekly job** page: set the weekly run's schedule (saved in
+  `weekly.json` in the city folder), see the work folder and command, and press **Run now**. The
+  desk's job finds the week's meetings and stages their briefs for review.
+
 ## 0.5.0 — 2026-11-24
 
 ### The podcast

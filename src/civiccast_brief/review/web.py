@@ -33,7 +33,9 @@ import json
 import logging
 import re
 import secrets
-from collections.abc import Callable, Mapping, Sequence
+import shlex
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -48,9 +50,10 @@ from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk
+from civiccast_brief.review import desk, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
+from civiccast_brief.station.runner import WEEKDAYS
 from civiccast_brief.weekly import rosterfill
 
 if TYPE_CHECKING:
@@ -216,6 +219,8 @@ class DeskApp:
         self.templates.filters["trigger"] = lambda v: TRIGGER_LABELS.get(v, v)
         #: True in the station, which adds the Weekly job page.
         self.has_station = False
+        #: The plain desk's weekly job work folder (the command's --work), if it has one.
+        self.weekly_work: Path | None = None
         #: Called after a desk action changes what readers see (the station queues a publish).
         self.on_public_change: Callable[[], None] | None = None
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
@@ -539,33 +544,88 @@ RUN_NOTICES: Final = {
 def _add_run_routes(
     app: FastAPI,
     state: DeskApp,
-    station: Station,
+    station: Station | None,
     read_form: Callable[[Request], Any],
     bad_token: Callable[[], Response],
+    *,
+    editable: bool,
 ) -> None:
-    """The Weekly job page: last run, next run, Run now, and each run's output."""
+    """The Weekly job page: last run, next run, Run now, each run's output.
 
-    def runs_page(notice: str = "", bad: bool = False, code: int = 200) -> HTMLResponse:
+    ``editable`` is True in the plain desk, where the Schedule form writes the city's
+    weekly.json and updates the running station. In the station the schedule comes from
+    station.json, so the page shows it read-only.
+    """
+
+    def weekly_form(state_form: Mapping[str, str] | None = None) -> dict[str, str]:
+        if state_form is not None:
+            return dict(state_form)
+        if state.city_dir is None:
+            return weekly_job.form_values(weekly_job.DEFAULT)
+        try:
+            return weekly_job.form_values(weekly_job.load(state.city_dir))
+        except weekly_job.WeeklyJobError:
+            return weekly_job.form_values(weekly_job.DEFAULT)
+
+    def runs_page(
+        notice: str = "",
+        bad: bool = False,
+        code: int = 200,
+        form: Mapping[str, str] | None = None,
+        error: str = "",
+        error_field: str = "",
+    ) -> HTMLResponse:
+        settings = weekly_job.DEFAULT
+        load_error = ""
+        if state.city_dir is not None:
+            try:
+                settings = weekly_job.load(state.city_dir)
+            except weekly_job.WeeklyJobError as exc:
+                load_error = str(exc)
+        command = ""
+        if state.city_dir is not None and state.weekly_work is not None:
+            steps = weekly_job.job_steps(
+                settings, state.city_dir, state.store.path, state.weekly_work
+            )
+            command = shlex.join(steps[0])
         return state.page(
             "runs.html",
             status=code,
             title="Weekly job",
-            job=station.status(),
+            job=station.status() if station is not None else None,
             notice=notice,
             notice_bad=bad,
+            no_city=state.city_dir is None,
+            editable=editable and station is not None,
+            schedule_form=weekly_form(form),
+            work=str(state.weekly_work or ""),
+            command=command,
+            weekdays=WEEKDAYS,
+            error=error or load_error,
+            error_field=error_field,
         )
 
     @app.get("/runs", response_class=HTMLResponse)
     def runs(notice: str = "") -> HTMLResponse:
         text, bad = RUN_NOTICES.get(notice, ("", False))
+        if notice == "saved" and station is not None:
+            status = station.status()
+            text = (
+                f"Saved. Next run: {status.next_at:%a %Y-%m-%d %H:%M %Z}."
+                if status.scheduled
+                else "Saved. The schedule is off; use Run now."
+            )
         return runs_page(text, bad)
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     def one_run(run_id: int) -> HTMLResponse:
-        run = station.run(run_id)
+        run = station.run(run_id) if station is not None else None
         if run is None:
             return runs_page(f"There is no run {run_id}.", True, 404)
         return state.page("run.html", title=f"Run {run_id}", run=run)
+
+    if station is None:
+        return
 
     @app.post("/runs/now")
     async def run_now(request: Request) -> Response:
@@ -573,6 +633,35 @@ def _add_run_routes(
             return bad_token()
         started = await run_in_threadpool(station.run_now)
         return _redirect("/runs?notice=" + ("started" if started is not None else "busy"))
+
+    if not editable:
+        return
+
+    @app.post("/runs/schedule")
+    async def save_schedule(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return runs_page(
+                form=form,
+                error="The weekly job needs the desk started with a city folder.",
+                code=400,
+            )
+        try:
+            job = weekly_job.from_form(form)
+            weekly_job.save(state.city_dir, job)
+        except weekly_job.WeeklyJobError as exc:
+            return runs_page(form=form, error=f"Not saved: {exc}", error_field=exc.field, code=400)
+        except OSError as exc:
+            return runs_page(form=form, error=f"Not saved: {exc}", code=400)
+        assert state.weekly_work is not None
+        station.reconfigure(
+            steps=weekly_job.job_steps(job, state.city_dir, state.store.path, state.weekly_work),
+            schedule=job.schedule,
+            scheduled=job.enabled,
+        )
+        return _redirect("/runs?notice=saved")
 
 
 def make_desk_app(
@@ -584,18 +673,42 @@ def make_desk_app(
     auth: DeskAuth | None = None,
     root: str = "",
     station: Station | None = None,
+    plain_weekly: bool = False,
+    weekly_work: str | Path | None = None,
 ) -> FastAPI:
     """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio.
 
     ``auth`` holds the accounts and sessions; by default they live in the desk's own file.
     ``root`` is the path the desk is mounted at ("/desk" in the station). ``station`` adds the
     Runs page: the weekly job's last run, next run and Run now.
+
+    ``plain_weekly`` gives the plain desk that page too (the nav link and ``/runs``), with a
+    Schedule form that writes the city's weekly.json. ``weekly_work`` is the work folder the job
+    passes as ``--work``. The station app leaves ``plain_weekly`` off: its schedule comes from
+    station.json and its page is read-only.
     """
     root = root.rstrip("/")
     state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate, root=root)
+    state.weekly_work = Path(weekly_work) if weekly_work is not None else None
     accounts = auth if auth is not None else DeskAuth(store.path)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # The plain desk runs the weekly job's scheduler itself; the station app starts its own.
+        if station is not None and plain_weekly:
+            station.start()
+        try:
+            yield
+        finally:
+            if station is not None and plain_weekly:
+                station.stop()
+
     app = FastAPI(
-        title="CivicCast Brief editor desk", docs_url=None, redoc_url=None, openapi_url=None
+        title="CivicCast Brief editor desk",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=lifespan,
     )
     app.state.desk = state
 
@@ -724,10 +837,12 @@ def make_desk_app(
             (STATIC_DIR / "desk.js").read_text(encoding="utf-8"), media_type="text/javascript"
         )
 
-    if station is not None:
+    if station is not None or plain_weekly:
         state.has_station = True
-        state.on_public_change = station.request_publish
-        _add_run_routes(app, state, station, read_form, bad_token)
+        if station is not None and not plain_weekly:
+            # Only the station has publish steps; the plain desk's job stages items for review.
+            state.on_public_change = station.request_publish
+        _add_run_routes(app, state, station, read_form, bad_token, editable=plain_weekly)
 
     @app.get("/", response_class=HTMLResponse)
     def items(status: str = "") -> HTMLResponse:
