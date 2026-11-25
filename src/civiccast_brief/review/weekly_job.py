@@ -10,8 +10,9 @@
     }
 
 The Weekly job page edits this file. The job itself is one ``civiccast_brief.weekly run`` command
-that finds the week's meetings and writes them, staged for review, to the desk's database. It has
-no site options: building and deploying the site stays with the weekly command's site options.
+that finds the week's meetings and writes each brief to the desk's database: a brief that passes
+its checks is published at once, and one that fails waits in review. It has no site options:
+building and deploying the site stays with the weekly command's site options.
 
 A missing file gives these defaults, with the schedule off, so a new desk never runs anything
 until its owner turns it on.
@@ -177,7 +178,7 @@ def _checked(value: object) -> bool:
 def job_steps(
     job: WeeklyJob, city_dir: str | Path, db: str | Path, work: str | Path
 ) -> list[list[str]]:
-    """The station job: one command that finds the week's meetings and stages them for review."""
+    """The plain desk's job: one command that finds the week's meetings and writes each brief."""
     argv = [
         sys.executable,
         "-m",

@@ -604,8 +604,9 @@ schtasks /Create /TN "CivicCast Brief weekly" /SC WEEKLY /D TUE /ST 06:00 /TR "C
 
 The editor desk started with `--city` also has a **Weekly job** page that sets this schedule from
 a form, saved in `weekly.json` in the city folder; **Run now** runs the job immediately. The desk's
-job finds the week's meetings and writes and stages each brief on the desk for review. Building
-and deploying the site stays with the weekly command's site options.
+job finds the week's meetings and writes each brief: a brief that passes its checks is published on
+the desk at once, and one that fails a check waits in Items for review. Building and deploying the
+site stays with the weekly command's site options.
 
 ## 10. A cloud station with a Windows PC worker
 

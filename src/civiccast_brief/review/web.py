@@ -923,7 +923,7 @@ def make_desk_app(
     if station is not None or plain_weekly:
         state.has_station = True
         if station is not None and not plain_weekly:
-            # Only the station has publish steps; the plain desk's job stages items for review.
+            # Only the station has publish steps; the plain desk publishes each brief that passes.
             state.on_public_change = station.request_publish
         _add_run_routes(app, state, station, read_form, bad_token, editable=plain_weekly)
 

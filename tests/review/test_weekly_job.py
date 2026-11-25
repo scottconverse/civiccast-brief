@@ -329,6 +329,13 @@ def test_the_weekly_job_page_says_what_test_one_meeting_publishes(plain):
     assert "go to the website with the next publish" in page
 
 
+def test_the_weekly_job_page_says_what_the_job_publishes(plain):
+    app, _, _, _ = plain
+    page = signed_in(app).get("/runs").text
+    assert "stages each brief on this desk for review" not in page
+    assert "passes its checks is published on this desk" in page
+
+
 def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):
     clock = Clock(datetime(2026, 11, 11, 12, 0, tzinfo=DENVER))
     steps = Steps()

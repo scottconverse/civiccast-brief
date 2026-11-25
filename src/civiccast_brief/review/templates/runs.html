@@ -58,7 +58,7 @@ run it.</p>
 {% endif %}
 {% if job %}
 {% if editable %}
-<p>It finds the week's meetings and stages each brief on this desk for review. Building and
+<p>It finds the week's meetings and writes each brief. A brief that passes its checks is published on this desk at once; one that fails a check waits in Items for review. Building and
 deploying the site stays with the weekly command's site options.</p>
 {% else %}
 <p>It runs {{ job.schedule }}: it finds the week's meetings, makes each brief, and publishes it.</p>
