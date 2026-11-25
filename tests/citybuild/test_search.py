@@ -149,6 +149,38 @@ def test_guesses_add_the_forms_real_colorado_towns_use():
     assert guesses("Berthoud", "CO")[-1] == "https://berthoudco.us/"
 
 
+def test_a_guessed_website_must_look_like_the_town_not_a_tourism_guide(web):
+    """Estes Park's first answer names the town but is a tourism guide; the town's own .gov
+    site comes later in the guesses and is the one taken (2026-11-25)."""
+    tourism = "https://www.estesparkco.org/"
+    official = "https://www.estespark.colorado.gov/"
+    order = guesses("Estes Park", "CO")
+    assert order.index(tourism) < order.index(official)
+    web.add(
+        tourism,
+        "<html><title>Estes Park Guide: Rocky Mountain Park, Hotels &amp; Dining</title>"
+        "<p>Estes Park</p></html>",
+    )
+    web.add(official, "<html><title>Town of Estes Park</title><p>Estes Park</p></html>")
+    found = search_city("Estes Park", "CO", fetcher=web.fetcher(), today=TODAY)
+    assert found.website == official
+    assert tourism in web.asked
+
+
+def test_a_guessed_org_website_that_names_the_town_is_accepted(web):
+    home = "https://www.berthoud.org/"
+    web.add(home, "<html><title>Town of Berthoud</title><p>Berthoud</p></html>")
+    found = search_city("Berthoud", "CO", fetcher=web.fetcher(), today=TODAY)
+    assert found.website == home
+
+
+def test_a_typed_website_is_used_even_with_no_government_words(web):
+    home = "https://www.estesparknews.test/"
+    web.add(home, "<html><title>Estes Park News</title><p>Estes Park</p></html>")
+    found = search_city("Estes Park", "CO", website=home, fetcher=web.fetcher(), today=TODAY)
+    assert found.website == home
+
+
 def test_a_guess_that_answers_403_opens_in_chrome(web):
     """A guessed site that turns the plain client away (403) is opened in Chrome once."""
     from civiccast_brief.citybuild.search import Search, _find_website
