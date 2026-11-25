@@ -175,6 +175,18 @@ def _checked(value: object) -> bool:
     return str(value or "").strip().lower() in ("1", "on", "true", "yes")
 
 
+def test_steps(
+    job: WeeklyJob, city_dir: str | Path, db: str | Path, work: str | Path
+) -> list[list[str]]:
+    """The job's command for one meeting only, with everything left for review.
+
+    The desk's Test one meeting button and the setup wizard's Test every city both use this,
+    so the two run exactly the same command."""
+    steps = job_steps(job, city_dir, db, work)
+    steps[0] = [*steps[0], "--limit", "1", "--review-only"]
+    return steps
+
+
 def job_steps(
     job: WeeklyJob, city_dir: str | Path, db: str | Path, work: str | Path
 ) -> list[list[str]]:

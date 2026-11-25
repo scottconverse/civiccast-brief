@@ -194,6 +194,29 @@ The build lives in the city's work folder: `site\episodes`, `site\media` and `si
 `desk.db`. The desk rebuilds the site after every weekly run and about half a minute after you
 publish, edit or kill a public item, then deploys it to the place you chose.
 
+### Test and Every week
+
+The **Test** step runs the city's real models on each city's newest meeting — captions, recap,
+story and script — one city at a time. It takes several minutes per city. Everything it makes
+waits in Items for review; nothing is published and no website is built. The step is finished
+when each city's test run ended OK and at least one item waits in that city's Items.
+
+The **Every week** step sets one weekly schedule (day, time and time zone) for every city, and
+whether to diarize the speakers' voices. Saving turns each city's schedule on and writes its
+`weekly.json`. It also offers one Windows scheduled task, `CivicCast Brief weekly`:
+
+- **Set up the Windows task** registers it for the current Windows user, with no administrator
+  rights and no stored password. It runs `civiccast_brief.review run-due --cities DIR` every hour
+  and at sign-in, with "start when available", so each city's weekly job runs even with the desk
+  closed. If a city's job is already running, the task waits for the next hour instead of starting
+  a second copy.
+- **No password is stored**, so the task runs only while that user is signed in to Windows. After
+  a reboot it runs at the next sign-in, and catches up a week that was missed while the PC was off.
+- **Remove the Windows task** stops that; the weekly job then runs only while the desk is open.
+
+Each city's next run is shown on the page. The task's state, next run, last run and last result
+are shown too.
+
 ### What readers see
 
 - The front page leads with the newest story. Each story has its own page.

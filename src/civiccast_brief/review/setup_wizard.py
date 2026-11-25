@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -47,6 +48,8 @@ STEPS: Final = (
     ("rosters", "Rosters"),
     ("models-voices", "Models and voices"),
     ("website", "Website"),
+    ("test", "Test"),
+    ("weekly", "Every week"),
 )
 
 
@@ -474,3 +477,129 @@ class SetupJobs:
     def status(self) -> list[CityStatus]:
         with self._lock:
             return list(self._rows.values())
+
+
+# ----- Test every city -----------------------------------------------------------------------
+
+
+def last_line(text: str) -> str:
+    """The last non-empty line of a run's output, cut short for a status cell."""
+    for line in reversed(str(text or "").splitlines()):
+        if line.strip():
+            return line.strip()[:300]
+    return ""
+
+
+@dataclass(frozen=True)
+class TestCityStatus:
+    """One city's row on the Test every city page."""
+
+    slug: str
+    state: str = "waiting"
+    message: str = ""
+    run_id: int | None = None
+
+
+class TestJobs:
+    """One background thread that tests each city, one city at a time.
+
+    For each city it starts that city's Test one meeting run (the same steps as the desk's
+    button) through its Station, waits for the ``station_runs`` row to finish, then checks the
+    city is done: the run ended ``ok`` and at least one item is waiting for review. Every
+    outside call is injected, so tests give fake Stations and never run a model.
+
+    A second start while a job runs does nothing and returns False.
+    """
+
+    def __init__(
+        self,
+        *,
+        station_for: Callable[[CitySpec], Any],
+        steps_for: Callable[[CitySpec], list[list[str]]],
+        review_count: Callable[[CitySpec], int],
+        poll_seconds: float = 1.0,
+        timeout_seconds: float = 2 * 60 * 60,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._station_for = station_for
+        self._steps_for = steps_for
+        self._review_count = review_count
+        self._poll = poll_seconds
+        self._timeout = timeout_seconds
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._rows: dict[str, TestCityStatus] = {}
+
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self, cities: list[CitySpec]) -> bool:
+        with self._lock:
+            if self.running():
+                return False
+            self._rows = {city.slug: TestCityStatus(city.slug) for city in cities}
+            self._thread = threading.Thread(
+                target=self._run, args=(list(cities),), daemon=True, name="setup-test"
+            )
+            self._thread.start()
+            return True
+
+    def status(self) -> list[TestCityStatus]:
+        with self._lock:
+            return list(self._rows.values())
+
+    def row(self, slug: str) -> TestCityStatus | None:
+        with self._lock:
+            return self._rows.get(slug)
+
+    def _set(self, slug: str, state: str, *, message: str = "", run_id: int | None = None) -> None:
+        with self._lock:
+            if slug in self._rows:
+                self._rows[slug] = TestCityStatus(slug, state, message, run_id)
+
+    def _run(self, cities: list[CitySpec]) -> None:
+        for city in cities:
+            self._set(city.slug, "running")
+            try:
+                station = self._station_for(city)
+                run_id = station.run_now_with(self._steps_for(city), "test")
+                if run_id is None:
+                    self._set(city.slug, "failed", message="Another run is going for this city.")
+                    continue
+                run = self._wait(station, run_id)
+                if run is None:
+                    self._set(
+                        city.slug,
+                        "failed",
+                        message="The test run did not finish in time.",
+                        run_id=run_id,
+                    )
+                    continue
+                if run.status != "ok":
+                    message = last_line(run.log) or f"The run {run.status}."
+                    self._set(city.slug, "failed", message=message, run_id=run_id)
+                    continue
+                if self._review_count(city) < 1:
+                    self._set(
+                        city.slug,
+                        "failed",
+                        message="The test run finished, but no item waits for review.",
+                        run_id=run_id,
+                    )
+                    continue
+                self._set(city.slug, "ok", run_id=run_id)
+            except Exception as exc:  # noqa: BLE001 - one city's failure must not stop the rest
+                self._set(city.slug, "failed", message=_one_line(exc))
+
+    def _wait(self, station: Any, run_id: int) -> Any:
+        end = self._monotonic() + self._timeout
+        while True:
+            run = station.run(run_id)
+            if run is None or run.status != "running":
+                return run
+            if self._monotonic() >= end:
+                return None
+            self._sleep(self._poll)

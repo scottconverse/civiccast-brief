@@ -22,11 +22,13 @@ import hmac
 import re
 import secrets
 import sqlite3
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
@@ -37,7 +39,7 @@ from starlette.types import Receive, Scope, Send
 
 from civiccast_brief import city as city_file
 from civiccast_brief import setup_check
-from civiccast_brief.review import setup_wizard, site_settings
+from civiccast_brief.review import setup_wizard, site_settings, weekly_job, weekly_task
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import (
@@ -53,11 +55,19 @@ from civiccast_brief.review.web import (
     _route_path,
     city_desk,
 )
-from civiccast_brief.station.runner import Station, StationError
+from civiccast_brief.station.runner import WEEKDAYS, Station, StationError
 
 
 class HubError(ValueError):
     """A city cannot be added; the message says why."""
+
+
+#: What the Every week page says after a successful action.
+WEEKLY_NOTICES: Final = {
+    "saved": "Saved. Every city runs on that schedule.",
+    "installed": "The Windows task is set up.",
+    "removed": "The Windows task is removed.",
+}
 
 
 @dataclass
@@ -80,6 +90,21 @@ def slug_from_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-")
 
 
+def city_slugs(cities_dir: str | Path) -> list[str]:
+    """Every subfolder that holds a ``city/`` folder and a valid slug, by folder name.
+
+    ``_left-out`` holds cities the wizard left out, so it is never one of them."""
+    try:
+        entries = sorted(Path(cities_dir).iterdir())
+    except OSError:
+        return []
+    return [
+        entry.name
+        for entry in entries
+        if entry.is_dir() and city_file._SLUG_RE.match(entry.name) and (entry / "city").is_dir()
+    ]
+
+
 class Hub:
     """The cities and their desks, discovered from the folder and opened when needed."""
 
@@ -94,6 +119,14 @@ class Hub:
         self.desks: dict[str, CityDesk] = {}
         #: The setup wizard's one background job (Find or Check), shared by every city.
         self.setup_jobs = setup_wizard.SetupJobs()
+        #: The setup wizard's Test every city job, one city at a time.
+        self.test_jobs = setup_wizard.TestJobs(
+            station_for=lambda city: self.load(city.slug).station,
+            steps_for=self._test_steps,
+            review_count=self._review_count,
+        )
+        #: Runs PowerShell for the Windows task page; tests give a fake.
+        self.task_runner = weekly_task.run_powershell
         #: True between lifespan startup and shutdown, when loaded cities' Stations run.
         self.running = False
 
@@ -105,15 +138,7 @@ class Hub:
 
     def slugs(self) -> list[str]:
         """Every subfolder that holds a ``city/`` folder and a valid slug, by folder name."""
-        try:
-            entries = sorted(self.cities_dir.iterdir())
-        except OSError:
-            return []
-        return [
-            entry.name
-            for entry in entries
-            if entry.is_dir() and city_file._SLUG_RE.match(entry.name) and (entry / "city").is_dir()
-        ]
+        return city_slugs(self.cities_dir)
 
     def rows(self) -> list[dict[str, str]]:
         """The city list page's rows: name and state from city.read_identity, else the slug."""
@@ -132,6 +157,53 @@ class Hub:
     def switcher(self) -> list[tuple[str, str]]:
         """(slug, display name) for every city, for the header's city switcher."""
         return [(row["slug"], row["name"]) for row in self.rows()]
+
+    # ----- the setup wizard's Test step -----------------------------------------------------
+
+    def _test_steps(self, city: setup_wizard.CitySpec) -> list[list[str]]:
+        """The Test one meeting command for a city, exactly as the desk's button builds it."""
+        desk = self.load(city.slug)
+        try:
+            settings = weekly_job.load(desk.city_dir)
+        except weekly_job.WeeklyJobError:
+            settings = weekly_job.DEFAULT
+        return weekly_job.test_steps(
+            settings, desk.city_dir, desk.store.path, desk.folder / "runs" / "weekly"
+        )
+
+    def _review_count(self, city: setup_wizard.CitySpec) -> int:
+        return len(self.load(city.slug).store.list_items("review"))
+
+    def test_state(self, city: setup_wizard.CitySpec) -> tuple[str, str, int | None]:
+        """A city's Test row when no job is running: (state, message, run id).
+
+        Read from the city's own ``station_runs`` and desk: the newest test run must have
+        ended ``ok`` and at least one item must wait for review."""
+        desk = self.load(city.slug)
+        job_row = self.test_jobs.row(city.slug)
+        if job_row is not None:
+            return job_row.state, job_row.message, job_row.run_id
+        try:
+            runs = [run for run in desk.station.runs() if run.trigger == "test"]
+        except Exception:  # noqa: BLE001 - a station without run history is simply untested
+            runs = []
+        newest = runs[0] if runs else None
+        if newest is None:
+            return "waiting", "", None
+        if newest.status == "running":
+            return "running", "", newest.id
+        if newest.status == "ok":
+            if self._review_count(city):
+                return "ok", "", newest.id
+            return "failed", "The test run finished, but no item waits for review.", newest.id
+        return (
+            "failed",
+            setup_wizard.last_line(newest.log) or f"The run {newest.status}.",
+            newest.id,
+        )
+
+    def test_done(self, city: setup_wizard.CitySpec) -> bool:
+        return self.test_state(city)[0] == "ok"
 
     # ----- cities ---------------------------------------------------------------------------
 
@@ -857,6 +929,184 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
                     )
                 )
         return _redirect("/setup/website?notice=saved")
+
+    # ----- the Test step --------------------------------------------------------------------
+
+    def test_rows() -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for spec in city_specs():
+            state, message, run_id = hub.test_state(spec)
+            rows.append(
+                {
+                    "slug": spec.slug,
+                    "name": display_name(spec),
+                    "state": state,
+                    "message": message,
+                    "run_id": run_id,
+                }
+            )
+        return rows
+
+    def test_step(status: int = 200, error: str = "") -> HTMLResponse:
+        rows = test_rows()
+        return setup_page(
+            "setup_test.html",
+            "test",
+            status=status,
+            title="Test",
+            rows=rows,
+            running=hub.test_jobs.running(),
+            error=error,
+            setup_next_ready=bool(rows) and all(row["state"] == "ok" for row in rows),
+        )
+
+    @app.get("/setup/test", response_class=HTMLResponse)
+    def setup_test_get() -> HTMLResponse:
+        return test_step()
+
+    @app.post("/setup/test")
+    async def setup_test_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        hub.test_jobs.start(city_specs())
+        return _redirect("/setup/test")
+
+    # ----- the Every week step --------------------------------------------------------------
+
+    def weekly_defaults() -> dict[str, str]:
+        specs = city_specs()
+        job = weekly_job.DEFAULT
+        if specs:
+            try:
+                job = weekly_job.load(specs[0].city_dir)
+            except weekly_job.WeeklyJobError:
+                job = weekly_job.DEFAULT
+        values = weekly_job.form_values(job)
+        values["diarize"] = "1" if job.diarize else ""
+        return values
+
+    def task_status() -> tuple[weekly_task.TaskStatus | None, str]:
+        try:
+            return weekly_task.status(hub.task_runner), ""
+        except weekly_task.WeeklyTaskError as exc:
+            return None, str(exc)
+
+    def weekly_rows() -> list[dict[str, Any]]:
+        now = datetime.now().astimezone()
+        rows: list[dict[str, Any]] = []
+        for spec in city_specs():
+            row: dict[str, Any] = {
+                "slug": spec.slug,
+                "name": display_name(spec),
+                "enabled": False,
+                "next_at": None,
+                "problem": "",
+            }
+            try:
+                job = weekly_job.load(spec.city_dir)
+            except weekly_job.WeeklyJobError as exc:
+                row["problem"] = f"weekly.json could not be read: {exc}"
+                rows.append(row)
+                continue
+            row["enabled"] = job.enabled
+            if job.enabled:
+                try:
+                    row["next_at"] = job.schedule.next_after(now)
+                except weekly_job.WeeklyJobError as exc:
+                    row["problem"] = str(exc)
+            rows.append(row)
+        return rows
+
+    def weekly_step(
+        form: dict[str, str] | None = None,
+        *,
+        notice: str = "",
+        error: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        rows = weekly_rows()
+        task, task_error = task_status()
+        return setup_page(
+            "setup_weekly.html",
+            "weekly",
+            status=status,
+            title="Every week",
+            form={**weekly_defaults(), **(form or {})},
+            rows=rows,
+            task=task,
+            task_error=task_error,
+            notice=notice,
+            error=error,
+            weekdays=WEEKDAYS,
+            setup_next_ready=bool(rows)
+            and all(row["enabled"] for row in rows)
+            and task is not None
+            and task.installed,
+        )
+
+    @app.get("/setup/weekly", response_class=HTMLResponse)
+    def setup_weekly_get(notice: str = "") -> HTMLResponse:
+        return weekly_step(notice=WEEKLY_NOTICES.get(notice, ""))
+
+    @app.post("/setup/weekly")
+    async def setup_weekly_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        action = form.get("action", "save")
+        if action == "install":
+            try:
+                weekly_task.install(sys.executable, hub.cities_dir, hub.task_runner)
+            except weekly_task.WeeklyTaskError as exc:
+                return weekly_step(form=dict(form), error=str(exc), status=500)
+            return _redirect("/setup/weekly?notice=installed")
+        if action == "remove":
+            try:
+                weekly_task.remove(hub.task_runner)
+            except weekly_task.WeeklyTaskError as exc:
+                return weekly_step(form=dict(form), error=str(exc), status=500)
+            return _redirect("/setup/weekly?notice=removed")
+        specs = city_specs()
+        if not specs:
+            return weekly_step(
+                form=dict(form), error="Add a city on the Cities step first.", status=400
+            )
+        diarize = str(form.get("diarize", "")).strip().lower() in ("1", "on", "true", "yes")
+        planned: list[tuple[setup_wizard.CitySpec, weekly_job.WeeklyJob]] = []
+        try:
+            for spec in specs:
+                try:
+                    existing = weekly_job.load(spec.city_dir)
+                except weekly_job.WeeklyJobError:
+                    existing = weekly_job.DEFAULT
+                job = weekly_job.WeeklyJob(
+                    enabled=True,
+                    day=str(form.get("day", "")),
+                    at=str(form.get("time", "")),
+                    zone=str(form.get("timezone", "")),
+                    days=existing.days,
+                    diarize=diarize,
+                )
+                weekly_job.validate(job)
+                planned.append((spec, job))
+        except weekly_job.WeeklyJobError as exc:
+            return weekly_step(form=dict(form), error=f"Not saved: {exc}", status=400)
+        for spec, job in planned:
+            try:
+                weekly_job.save(spec.city_dir, job)
+            except (OSError, weekly_job.WeeklyJobError) as exc:
+                return weekly_step(form=dict(form), error=f"Not saved: {exc}", status=400)
+            desk = hub.desks.get(spec.slug)
+            if desk is not None:
+                desk.station.reconfigure(
+                    steps=weekly_job.job_steps(
+                        job, desk.city_dir, desk.store.path, desk.folder / "runs" / "weekly"
+                    ),
+                    schedule=job.schedule,
+                    scheduled=True,
+                )
+        return _redirect("/setup/weekly?notice=saved")
 
     app.mount("/c", CityDispatcher(hub))
     return app

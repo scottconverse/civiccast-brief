@@ -2,6 +2,7 @@
 
     python -m civiccast_brief.review serve --db PATH [--city DIR] [--port 8765]
     python -m civiccast_brief.review export --db PATH --out DIR
+    python -m civiccast_brief.review run-due --cities DIR
 
 serve runs the editor desk on 127.0.0.1 only. It creates an empty database if PATH does not
 exist, and moves an older review database to the desk's states (approved items become
@@ -24,6 +25,7 @@ from fastapi import FastAPI
 
 from civiccast_brief.review.export import export_published
 from civiccast_brief.review.hub import make_hub_app
+from civiccast_brief.review.run_due import run_due
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import (
     BIND_HOST,
@@ -75,6 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument(
         "--out", required=True, type=Path, help="output folder (created if missing)"
     )
+
+    due = commands.add_parser(
+        "run-due", help="run every city's weekly job when it is due (the Windows task's command)"
+    )
+    due.add_argument(
+        "--cities", required=True, type=Path, help="the folder of city folders, as the hub uses"
+    )
     return parser
 
 
@@ -82,7 +91,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "serve":
         return _serve(args.db, args.city, args.port, args.work, args.cities)
+    if args.command == "run-due":
+        return _run_due(args.cities)
     return _export(args.db, args.out)
+
+
+def _run_due(cities: Path) -> int:
+    """Run every city that is due; one city's failure never stops the rest."""
+    if cities.exists() and not cities.is_dir():
+        print(f"error: {cities} is not a folder", file=sys.stderr)
+        return 1
+    try:
+        cities.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"error: could not use {cities}: {exc}", file=sys.stderr)
+        return 1
+    return run_due(cities)
 
 
 def _serve(
