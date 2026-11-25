@@ -312,3 +312,55 @@ def test_a_second_page_with_other_names_is_named_in_the_note(web):
 
     note = members.roster_from_found("Jamestown", "CO", found, date(2026, 11, 11))["note"]
     assert f"{board} also lists Board of Trustees members, with Megan Quitter in place" in note
+
+
+def test_a_city_that_prints_names_in_capitals_keeps_them():
+    """Golden prints four names in capitals in its headings ("MAYOR LAURA WEINBERG",
+    "COUNCILOR DON CAMERON, Ward 3") and the same names in mixed case in the Contact links
+    below (page saved 2026-11-25). The names come out as the city writes them in mixed case."""
+    found, untitled = _read("golden-council-commentaries.html", "City Council")
+    assert [name for name, _, _, _ in found] == [
+        "Laura Weinberg",
+        "Lisa Vitry",
+        "Patty Evans",
+        "Emily Kurzinski",
+        "Gerchard Pfau",
+        "Don Cameron",
+        "Sandra Knecht",
+    ]
+    assert {name: role for name, _, _, role in found} == {
+        "Laura Weinberg": "Mayor",
+        "Emily Kurzinski": "Councilor, Ward 1",
+        "Gerchard Pfau": "Councilor, Ward 2",
+        "Don Cameron": "Councilor, Ward 3",
+        "Sandra Knecht": "Councilor, Ward 4",
+        "Lisa Vitry": "Councilor, District 1",
+        "Patty Evans": "Councilor, District 2",
+    }
+    assert untitled == []
+
+
+def test_a_capitals_only_name_with_no_mixed_case_copy_is_capitalised_and_noted():
+    """A name the page prints in capitals only has nothing to copy, so it is simple-capitalised
+    and the roster says so."""
+    page = "<h2>MAYOR JANE DOE</h2><p>Text.</p><h2>COUNCILOR JOHN ROE, Ward 1</h2>"
+    notes: list[str] = []
+    found, _ = read_members(page, "City Council", notes)
+    assert [(m.name, m.role) for m in found] == [
+        ("Jane Doe", "Mayor"),
+        ("John Roe", "Councilor, Ward 1"),
+    ]
+    assert notes == [
+        '"JANE DOE" is printed in capitals only; check the capitalization',
+        '"JOHN ROE" is printed in capitals only; check the capitalization',
+    ]
+
+
+def test_all_caps_headings_are_not_members():
+    """The page's headings are capitals too, but they are not names."""
+    page = (
+        "<h1>MEET YOUR CITY COUNCILORS</h1><h2>CITY COUNCIL</h2>"
+        "<h2>MAYOR LAURA WEINBERG</h2><h2>COUNCILOR LISA VITRY, District 1</h2>"
+    )
+    found, _ = read_members(page, "City Council")
+    assert [m.name for m in found] == ["Laura Weinberg", "Lisa Vitry"]

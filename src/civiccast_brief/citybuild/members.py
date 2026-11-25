@@ -129,6 +129,9 @@ _NOT_NAME: Final = frozenset(
 _UP: Final = r"[A-ZÀ-ÖØ-Þ]"
 _LOW: Final = r"[a-zß-öø-ÿ]"
 _ANY: Final = r"[A-Za-zÀ-ÖØ-öø-ÿ'’.-]"
+#: A word printed in capitals only (letters A-Z and past A-Z, plus ' and -).
+_CAPS_WORD: Final = re.compile(rf"{_UP}[A-ZÀ-ÖØ-Þ'’.-]*")
+_UP_RE: Final = re.compile(_UP)
 _ROLE_RE: Final = re.compile(rf"^{_ROLE}$", re.IGNORECASE)
 _TITLE_THEN_NAME: Final = re.compile(rf"^(?P<role>{_ROLE})\s*:?\s+(?P<name>.+?)$", re.IGNORECASE)
 _NAME_THEN_TITLE: Final = re.compile(
@@ -186,6 +189,8 @@ class Found:
     body: str = ""
     problem: str = ""
     asked: list[str] = field(default_factory=list)
+    #: Things the page forced the reader to guess (a name printed in capitals only, say).
+    notes: list[str] = field(default_factory=list)
     #: Other pages on the site that list as many members with different names: (page, names
     #: only that page lists).
     differ: list[tuple[str, list[str]]] = field(default_factory=list)
@@ -211,6 +216,15 @@ def page_lines(text: str) -> list[str]:
     ]
 
 
+def _caps_word(word: str) -> bool:
+    """A word printed in capitals: letters only (A-Z and past A-Z), plus ' and -."""
+    return bool(_CAPS_WORD.fullmatch(word)) and bool(_UP_RE.search(word))
+
+
+def _all_caps_name(name: str) -> bool:
+    return all(_caps_word(word) for word in name.split())
+
+
 def _word_ok(word: str) -> bool:
     if word.casefold() in _PARTICLES:
         return True
@@ -218,10 +232,32 @@ def _word_ok(word: str) -> bool:
         return True
     if word.casefold() in _SUFFIXES:
         return True
+    # A city may print a name in capitals only ("DON CAMERON", Golden CO, 2026-11-25); the
+    # headings that are also all capitals ("CITY COUNCIL") are turned away by _NOT_NAME.
     # Letters past A-Z count too: "Jorge Chávez" (Boulder Valley's board, 2026-11-11).
-    if not re.fullmatch(rf"{_UP}{_ANY}*{_LOW}{_ANY}*|{_UP}{_LOW}*['’]{_UP}{_LOW}+", word):
+    if not _caps_word(word) and not re.fullmatch(
+        rf"{_UP}{_ANY}*{_LOW}{_ANY}*|{_UP}{_LOW}*['’]{_UP}{_LOW}+", word
+    ):
         return False
     return word.casefold().strip(".") not in _NOT_NAME
+
+
+def _mixed_case_copy(name: str, lines: list[str]) -> str | None:
+    """The same name printed in mixed case elsewhere on the page, or None."""
+    pattern = re.compile(
+        r"(?<![\w'’])" + r"\s+".join(re.escape(word) for word in name.split()) + r"(?![\w'’])",
+        re.IGNORECASE,
+    )
+    for line in lines:
+        for match in pattern.finditer(line):
+            text = match.group(0).strip()
+            if text and not _all_caps_name(text):
+                return text
+    return None
+
+
+def _capitalize_name(name: str) -> str:
+    return " ".join(word[:1].upper() + word[1:].lower() for word in name.split())
 
 
 def as_name(text: str) -> str | None:
@@ -246,6 +282,8 @@ def split_name(name: str) -> tuple[str, str]:
 
 def _role_text(role: str, seat: str = "") -> str:
     role = " ".join(role.split())
+    if not re.search(_LOW, role):  # a role printed in capitals: "COUNCILOR" -> "Councilor"
+        role = role.title()
     if re.fullmatch(r"mayor\s*pro[\s-]*tem(?:pore)?", role, re.IGNORECASE):
         role = "Mayor Pro Tem"
     elif role.casefold() == "mayor":
@@ -296,8 +334,14 @@ def _member_title(body: str, roles: list[str]) -> str:
     return "Council Member"
 
 
-def read_members(text: str, body: str = "") -> tuple[list[Member], list[str]]:
-    """The members a page prints, and the names among them printed with no title."""
+def read_members(
+    text: str, body: str = "", notes: list[str] | None = None
+) -> tuple[list[Member], list[str]]:
+    """The members a page prints, and the names among them printed with no title.
+
+    ``notes``, when given, collects what the page forced the reader to guess: a name printed in
+    capitals only with no mixed-case copy, so the roster can say so.
+    """
     lines = page_lines(text)
     hits: dict[int, tuple[str, str]] = {}
     for index, line in enumerate(lines):
@@ -320,10 +364,29 @@ def read_members(text: str, body: str = "") -> tuple[list[Member], list[str]]:
                 untitled[index] = name
             index += 1
     title = _member_title(body, [role for _, role in hits.values()])
+    shown: dict[str, str] = {}
+
+    def printed_name(name: str) -> str:
+        """The name as the city prints it: its mixed-case copy when the page has one."""
+        if name in shown:
+            return shown[name]
+        out = name
+        if _all_caps_name(name):
+            mixed = _mixed_case_copy(name, lines)
+            if mixed:
+                out = mixed
+            else:
+                out = _capitalize_name(name)
+                if notes is not None:
+                    notes.append(f'"{name}" is printed in capitals only; check the capitalization')
+        shown[name] = out
+        return out
+
     rank = {"mayor": 0, "mayor pro tem": 1}
     chosen: dict[str, tuple[int, str]] = {}  # name -> (order, role)
     for index in sorted(set(hits) | set(untitled)):
         name, role = hits[index] if index in hits else (untitled[index], title)
+        name = printed_name(name)
         if name in chosen:
             old = chosen[name][1]
             if rank.get(role.casefold(), 9) < rank.get(old.casefold(), 9):
@@ -334,8 +397,13 @@ def read_members(text: str, body: str = "") -> tuple[list[Member], list[str]]:
     for name, (_, role) in sorted(chosen.items(), key=lambda kv: kv[1][0]):
         first_name, last_name = split_name(name)
         members.append(Member(name=name, first=first_name, last=last_name, role=role))
-    printed = {name for name, _ in hits.values()}
-    return members, [name for name in untitled.values() if name not in printed]
+    printed = {printed_name(name) for name, _ in hits.values()}
+    untitled_out = []
+    for raw in untitled.values():
+        name = printed_name(raw)
+        if name not in printed:
+            untitled_out.append(name)
+    return members, untitled_out
 
 
 def _same_site(url: str, home: str) -> bool:
@@ -405,7 +473,7 @@ def find_members(
 
     queue: list[tuple[int, int, str]] = [(99, 0, website)]  # (-lead, depth, url)
     seen = {website.split("#", 1)[0].rstrip("/")}
-    best: tuple[tuple[int, int], list[Member], list[str], str] | None = None
+    best: tuple[tuple[int, int], list[Member], list[str], str, list[str]] | None = None
     rosters: list[tuple[tuple[int, int], list[Member], str]] = []
     read = 0
     while queue and read < MAX_PAGES:
@@ -416,12 +484,13 @@ def find_members(
         if page is None:
             continue
         text = page.text
-        members, untitled = read_members(text, body)
+        notes: list[str] = []
+        members, untitled = read_members(text, body, notes)
         if len(members) >= MIN_MEMBERS:
             score = (int(_heads_body(members)), len(members))
             rosters.append((score, members, page.url))
             if best is None or score > best[0]:
-                best = (score, members, untitled, page.url)
+                best = (score, members, untitled, page.url, notes)
         if depth >= 2:
             continue
         _, links, _ = parse(text, page.url)
@@ -440,7 +509,7 @@ def find_members(
             + (" (the site opened only in a browser)" if blocked else "")
         )
         return found
-    score, found.members, found.untitled, found.page = best
+    score, found.members, found.untitled, found.page, found.notes = best
     names = {m.name for m in found.members}
     for other_score, other, url in rosters:
         extra = [m.name for m in other if m.name not in names]
@@ -472,6 +541,8 @@ def roster_from_found(name: str, state: str, found: Found, today: date) -> dict[
             f" The page prints no title for {', '.join(found.untitled)}; "
             f"they are listed as {title}."
         )
+    for guess in found.notes:
+        note += f" {guess}."
     for page, extra in found.differ:
         note += (
             f" {page} also lists {found.body or 'the'} members, with {', '.join(extra)} "
