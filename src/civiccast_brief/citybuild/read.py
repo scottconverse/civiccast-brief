@@ -85,7 +85,7 @@ class Proof:
 
 #: What a reader can do when a body has no meeting in a platform's window.
 _NO_MEETING_FIX: Final = (
-    " If this body no longer meets, or meets rarely, remove it from this source (Sources page, "
+    ". If this body no longer meets, or meets rarely, remove it from this source (Sources page, "
     "Edit); it can be added back at any time."
 )
 

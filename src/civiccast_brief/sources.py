@@ -214,7 +214,10 @@ class Source:
 
 def parse_bodies(value: str | Iterable[str]) -> tuple[str, ...]:
     """Body names from a list, or from text with one name per line or commas between names."""
-    parts = re.split(r"[,\n]", value) if isinstance(value, str) else list(value)
+    if isinstance(value, str):
+        parts = re.split(r"\n", value) if "\n" in value.strip() else re.split(r",", value)
+    else:
+        parts = list(value)
     seen: list[str] = []
     for part in parts:
         name = " ".join(str(part).split())
