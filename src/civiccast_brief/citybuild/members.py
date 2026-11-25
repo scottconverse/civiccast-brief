@@ -163,6 +163,12 @@ _NAME_THEN_TITLE: Final = re.compile(
 )
 _ROLE_FIRST: Final = re.compile(rf"^(?P<role>{_ROLE})(?:\s*(?:[,/–—(-]|$).*)?$", re.IGNORECASE)
 _SEAT_TAIL: Final = re.compile(rf"\s*,\s*(?P<seat>{_SEAT})$", re.IGNORECASE)
+#: ``Ward I: JEN SWANTY``, ``Ward II and Mayor Pro Tem: ANDREA SAMSON`` (Loveland CO, 2026-11-25).
+_SEAT_THEN_NAME: Final = re.compile(
+    rf"^(?P<seat>{_SEAT})(?:\s+and\s+(?P<role>{_ROLE}))?\s*:\s*(?P<name>.+?)$", re.IGNORECASE
+)
+#: Stands in a seat-first member's role until :func:`read_members` knows the body's member title.
+_BODY_TITLE: Final = "\x00title"
 _CONTACT: Final = re.compile(r"\s*(?:\||\(\d{3}\)|\d{3}[-.]\d{3}[-.]\d{4}|\S+@\S+).*$")
 _BLOCK_TAGS: Final = re.compile(
     r"</?(?:p|div|li|ul|ol|h[1-6]|br|tr|td|th|table|section|article|figcaption|dt|dd|header|"
@@ -340,6 +346,14 @@ def _member_on(line: str, following: str) -> tuple[str, str] | None:
         name = as_name(rest)
         if name:
             return name, _role_text(match["role"], seat)
+    match = _SEAT_THEN_NAME.match(line)
+    if match:
+        name = as_name(match["name"])
+        if name:
+            role = match["role"]
+            if role:
+                return name, _role_text(role, match["seat"])
+            return name, _role_text(_BODY_TITLE, match["seat"])
     name = as_name(line)
     if name:
         match = _ROLE_FIRST.match(_clean(following))
@@ -386,7 +400,12 @@ def read_members(
                     break
                 untitled[index] = name
             index += 1
-    title = _member_title(body, [role for _, role in hits.values()])
+    title = _member_title(body, [role for _, role in hits.values() if _BODY_TITLE not in role])
+    # A member printed after a seat alone gets the body's member title ("Council Member, Ward I").
+    hits = {
+        index: (name, role.replace(_BODY_TITLE, title) if _BODY_TITLE in role else role)
+        for index, (name, role) in hits.items()
+    }
     shown: dict[str, str] = {}
 
     def printed_name(name: str) -> str:

@@ -331,6 +331,32 @@ def test_a_second_page_with_other_names_is_named_in_the_note(web):
     assert f"{board} also lists Board of Trustees members, with Megan Quitter in place" in note
 
 
+def test_members_printed_after_their_ward_are_read():
+    """Loveland prints each ward line first, the name after a colon ("Ward I: JEN SWANTY"),
+    with the mayor's role only on the mayor's line and the pro tem's role inside the seat
+    ("Ward II and Mayor Pro Tem: ANDREA SAMSON"); page saved 2026-11-25."""
+    found, untitled = _read("loveland-council-members.html", "City Council")
+    assert found == [
+        ("Patrick McFall", "Patrick", "McFall", "Mayor"),
+        ("Jen Swanty", "Jen", "Swanty", "Council Member, Ward I"),
+        ("Geoff Frahm", "Geoff", "Frahm", "Council Member, Ward I"),
+        ("Andrea Samson", "Andrea", "Samson", "Mayor Pro Tem, Ward II"),
+        ("Sarah Rothberg", "Sarah", "Rothberg", "Council Member, Ward II"),
+        ("Caitlin Wyrick", "Caitlin", "Wyrick", "Council Member, Ward III"),
+        ("Kalina Middleton", "Kalina", "Middleton", "Council Member, Ward III"),
+        ("Laura Light-Kovacs", "Laura", "Light-Kovacs", "Council Member, Ward IV"),
+        ("Zeke Cortez", "Zeke", "Cortez", "Council Member, Ward IV"),
+    ]
+    assert untitled == []
+
+
+def test_a_seat_line_needs_a_colon_and_a_name():
+    """``Ward Information`` and links into the ward map are headings, not members."""
+    assert members._member_on("Ward I: JEN SWANTY", "") is not None
+    assert members._member_on("Ward Information", "") is None
+    assert members._member_on("Ward I: Determine Your Ward", "") is None
+
+
 def test_a_city_that_prints_names_in_capitals_keeps_them():
     """Golden prints four names in capitals in its headings ("MAYOR LAURA WEINBERG",
     "COUNCILOR DON CAMERON, Ward 3") and the same names in mixed case in the Contact links
