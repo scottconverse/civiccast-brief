@@ -36,6 +36,17 @@ def test_serve_takes_no_host_option_and_checks_the_port() -> None:
         build_parser().parse_args(["serve", "--db", "x.db", "--port", "web"])
 
 
+def test_serve_takes_a_cities_folder_but_not_with_city_or_work(tmp_path, capsys) -> None:
+    parsed = build_parser().parse_args(
+        ["serve", "--db", str(tmp_path / "hub.db"), "--cities", str(tmp_path / "cities")]
+    )
+    assert parsed.cities == tmp_path / "cities"
+    assert main(["serve", "--db", "x.db", "--cities", "cities", "--city", "city"]) == 1
+    assert "--cities cannot be used with --city or --work" in capsys.readouterr().err
+    assert main(["serve", "--db", "x.db", "--cities", "cities", "--work", "work"]) == 1
+    assert "--cities cannot be used with --city or --work" in capsys.readouterr().err
+
+
 def test_export_prints_what_it_wrote_and_skipped(tmp_path, capsys) -> None:
     db = tmp_path / "d.db"
     seed(db)

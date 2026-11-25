@@ -63,7 +63,16 @@
 <body>
 <header>
   <h1><a href="{{ root }}/">CivicCast Brief editor desk</a></h1>
-  {% if signed_in %}
+  {% if cities %}
+  <nav aria-label="Cities">
+    <span class="muted">City:</span>
+    {% for slug, name in cities %}
+    <a href="/c/{{ slug }}/" {% if slug == current %}aria-current="page"{% endif %}>{{ name }}</a>
+    {% endfor %}
+    <a href="/">All cities</a>
+  </nav>
+  {% endif %}
+  {% if signed_in and not hub %}
   <nav aria-label="Desk">
     <a href="{{ root }}/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
     <a href="{{ root }}/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
@@ -73,6 +82,8 @@
     <a href="{{ root }}/roster" {% if nav == "roster" %}aria-current="page"{% endif %}>Roster</a>
     {% if has_station %}<a href="{{ root }}/runs" {% if nav == "runs" %}aria-current="page"{% endif %}>Weekly job</a>{% endif %}
   </nav>
+  {% endif %}
+  {% if signed_in %}
   <form method="post" action="{{ root }}/sign-out" class="sign-out">
     <input type="hidden" name="token" value="{{ token }}">
     <button type="submit">Sign out</button>

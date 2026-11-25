@@ -34,11 +34,12 @@ import logging
 import re
 import secrets
 import shlex
+import sys
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
@@ -53,11 +54,8 @@ from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
 from civiccast_brief.review import desk, setup_steps, voices, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
-from civiccast_brief.station.runner import WEEKDAYS
+from civiccast_brief.station.runner import WEEKDAYS, Station
 from civiccast_brief.weekly import rosterfill
-
-if TYPE_CHECKING:
-    from civiccast_brief.station.runner import Station
 
 logger = logging.getLogger(__name__)
 
@@ -196,8 +194,14 @@ class DeskApp:
         writer: desk.Writer | None = None,
         regenerate: RegenerateCallback | None = None,
         root: str = "",
+        cities: Callable[[], list[tuple[str, str]]] | None = None,
+        current: str = "",
     ) -> None:
         self.store = store
+        #: The cities this desk can switch to (slug, display name), or None for one city.
+        self.cities = cities
+        #: The slug of the city this desk shows, for the switcher's current marker.
+        self.current = current
         #: Where the desk is mounted ("" or "/desk"); every link and redirect starts with it.
         self.root = root
         self.city_dir = Path(city_dir) if city_dir is not None else None
@@ -227,6 +231,8 @@ class DeskApp:
 
     def page(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
         context.setdefault("signed_in", True)
+        context.setdefault("cities", self.cities() if self.cities is not None else None)
+        context.setdefault("current", self.current)
         html = self.templates.get_template(name).render(
             token=self.token,
             city_dir=self.city_dir,
@@ -758,6 +764,8 @@ def make_desk_app(
     station: Station | None = None,
     plain_weekly: bool = False,
     weekly_work: str | Path | None = None,
+    cities: Callable[[], list[tuple[str, str]]] | None = None,
+    current: str = "",
 ) -> FastAPI:
     """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio.
 
@@ -769,9 +777,20 @@ def make_desk_app(
     Schedule form that writes the city's weekly.json. ``weekly_work`` is the work folder the job
     passes as ``--work``. The station app leaves ``plain_weekly`` off: its schedule comes from
     station.json and its page is read-only.
+
+    ``cities`` and ``current`` put a city switcher in the header; the hub passes them, the plain
+    single-city desk leaves them out.
     """
     root = root.rstrip("/")
-    state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate, root=root)
+    state = DeskApp(
+        store,
+        city_dir=city_dir,
+        writer=writer,
+        regenerate=regenerate,
+        root=root,
+        cities=cities,
+        current=current,
+    )
     state.weekly_work = Path(weekly_work) if weekly_work is not None else None
     accounts = auth if auth is not None else DeskAuth(store.path)
 
@@ -1160,11 +1179,19 @@ def make_desk_app(
         return ""
 
     @app.get("/sources/find", response_class=HTMLResponse)
-    def find_page() -> HTMLResponse:
+    def find_page(request: Request) -> HTMLResponse:
+        form = _city_names(state.city_dir)
+        # The hub links here after "Add a city", with the name and state it was given.
+        name = request.query_params.get("name", "").strip()
+        region = request.query_params.get("state", "").strip()
+        if name:
+            form["name"] = name
+        if region:
+            form["state"] = region
         return state.page(
             "find.html",
             title="Find sources",
-            form=_city_names(state.city_dir),
+            form=form,
             found=None,
             error="",
             error_field="",
@@ -1480,6 +1507,51 @@ def make_desk_app(
         return _redirect("/sources?" + urlencode({"done": done, "id": new_id}))
 
     return app
+
+
+def city_desk(
+    store: ReviewStore,
+    city_dir: str | Path,
+    *,
+    weekly_work: str | Path,
+    auth: DeskAuth | None = None,
+    root: str = "",
+    writer: desk.Writer | None = None,
+    cities: Callable[[], list[tuple[str, str]]] | None = None,
+    current: str = "",
+) -> tuple[FastAPI, Station]:
+    """One city's plain desk and its weekly-job Station, built the same way everywhere.
+
+    ``review serve --city`` and the hub's per-city desks both come through here, so the two
+    read weekly.json, make the Station and mount the desk with the same code. A broken
+    weekly.json starts the desk with the schedule off, as ``_serve`` always has."""
+    weekly_work = Path(weekly_work)
+    weekly_work.mkdir(parents=True, exist_ok=True)
+    settings = weekly_job.DEFAULT
+    try:
+        settings = weekly_job.load(city_dir)
+    except weekly_job.WeeklyJobError as exc:
+        print(f"warning: {exc}; starting with the schedule off", file=sys.stderr)
+    station = Station(
+        store.path,
+        weekly_job.job_steps(settings, city_dir, store.path, weekly_work),
+        settings.schedule,
+        cwd=Path(store.path).parent,
+        scheduled=settings.enabled,
+    )
+    app = make_desk_app(
+        store,
+        city_dir=city_dir,
+        writer=writer,
+        auth=auth,
+        root=root,
+        station=station,
+        plain_weekly=True,
+        weekly_work=weekly_work,
+        cities=cities,
+        current=current,
+    )
+    return app, station
 
 
 def serve(app: FastAPI, port: int = DEFAULT_PORT) -> None:

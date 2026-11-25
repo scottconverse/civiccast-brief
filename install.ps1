@@ -210,7 +210,15 @@ $lines = @(
     'set PYTHONIOENCODING=utf-8',
     'rem The browser opens a few seconds later, once the desk answers.',
     'start "" /min powershell -NoProfile -Command "Start-Sleep 4; Start-Process http://127.0.0.1:8765/"',
-    "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`" --city `"%WORK%\city`""
+    'rem A city set up here before the hub existed keeps its own desk; a new install holds several.',
+    'if exist "%WORK%\city\city.json" goto singlecity',
+    'goto multicities',
+    ':singlecity',
+    "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`" --city `"%WORK%\city`"",
+    'goto done',
+    ':multicities',
+    "`"$python`" -m civiccast_brief.review serve --db `"%WORK%\desk.db`" --cities `"%WORK%\cities`"",
+    ':done'
 )
 Set-Content -Path $launcher -Value $lines -Encoding ascii
 Ok "wrote $launcher"

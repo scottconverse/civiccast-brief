@@ -10,6 +10,10 @@ disappears once every required step is done. The sections below are the same ste
 
 ## Start here: the desk's Find page
 
+One desk can hold several cities, each with its own city folder and items, and one sign-in: its
+home page lists them and has an **Add a city** form. A new install starts that way; a desk set up
+with one city before keeps working unchanged.
+
 Most people set up a city in the editor desk, not with commands. Install the program (next
 section), double-click `desk.cmd`, and open **Sources > Find a city's sources**. Type the city's
 name and state (and its website, when you know it), press **Search**, tick the sources it found and
