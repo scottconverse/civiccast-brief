@@ -83,9 +83,24 @@ class Proof:
         return out
 
 
+#: What a reader can do when a body has no meeting in a platform's window.
+_NO_MEETING_FIX: Final = (
+    " If this body no longer meets, or meets rarely, remove it from this source (Sources page, "
+    "Edit); it can be added back at any time."
+)
+
+#: Apostrophes a portal may print in a body's name, or leave out of it.
+_APOSTROPHES: Final = str.maketrans("", "", "'’‘")
+
+
+def _plain(text: str) -> str:
+    """``text`` with the apostrophes ' ’ ‘ removed, for comparing a body's name to a title."""
+    return text.translate(_APOSTROPHES)
+
+
 def names_for(body: str) -> list[str]:
     """The ways a body's name is written: as given, and without a part in parentheses."""
-    name = squash(body).casefold()
+    name = squash(_plain(body)).casefold()
     short = squash(re.sub(r"\([^)]*\)", " ", name))
     return [n for n in dict.fromkeys((name, short)) if n]
 
@@ -115,7 +130,7 @@ def body_matches(body: str, text: str, city: str = "") -> bool:
     ("City Council Meeting November 4, 2026" names "LOVELAND CITY COUNCIL MEETING"), but a
     shortened name must end where the title ends it or dates it: "City Council" does not
     match "City Council Study Session"."""
-    lowered = squash(text).casefold()
+    lowered = _plain(squash(text)).casefold()
     if any(name in lowered for name in names_for(body)):
         return True
     return shortened_match(body, lowered, city)
@@ -123,6 +138,7 @@ def body_matches(body: str, text: str, city: str = "") -> bool:
 
 def shortened_match(body: str, text: str, city: str = "") -> bool:
     """Whether ``text`` (casefolded) names ``body`` in a shortened form (see :func:`short_names`)."""
+    text = _plain(text)
     return any(
         re.search(rf"(?<!\w){re.escape(name)}{_AFTER_SHORT}", text, re.IGNORECASE)
         for name in short_names(body, city)
@@ -247,7 +263,7 @@ def _primegov(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     if not dated:
         proof.problem = (
             f"no meeting of committee {committee} on or before {today} "
-            f"in {PRIMEGOV_FIRST_YEAR}-{today.year}"
+            f"in {PRIMEGOV_FIRST_YEAR}-{today.year}{_NO_MEETING_FIX}"
         )
         return
     tried: list[str] = []
@@ -664,7 +680,7 @@ def _civicclerk(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> 
     if not docs:
         proof.problem = (
             f"none of the portal's newest {platforms.CLERK_EVENTS} meetings on or before {today} "
-            f"is a {proof.body!r} meeting with an agenda posted"
+            f"is a {proof.body!r} meeting with an agenda posted{_NO_MEETING_FIX}"
         )
         return
     _read_docs(proof, docs, fetcher)
@@ -679,7 +695,8 @@ def _escribe(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> Non
     ]
     if not meetings:
         proof.problem = (
-            f"no {proof.body!r} meeting in the calendar's last {platforms.ESCRIBE_DAYS} days"
+            f"no {proof.body!r} meeting in the calendar's last {platforms.ESCRIBE_DAYS} "
+            f"days{_NO_MEETING_FIX}"
         )
         return
     base = platforms.escribe_base(source.tenant)
@@ -725,7 +742,7 @@ def _civicweb(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
     if not meetings:
         proof.problem = (
             f"no published {proof.body!r} meeting in the portal's last {platforms.CIVICWEB_DAYS} "
-            f"days up to {today}"
+            f"days up to {today}{_NO_MEETING_FIX}"
         )
         return
     tried: list[str] = []

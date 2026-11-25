@@ -47,6 +47,19 @@ def test_body_names_match_with_or_without_the_part_in_parentheses():
     assert committee_for("Library Advisory Board", rows) is None
 
 
+def test_body_names_match_with_or_without_an_apostrophe():
+    body = "Citizens Finance Advisory Commission"
+    for title in (
+        "Citizens' Finance Advisory Commission - 14 Oct 2026",
+        "Citizens’ Finance Advisory Commission - 14 Oct 2026",
+    ):
+        assert body_matches(body, title), title
+    # The other way round: the body carries the apostrophe and the title does not.
+    assert body_matches("Citizens' Finance Advisory Commission", body)
+    # Removing the apostrophe does not make every name a match.
+    assert not body_matches("Citizens Finance Advisory Commission", "Citizens Advisory Board")
+
+
 def test_a_title_may_leave_off_the_city_name_and_the_word_meeting():
     body = "LOVELAND CITY COUNCIL MEETING"
     for title in (
@@ -703,7 +716,8 @@ def test_civicweb_says_when_the_body_has_no_meeting_or_its_documents_do_not_answ
     assert not proof.ok
     assert proof.problem == (
         "no published 'Zoning Board of Adjustment' meeting in the portal's last 120 days "
-        "up to 2026-11-12"
+        "up to 2026-11-12 If this body no longer meets, or meets rarely, remove it from this "
+        "source (Sources page, Edit); it can be added back at any time."
     )
     # A portal whose document list for the meeting does not answer is named, not passed over.
     web = type(web)()
