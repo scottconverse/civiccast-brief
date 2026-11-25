@@ -155,22 +155,26 @@ def _check(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
     return 0 if proofs and read == len(proofs) else 1
 
 
-def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
-    folder: Path = args.city
-    try:
-        sources = load_sources(folder)
-    except SourceError as exc:
-        print(f"city rosters: {exc}", file=sys.stderr)
-        return 1
+def write_city_rosters(
+    folder: str | Path,
+    *,
+    fetcher: Fetcher | None = None,
+    open_page: Any = None,
+    close_chrome: Any = None,
+) -> list[str]:
+    """Write each board's roster from its PrimeGov member list or its own page.
+
+    Returns the lines to show (one per roster written, or a line saying none was found).
+    Raises :class:`SourceError` when the city's sources or its city and roster files cannot be
+    read. ``fetcher``, ``open_page`` and ``close_chrome`` are injected by the wizard's tests.
+    """
+    folder = Path(folder)
+    sources = load_sources(folder)
     try:
         roster = json.loads((folder / "roster.json").read_text(encoding="utf-8"))
         city = json.loads((folder / "city.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        print(
-            f"city rosters: {folder} has no readable city.json and roster.json: {exc}",
-            file=sys.stderr,
-        )
-        return 1
+        raise SourceError(f"{folder} has no readable city.json and roster.json: {exc}") from exc
     name, state, today = str(city.get("name", "")), str(roster.get("state", "")), date.today()
     fetcher = fetcher or Fetcher()
     lines: list[str] = []
@@ -191,10 +195,19 @@ def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
         fetcher,
         today,
         website=str(search.get("website", "")) if isinstance(search, dict) else "",
-        open_in_browser=browser.open_page,
+        open_in_browser=open_page or browser.open_page,
     )
-    browser.close_shared()
-    for line in lines or [f"{folder}: no board has a member list this can read"]:
+    (close_chrome or browser.close_shared)()
+    return lines or [f"{folder}: no board has a member list this can read"]
+
+
+def _rosters(args: argparse.Namespace, fetcher: Fetcher | None = None) -> int:
+    try:
+        lines = write_city_rosters(args.city, fetcher=fetcher)
+    except SourceError as exc:
+        print(f"city rosters: {exc}", file=sys.stderr)
+        return 1
+    for line in lines:
         print(line)
     return 0
 

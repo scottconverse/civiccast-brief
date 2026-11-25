@@ -467,6 +467,138 @@ def test_rosters_next_needs_one_roster_file_per_city(hub_app):
     assert "City Council" in allowed.text and ">1<" in allowed.text
 
 
+def spec_for(cities, slug: str = "alpha", name: str = "Alpha City") -> setup_wizard.CitySpec:
+    return setup_wizard.CitySpec(slug, cities / slug, setup_wizard.CitySetup(name, "Colorado"))
+
+
+ROSTER_LINE = "Planning Commission: wrote planning-commission.json, 7 members from https://x"
+
+
+def test_the_rosters_job_saves_its_lines_and_counts_the_bodies(tmp_path):
+    cities = tmp_path / "cities"
+    write_city(cities, "alpha", name="Alpha City")
+    jobs = SetupJobs(
+        find_rosters=lambda city, **kwargs: [ROSTER_LINE],
+        fetcher_factory=lambda: object(),
+        close_chrome=lambda: None,
+    )
+    assert jobs.start_rosters([spec_for(cities)]) is True
+    wait(jobs)
+    row = jobs.status()[0]
+    assert (row.state, row.count) == ("found", 1)
+    saved = json.loads((cities / "alpha" / "city" / "roster-find.json").read_text())
+    assert saved["lines"] == [ROSTER_LINE]
+    assert saved["day"]
+
+
+def test_a_roster_search_that_fails_says_why(tmp_path):
+    cities = tmp_path / "cities"
+    write_city(cities, "alpha", name="Alpha City")
+
+    def failing_find(city, **kwargs):
+        raise RuntimeError("the board page did not answer")
+
+    jobs = SetupJobs(
+        find_rosters=failing_find,
+        fetcher_factory=lambda: object(),
+        close_chrome=lambda: None,
+    )
+    jobs.start_rosters([spec_for(cities)])
+    wait(jobs)
+    row = jobs.status()[0]
+    assert row.state == "failed"
+    assert "the board page did not answer" in row.message
+
+
+def test_a_second_roster_search_while_one_runs_is_refused(tmp_path):
+    cities = tmp_path / "cities"
+    write_city(cities, "alpha", name="Alpha City")
+    release = threading.Event()
+
+    def slow_find(city, **kwargs):
+        release.wait(2.0)
+        return []
+
+    jobs = SetupJobs(
+        find_rosters=slow_find,
+        fetcher_factory=lambda: object(),
+        close_chrome=lambda: None,
+    )
+    assert jobs.start_rosters([spec_for(cities)]) is True
+    assert jobs.start_rosters([spec_for(cities)]) is False
+    release.set()
+    wait(jobs)
+
+
+def test_the_rosters_page_lists_every_body_and_says_what_is_missing(hub_app):
+    app, cities = hub_app
+    city = cities / "alpha" / "city"
+    (city / "sources.json").write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "sources": [
+                    {
+                        "kind": "youtube",
+                        "channel_id": "UCabcdefghijklmnopqrstuv",
+                        "bodies": ["Town Board", "Planning Commission"],
+                    },
+                    {
+                        "kind": "webpage",
+                        "url": "https://example.org/meetings",
+                        "bodies": ["town  board"],  # the same body, other spacing and case
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (city / "roster.json").write_text(
+        json.dumps({"body": "Town Board", "members": [{"name": "Ada"}]}), encoding="utf-8"
+    )
+    client = client_for(app)
+    page = client.get("/setup/rosters")
+    assert page.text.count("Town Board") == 1  # the repeated body is dropped
+    assert "Planning Commission" in page.text
+    assert "No roster" in page.text
+    assert "Its meetings cannot be written until it has members." in page.text
+    assert 'href="/c/alpha/roster"' in page.text
+    assert ROSTER_LINE not in page.text
+
+    (city / "roster-find.json").write_text(
+        json.dumps({"day": "2026-11-25", "lines": [ROSTER_LINE]}), encoding="utf-8"
+    )
+    page = client.get("/setup/rosters")
+    assert ROSTER_LINE in page.text
+
+
+def test_find_board_rosters_starts_the_job_only_with_the_token(hub_app):
+    app, _ = hub_app
+    client = client_for(app)
+    calls: list[str] = []
+
+    def fake_find(city, **kwargs):
+        calls.append(city.slug)
+        return [ROSTER_LINE]
+
+    app.state.hub.setup_jobs = SetupJobs(
+        find_rosters=fake_find,
+        fetcher_factory=lambda: object(),
+        close_chrome=lambda: None,
+    )
+    refused = client.post("/setup/rosters", data={"action": "rosters"}, follow_redirects=False)
+    assert refused.status_code == 403
+    started = client.post(
+        "/setup/rosters",
+        data={"token": token(client), "action": "rosters"},
+        follow_redirects=False,
+    )
+    assert started.status_code == 303 and started.headers["location"] == "/setup/rosters"
+    wait(app.state.hub.setup_jobs)
+    assert calls == ["alpha"]
+    assert app.state.hub.setup_jobs.status()[0].state == "found"
+
+
 def test_copy_settings_writes_only_missing_or_different_files_and_spares_the_source(tmp_path):
     source = tmp_path / "cities" / "alpha" / "city"
     same = tmp_path / "cities" / "bravo" / "city"
@@ -736,6 +868,7 @@ def test_the_city_list_links_to_setup(hub_app):
         ("post", "/setup/find", {"action": "find"}),
         ("post", "/setup/check", {"action": "check"}),
         ("post", "/setup/check", {"action": "leave-out", "slug": "alpha"}),
+        ("post", "/setup/rosters", {"action": "rosters"}),
         ("post", "/setup/models-voices", {"action": "copy"}),
         ("post", "/setup/website", {"action": "save", "target": "none"}),
         ("post", "/setup/test", {"action": "test"}),
