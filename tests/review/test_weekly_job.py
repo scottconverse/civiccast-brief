@@ -343,3 +343,18 @@ def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):
     assert reply.status_code == 400
     assert "needs the desk started with a city folder" in reply.text
     assert steps.ran == []
+
+
+def test_the_items_page_says_the_schedule_is_off_and_shows_no_next_run(plain):
+    app, _, _, _ = plain
+    page = signed_in(app).get("/").text
+    assert "schedule off" in page
+    assert "next run" not in page
+
+
+def test_the_items_page_shows_the_next_run_when_the_schedule_is_on(plain):
+    app, station, _, _ = plain
+    station.reconfigure(scheduled=True)
+    page = signed_in(app).get("/").text
+    assert "next run" in page
+    assert "schedule off" not in page

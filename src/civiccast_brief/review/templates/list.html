@@ -23,7 +23,7 @@
 <h2>Control room</h2>
 {% if job %}
 <p>Weekly job: {% if job.running %}<strong>running</strong> since {{ job.running.started_at|when }}{% elif job.last %}last run <span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% else %}no run yet{% endif %}
-  &middot; next run {{ job.next_at|when }}{% if job.publish_at %} &middot; <strong>publish queued</strong> for {{ job.publish_at|when }}{% endif %}
+  &middot; {% if job.scheduled %}next run {{ job.next_at|when }}{% else %}schedule off{% endif %}{% if job.publish_at %} &middot; <strong>publish queued</strong> for {{ job.publish_at|when }}{% endif %}
   &middot; <a href="{{ root }}/runs">Weekly job and Run now</a></p>
 {% endif %}
 <h3>Problems ({{ problems|length }})</h3>
