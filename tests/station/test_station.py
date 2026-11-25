@@ -173,6 +173,19 @@ def test_the_job_runs_real_commands_and_keeps_their_output(tmp_path):
     assert "could not start no-such-program-ccb" in gone.log
 
 
+def test_has_run_finds_a_run_older_than_the_newest_twenty(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    s = Station(tmp_path / "desk.db", [["find"]], MONDAY_6, clock=clock, runner=Steps())
+    assert not s.has_run("test", "ok")
+    s.run_once("test")
+    for _ in range(25):
+        s.run_once("manual")
+    assert len(s.runs()) == 20
+    assert s.has_run("test", "ok")
+    assert not s.has_run("test", "failed")
+    assert not s.has_run("schedule", "ok")
+
+
 @pytest.fixture
 def app(tmp_path):
     clock = Clock(at(2026, 11, 11, 12, 0))

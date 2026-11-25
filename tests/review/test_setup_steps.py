@@ -136,6 +136,18 @@ def test_a_finished_test_run_ticks_the_test_step(tmp_path, city):
     assert done(city, "test", station)
 
 
+def test_an_old_test_run_ticks_the_test_step_after_many_later_runs(tmp_path, city):
+    # The desk shows only the newest 20 runs; the step must still find a test run older than that.
+    station = make_station(tmp_path)
+    station.run_once("test")
+    for _ in range(25):
+        station.run_once("manual")
+    newest = station.runs()
+    assert len(newest) == 20
+    assert not any(run.trigger == "test" for run in newest)
+    assert done(city, "test", station)
+
+
 def test_a_failed_test_run_does_not_tick_the_test_step(tmp_path, city):
     station = make_station(tmp_path, code=1)
     station.run_once("test")

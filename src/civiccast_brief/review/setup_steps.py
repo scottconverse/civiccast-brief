@@ -31,7 +31,7 @@ from civiccast_brief.review import voices, weekly_job
 from civiccast_brief.weekly import rosterfill
 
 if TYPE_CHECKING:
-    from civiccast_brief.station.runner import Run, Station
+    from civiccast_brief.station.runner import Station
 
 #: The file the Check button and ``city check`` save (``citybuild.cli.PROOF_FILE``).
 PROOF_NAME: Final = "city-check.json"
@@ -216,14 +216,12 @@ def _voices_step(folder: Path) -> Step:
         done,
         True,
         "/voices",
-        "Which voice reads each body's episodes.",
+        "The voice engine and the two host voices for the episodes.",
     )
 
 
 def _test_step(station: Station | None) -> Step:
-    done = bool(station is not None) and any(
-        run.trigger == TEST_TRIGGER and run.status == OK_STATUS for run in _runs(station)
-    )
+    done = station is not None and station.has_run(TEST_TRIGGER, OK_STATUS)
     return Step(
         "test",
         "Test one meeting",
@@ -247,9 +245,3 @@ def _weekly_step(folder: Path) -> Step:
         "/runs",
         "Set a day and time on the Weekly job page, and save it with the schedule on.",
     )
-
-
-def _runs(station: Station | None) -> list[Run]:
-    if station is None:
-        return []
-    return list(station.status().runs)

@@ -234,6 +234,17 @@ class Station:
             ).fetchall()
         return [_run(row, self.schedule.zone) for row in rows]
 
+    def has_run(self, trigger: str, status: str) -> bool:
+        """True when any run with that trigger ended with that status, however old.
+
+        Reads the table itself, not :meth:`runs`, which keeps only the newest 20 rows."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM station_runs WHERE trigger = ? AND status = ? LIMIT 1",
+                (trigger, status),
+            ).fetchone()
+        return row is not None
+
     def run(self, run_id: int) -> Run | None:
         with self._connect() as conn:
             row = conn.execute(
