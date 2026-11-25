@@ -12,7 +12,8 @@ With --city and no --model, the recap and the judge use the city's model picks (
 
 Writes transcript.json, speakers.json and recap.json (plus draft.json, verify-report.json and
 summary.json) under DIR. Exit 0 when every stage finished; 1 when capture or the pipeline failed;
-3 when the video is a live event that has not started yet (nothing to run; try a later week).
+3 when the video is a live event that has not started yet (nothing to run; try a later week);
+4 when YouTube has not posted the video's captions yet (try a later week).
 """
 
 from __future__ import annotations
@@ -33,6 +34,9 @@ from civiccast_brief.meeting.pipeline import Complete, PipelineError, run
 #: Exit code for a scheduled live event or premiere that has not aired yet: not a failure, and
 #: the weekly run records it as "not run" so a later week picks the video up again.
 LIVE_NOT_STARTED_EXIT = 3
+#: Exit code for a recently posted video whose captions YouTube has not made yet: not a failure,
+#: and the weekly run leaves it "waiting" so a later run tries the video again.
+CAPTIONS_NOT_YET_EXIT = 4
 from civiccast_brief.meeting.recap import DEFAULT_WINDOW_S
 from civiccast_brief.script import llm
 
@@ -116,6 +120,10 @@ def _run(args: argparse.Namespace) -> int:
         # A scheduled stream that has not aired: nothing to report yet, so not a failure.
         print(f"not run: {exc}", file=sys.stderr)
         return LIVE_NOT_STARTED_EXIT
+    except capture_mod.CaptionsNotYet as exc:
+        # YouTube has not made this new video's captions yet: nothing to report, so try later.
+        print(f"not run: {exc}", file=sys.stderr)
+        return CAPTIONS_NOT_YET_EXIT
     except (
         capture_mod.CaptureError,
         granicus_mod.GranicusError,

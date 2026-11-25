@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,14 @@ Runner = Callable[..., proc.ProcessResult]
 
 
 LIVE_NOT_STARTED_REASON = "the video is a live event that has not started yet"
+
+#: How long a freshly posted video is given before its missing captions are called a failure:
+#: YouTube takes a few days to make automatic captions, so a newer video is tried again.
+CAPTIONS_NOT_YET_DAYS = 7
+
+CAPTIONS_NOT_YET_REASON = (
+    "YouTube has not posted this video's captions yet; it is tried again on the next run"
+)
 
 #: yt-dlp's messages for a scheduled stream or premiere that has not aired yet. There is no
 #: meeting to report until it airs, so a later week picks the video up again.
@@ -49,6 +58,10 @@ class CaptureError(RuntimeError):
 
 class LiveNotStarted(CaptureError):
     """The video is a live event or premiere that has not started yet; nothing to capture."""
+
+
+class CaptionsNotYet(CaptureError):
+    """A recently posted video has no captions yet; YouTube has not made them, so try later."""
 
 
 @dataclass
@@ -114,6 +127,32 @@ def _info(work: Path, video_id: str) -> dict[str, Any]:
     return {key: raw.get(key) for key in keys}
 
 
+def _posted_at(work: Path, video_id: str) -> datetime | None:
+    """When YouTube published the video, from its info file: release time, then upload time,
+    then ``upload_date`` (YYYYMMDD, UTC). ``None`` without an info file or a usable date."""
+    info_file = work / f"{video_id}.info.json"
+    if not info_file.exists():
+        return None
+    try:
+        raw = json.loads(info_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for key in ("release_timestamp", "timestamp"):
+        value = raw.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            try:
+                return datetime.fromtimestamp(value, tz=UTC)
+            except (OSError, OverflowError, ValueError):
+                continue
+    uploaded = raw.get("upload_date")
+    if isinstance(uploaded, str) and len(uploaded) == 8 and uploaded.isdigit():
+        try:
+            return datetime.strptime(uploaded, "%Y%m%d").replace(tzinfo=UTC)
+        except ValueError:
+            return None
+    return None
+
+
 def _run(runner: Runner, argv: list[str], video_id: str) -> proc.ProcessResult:
     try:
         return command.run_capture(runner, argv, timeout_s=CAPTION_TIMEOUT_S)
@@ -128,13 +167,16 @@ def capture_captions(
     python: str | None = None,
     runner: Runner = proc.run,
     browser: panel.PanelBrowser | None = None,
+    now: datetime | None = None,
 ) -> Capture:
     """Fetch the auto-caption track for one YouTube video id into ``work_dir``.
 
     Reuses a caption file already in ``work_dir``, so a second run does not call YouTube again.
     ``python`` names the interpreter that runs yt-dlp; by default it is the private runtime.
     When yt-dlp gets no captions, the watch page's "Show transcript" panel is read in Chrome
-    (spec 8.4.2); ``browser`` stands in for Chrome in tests.
+    (spec 8.4.2); ``browser`` stands in for Chrome in tests. A video posted less than
+    :data:`CAPTIONS_NOT_YET_DAYS` ago whose captions are still missing raises
+    :class:`CaptionsNotYet`, not a failure. ``now`` (UTC) fixes the clock for tests.
     """
     if not video_id.replace("-", "").replace("_", "").isalnum():
         raise CaptureError(f"not a YouTube video id: {video_id!r}")
@@ -155,6 +197,13 @@ def capture_captions(
             try:
                 caption = panel.read_panel(video_id, work_dir, browser)
             except panel.PanelError as panel_exc:
+                posted = _posted_at(work_dir, video_id)
+                if posted is not None and (now or datetime.now(UTC)) - posted < timedelta(
+                    days=CAPTIONS_NOT_YET_DAYS
+                ):
+                    raise CaptionsNotYet(
+                        f"{CAPTIONS_NOT_YET_REASON} (posted {posted.date()})"
+                    ) from exc
                 raise CaptureError(f"{exc}; then the Show transcript panel: {panel_exc}") from exc
 
     if caption.name.endswith(panel.SUFFIX):
