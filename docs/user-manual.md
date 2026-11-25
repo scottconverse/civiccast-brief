@@ -221,8 +221,8 @@ The flag groups, all read from `--help`:
   `lfm3`, `fake`), `--out`, `--intro`, `--outro`, `--config`.
 - **site**: `build --episodes --out --base-url [--stills]`; `home [--cities] --out [--base-url]`.
 - **weekly run**: `--city`, `--work`, `--db`, `--days` (default 7), `--first`, `--last`,
-  `--diarize`, `--episodes`, `--media`, `--site-out`, `--base-url`, `--media-base-url`,
-  `--audio-engine`, `--audio-fallback-engine`, `--worker`.
+  `--limit`, `--diarize`, `--episodes`, `--media`, `--site-out`, `--base-url`,
+  `--media-base-url`, `--audio-engine`, `--audio-fallback-engine`, `--worker`.
 - **station**: `serve --config station.json [--port]`; `deploy cloudflare --site --media
   --project --bucket --prefix --media-url [--account]`; `deploy folder --site --media --out
   --media-out`; `worker --station URL [--work] [--every] [--once]`.
@@ -343,6 +343,12 @@ what failed. Exit 0 means everything finished.
 The desk started with `--city` has a **Weekly job** page (in the nav) that sets this run's
 schedule from a form, saved in `weekly.json` in the city folder; **Run now** runs it at once.
 That job finds the week's meetings and writes and stages each brief on the desk for review.
+**Test one meeting** runs the same command with `--limit 1`, so only the newest meeting that would
+be run goes through; the roundup is skipped.
+
+`--limit N` runs only the N newest meetings that would be run (no reason given, not done yet),
+newest day first. The others are left alone and not recorded in `weekly-state.json`, and the
+weekly roundup is skipped.
 Building and deploying the site stay with the weekly command's site options.
 
 Before a change reaches the live sites, run it through Dev and then Test with

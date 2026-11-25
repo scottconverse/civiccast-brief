@@ -314,6 +314,11 @@ The run writes `transcript.json`, `speakers.json`, `recap.json`, `verify-report.
 `summary.json`. Every recap claim carries a quote that appears word for word in the transcript, with
 its time.
 
+The desk's **Weekly job** page also has **Test one meeting**, which runs
+`python -m civiccast_brief.weekly run ... --limit 1` for the newest meeting, so one real meeting
+goes through captions, recap, story and script before you turn on the weekly schedule. It lands in
+Items for review and publishes nothing.
+
 ## 4. Write and check the script
 
 ```

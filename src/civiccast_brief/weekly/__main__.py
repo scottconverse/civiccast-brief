@@ -158,14 +158,14 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         worker=args.worker,
     )
     if listers is not None:
-        return _week(city.name, sources, first, last, listers, settings)
+        return _week(city.name, sources, first, last, listers, settings, args.limit)
     import httpx
 
     # One client for the whole run: the documents step fetches packets inside run_week.
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         listers = real_listers(client)
         listers.city = city.name  # a title may leave the city's name off a body's name
-        return _week(city.name, sources, first, last, listers, settings)
+        return _week(city.name, sources, first, last, listers, settings, args.limit)
 
 
 def _publish(args: argparse.Namespace) -> int:
@@ -189,16 +189,33 @@ def _publish(args: argparse.Namespace) -> int:
 
 
 def _week(
-    name: str, sources: Any, first: date, last: date, listers: Listers, settings: Settings
+    name: str,
+    sources: Any,
+    first: date,
+    last: date,
+    listers: Listers,
+    settings: Settings,
+    limit: int | None = None,
 ) -> int:
     meetings, problems = find_meetings(sources, first, last, listers)
     print(f"{name}: {len(meetings)} meeting(s) from {first} to {last}")
     for problem in problems:
         print(f"source problem: {problem}", file=sys.stderr)
-    report = run_week(settings, meetings, last)
+    report = run_week(settings, meetings, last, limit=limit)
     for line in report.lines:
         print(line)
     return 1 if report.failed or problems else 0
+
+
+def _positive(text: str) -> int:
+    """A whole number of at least 1, for --limit."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError("--limit must be at least 1")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -212,6 +229,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--first", type=date.fromisoformat, help="first day, YYYY-MM-DD")
     run.add_argument("--last", type=date.fromisoformat, help="last day (default: today)")
     run.add_argument("--diarize", action="store_true", help="label caption lines with voices")
+    run.add_argument(
+        "--limit",
+        type=_positive,
+        default=None,
+        metavar="N",
+        help="run only the N newest meetings that would be run; skip the roundup",
+    )
     _site_options(run)
     publish = commands.add_parser("publish", help="build the site from what is published now")
     publish.add_argument("--city", type=Path, required=True, help="city folder (city.json ...)")

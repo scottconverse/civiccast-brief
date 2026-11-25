@@ -528,7 +528,12 @@ def _problems(items: Sequence[DeskItem], job: Any) -> list[Problem]:
 
 
 #: How a run started, as the Weekly job page says it.
-TRIGGER_LABELS: Final = {"manual": "Run now", "schedule": "Schedule", "publish": "Publish"}
+TRIGGER_LABELS: Final = {
+    "manual": "Run now",
+    "schedule": "Schedule",
+    "publish": "Publish",
+    "test": "Test",
+}
 
 
 def _redirect(location: str) -> RedirectResponse:
@@ -557,15 +562,22 @@ def _add_run_routes(
     station.json, so the page shows it read-only.
     """
 
+    def weekly_settings() -> tuple[weekly_job.WeeklyJob, str]:
+        """The city's weekly job and, when weekly.json is broken, what to say about it."""
+        if state.city_dir is None:
+            return weekly_job.DEFAULT, ""
+        try:
+            return weekly_job.load(state.city_dir), ""
+        except weekly_job.WeeklyJobError as exc:
+            return (
+                weekly_job.DEFAULT,
+                f"weekly.json could not be read: {exc}. Saving the form replaces it.",
+            )
+
     def weekly_form(state_form: Mapping[str, str] | None = None) -> dict[str, str]:
         if state_form is not None:
             return dict(state_form)
-        if state.city_dir is None:
-            return weekly_job.form_values(weekly_job.DEFAULT)
-        try:
-            return weekly_job.form_values(weekly_job.load(state.city_dir))
-        except weekly_job.WeeklyJobError:
-            return weekly_job.form_values(weekly_job.DEFAULT)
+        return weekly_job.form_values(weekly_settings()[0])
 
     def runs_page(
         notice: str = "",
@@ -575,13 +587,7 @@ def _add_run_routes(
         error: str = "",
         error_field: str = "",
     ) -> HTMLResponse:
-        settings = weekly_job.DEFAULT
-        load_error = ""
-        if state.city_dir is not None:
-            try:
-                settings = weekly_job.load(state.city_dir)
-            except weekly_job.WeeklyJobError as exc:
-                load_error = str(exc)
+        settings, load_error = weekly_settings()
         command = ""
         if state.city_dir is not None and state.weekly_work is not None:
             steps = weekly_job.job_steps(
@@ -662,6 +668,23 @@ def _add_run_routes(
             scheduled=job.enabled,
         )
         return _redirect("/runs?notice=saved")
+
+    @app.post("/runs/test")
+    async def test_one(request: Request) -> Response:
+        """Run the weekly job's command for just the newest meeting, for the desk to watch."""
+        if await read_form(request) is None:
+            return bad_token()
+        if state.city_dir is None or state.weekly_work is None:
+            return runs_page(
+                error="The weekly job needs the desk started with a city folder.", code=400
+            )
+        settings, _ = weekly_settings()
+        steps = weekly_job.job_steps(settings, state.city_dir, state.store.path, state.weekly_work)
+        steps[0] = [*steps[0], "--limit", "1"]
+        started = await run_in_threadpool(station.run_now_with, steps, "test")
+        if started is None:
+            return _redirect("/runs?notice=busy")
+        return _redirect(f"/runs/{started}")
 
 
 def make_desk_app(

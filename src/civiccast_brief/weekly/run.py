@@ -1042,13 +1042,28 @@ def run_week(
     last: date,
     steps: Steps | None = None,
     published: str | None = None,
+    limit: int | None = None,
 ) -> Report:
     """Run every meeting not done yet, the roundup, and the site. One meeting's failure is
-    recorded and the run goes on with the next."""
+    recorded and the run goes on with the next.
+
+    With ``limit`` only that many of the newest meetings that would be run (no ``reason`` and
+    not ``done``) are run, newest day first; the rest are left out and not recorded in the
+    state. The roundup is skipped, since it would cover meetings that were not run."""
     steps = steps or Steps()
     state = State(settings.work / STATE_NAME)
     report = Report()
-    for meeting in meetings:
+    selected = list(meetings)
+    if limit is not None:
+        runnable = [
+            meeting
+            for meeting in meetings
+            if not meeting.reason
+            and state.data["meetings"].get(meeting.key, {}).get("status") != "done"
+        ]
+        runnable.sort(key=lambda meeting: meeting.day, reverse=True)
+        selected = runnable[:limit]
+    for meeting in selected:
         entry = state.meeting(meeting.key)
         entry.update(title=meeting.title, week=last.isoformat())
         # A meeting run before keeps its run, even when it would not be run now: its episode
@@ -1083,8 +1098,11 @@ def run_week(
         report.add(f"{meeting.day} {meeting.title}: done")
         for line in [*entry.get("documents", []), *entry.get("roster", [])]:
             report.add(f"{meeting.day} {meeting.title}: {line}")
-    line = run_roundup(steps, settings, state, last)
-    report.add(line, failed=line.startswith("roundup: failed"))
+    if limit is not None:
+        report.add("roundup: skipped (--limit)")
+    else:
+        line = run_roundup(steps, settings, state, last)
+        report.add(line, failed=line.startswith("roundup: failed"))
     if settings.site is not None:
         _publish_into(report, steps, settings, state, published)
     return report

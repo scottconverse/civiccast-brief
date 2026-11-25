@@ -1505,3 +1505,58 @@ def test_no_fallback_engine_means_no_flag_on_the_audio_step(tmp_path):
 
     audio = next(argv for step, argv in fake.calls if step == "audio")
     assert "--fallback-engine" not in audio
+
+
+def test_limit_runs_only_the_newest_runnable_meeting_and_skips_the_roundup(tmp_path):
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    cancelled = Found(
+        PZ, date(2026, 11, 7), "Cancelled Meeting", "p", "CCCCCCCCCCC", reason="cancelled"
+    )
+
+    report = run_week(
+        settings, [COUNCIL_MEETING, PZ_MEETING, cancelled], LAST, fake.steps(), limit=1
+    )
+
+    assert report.failed == 0
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == ["PZPZPZPZPZ1"]
+    assert "roundup: skipped (--limit)" in report.lines
+    assert not any(line.startswith("roundup: not made") for line in report.lines)
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert "youtube:oWZpzjzjwnE" not in state["meetings"]
+    assert "youtube:CCCCCCCCCCC" not in state["meetings"]
+
+
+def test_limit_counts_only_meetings_not_done_and_without_a_reason(tmp_path):
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    run_week(settings, [PZ_MEETING], LAST, Fake().steps())
+    cancelled = Found(
+        PZ, date(2026, 11, 7), "Cancelled Meeting", "p", "CCCCCCCCCCC", reason="cancelled"
+    )
+
+    fake = Fake()
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, PZ_MEETING, cancelled],
+        LAST,
+        fake.steps(),
+        limit=1,
+    )
+
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == ["oWZpzjzjwnE"]
+    assert "2026-11-05 Planning and Zoning Commission: done in an earlier run" not in report.lines
+    assert "roundup: skipped (--limit)" in report.lines
+
+
+def test_without_limit_every_meeting_and_the_roundup_run_as_before(tmp_path):
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+
+    report = run_week(settings, [PZ_MEETING, COUNCIL_MEETING], LAST, fake.steps())
+
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == [
+        "PZPZPZPZPZ1",
+        "oWZpzjzjwnE",
+    ]
+    assert "roundup: skipped (--limit)" not in report.lines
+    assert any(line.startswith("roundup:") and "skipped" not in line for line in report.lines)

@@ -35,9 +35,11 @@ class Steps:
 
     def __init__(self) -> None:
         self.ran: list[str] = []
+        self.argvs: list[list[str]] = []
 
     def __call__(self, argv, cwd, output) -> int:
         self.ran.append(argv[0])
+        self.argvs.append(list(argv))
         output(f"{argv[0]} says hello")
         return 0
 
@@ -256,6 +258,7 @@ def test_without_a_city_the_page_says_the_weekly_job_needs_one(tmp_path):
         assert page.status_code == 200
         assert "needs the desk started with a city folder" in page.text
         assert 'action="/runs/schedule"' not in page.text
+        assert 'action="/runs/test"' not in page.text
 
 
 def test_in_the_station_the_schedule_is_read_only(tmp_path):
@@ -275,3 +278,57 @@ def test_in_the_station_the_schedule_is_read_only(tmp_path):
         assert 'action="/desk/runs/schedule"' not in page.text
         with TestClient(app, base_url="https://127.0.0.1"):
             pass
+
+
+def test_test_one_meeting_runs_the_limit_command_and_shows_its_run(plain):
+    app, station, steps, _ = plain
+    client = signed_in(app)
+
+    reply = client.post("/runs/test", data={"token": app.state.desk.token}, follow_redirects=False)
+
+    assert reply.status_code == 303
+    assert reply.headers["location"].startswith("/runs/")
+    run_id = int(reply.headers["location"].rsplit("/", 1)[1])
+    station.join_workers()
+    assert steps.argvs and steps.argvs[-1][-2:] == ["--limit", "1"]
+    assert "civiccast_brief.weekly" in steps.argvs[-1]
+    assert steps.argvs[-1][0] == sys.executable
+    run = station.run(run_id)
+    assert run is not None
+    assert (run.trigger, run.status) == ("test", "ok")
+    page = client.get(reply.headers["location"]).text
+    assert f"Run {run_id}" in page
+    assert "Test" in page
+
+
+def test_the_weekly_job_page_shows_the_test_section_above_the_schedule(plain):
+    app, _, _, _ = plain
+    page = signed_in(app).get("/runs").text
+    assert 'action="/runs/test"' in page
+    assert "Test one meeting" in page
+    assert 'data-busy="Starting…"' in page
+    assert page.index("Test one meeting") < page.index('action="/runs/schedule"')
+
+
+def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):
+    clock = Clock(datetime(2026, 11, 11, 12, 0, tzinfo=DENVER))
+    steps = Steps()
+    with ReviewStore(tmp_path / "desk.db") as store:
+        station = Station(
+            store.path,
+            [["find"]],
+            MONDAY_6,
+            runner=steps,
+            clock=clock,
+            scheduled=False,
+        )
+        app = make_desk_app(
+            store, station=station, plain_weekly=True, weekly_work=tmp_path / "work"
+        )
+        client = signed_in(app)
+        reply = client.post(
+            "/runs/test", data={"token": app.state.desk.token}, follow_redirects=False
+        )
+    assert reply.status_code == 400
+    assert "needs the desk started with a city folder" in reply.text
+    assert steps.ran == []

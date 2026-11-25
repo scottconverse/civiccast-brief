@@ -85,8 +85,19 @@ def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> 
     writer = desk_writer(work, city) if work is not None else None
     try:
         weekly_work = None
-        settings = weekly_job.load(city) if city is not None else None
-        if settings is not None:
+        settings = None
+        if city is not None:
+            settings = weekly_job.DEFAULT
+            try:
+                settings = weekly_job.load(city)
+            except weekly_job.WeeklyJobError as exc:
+                # A broken weekly.json must not keep the desk from starting: use the defaults
+                # with the schedule off, and let the Weekly job page show what is wrong.
+                print(
+                    f"warning: {city / weekly_job.SETTINGS_NAME}: {exc};"
+                    " starting with the schedule off",
+                    file=sys.stderr,
+                )
             weekly_work = work if work is not None else db.parent / "runs" / "weekly"
             weekly_work.mkdir(parents=True, exist_ok=True)
         with ReviewStore(db) as store:

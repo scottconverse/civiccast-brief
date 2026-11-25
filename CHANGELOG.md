@@ -9,6 +9,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - The plain desk (`desk.cmd`) has a **Weekly job** page: set the weekly run's schedule (saved in
   `weekly.json` in the city folder), see the work folder and command, and press **Run now**. The
   desk's job finds the week's meetings and stages their briefs for review.
+- The Weekly job page has **Test one meeting**: it runs the newest meeting the same way the weekly
+  job does (captions, recap, story and script) and stages it for review, publishing nothing
+  (`weekly run --limit 1`). A broken `weekly.json` no longer stops the desk from starting.
 
 ## 0.5.0 — 2026-11-24
 

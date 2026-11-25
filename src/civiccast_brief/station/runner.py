@@ -421,7 +421,9 @@ class Station:
         with self._connect() as conn:
             conn.execute("UPDATE station_runs SET log = ? WHERE id = ?", (text, run_id))
 
-    def _execute(self, run_id: int, trigger: str = "manual") -> None:
+    def _execute(
+        self, run_id: int, trigger: str = "manual", steps: list[list[str]] | None = None
+    ) -> None:
         lines: list[str] = []
         flushed = _time.monotonic()
 
@@ -437,13 +439,14 @@ class Station:
         publish_done = False
         try:
             if trigger != "publish":
-                for step in self.steps:
+                for step in self.steps if steps is None else steps:
                     output("> " + " ".join(step))
                     code = self.runner(step, self.cwd, output)
                     if code != 0:
                         output(f"stopped: that step ended with code {code}")
                         break
-            if self.publish_steps:
+            # A one-off run of its own steps (the desk's Test one meeting) publishes nothing.
+            if self.publish_steps and steps is None:
                 if code != 0:
                     output("publishing what the desk already published:")
                 covered = self._take_publish_request()
@@ -488,11 +491,25 @@ class Station:
 
     def run_now(self) -> int | None:
         """Start the job in the background (the desk's Run now). None when one is going."""
-        run_id = self._begin("manual")
+        return self._start("manual")
+
+    def run_now_with(self, steps: Sequence[Sequence[str]], trigger: str = "test") -> int | None:
+        """Start these commands instead of the job (the desk's Test one meeting).
+
+        Same one-run-at-a-time rule and the same ``station_runs`` record and log as
+        :meth:`run_now`; no publish steps follow it. None when a run is already going.
+        """
+        return self._start(trigger, _commands(steps))
+
+    def _start(self, trigger: str, steps: list[list[str]] | None = None) -> int | None:
+        run_id = self._begin(trigger)
         if run_id is None:
             return None
         worker = threading.Thread(
-            target=self._execute, args=(run_id,), name=f"station-run-{run_id}", daemon=True
+            target=self._execute,
+            args=(run_id, trigger) if steps is None else (run_id, trigger, steps),
+            name=f"station-run-{run_id}",
+            daemon=True,
         )
         self._workers.append(worker)
         worker.start()
