@@ -85,7 +85,13 @@ _TERM = re.compile(
     r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:\d{1,2},?\s+)?\d{4})$",
     re.IGNORECASE,
 )
-_TERM_TAIL = re.compile(r"\s*\((?:term|expires?|exp\.?)\b[^)]*\)\s*$", re.IGNORECASE)
+#: A term printed after the name: in parentheses ("(Term ends June 2030)") or bare on the same
+#: line ("Secretary – Eleanor Hasenbeck Term expires: September 2027", Berthoud CO, 2026-11-25).
+_TERM_TAIL = re.compile(
+    r"\s*(?:\((?:term|expires?|exp\.?)\b[^)]*\)"
+    r"|\b(?:term\s+(?:expires?|ends?)\b|expires?\b|exp\b\.?)\s*:?.*)\s*$",
+    re.IGNORECASE,
+)
 _HEADER = frozenset(
     {"name", "email", "title", "term", "expires", "contact", "phone", "position", "role", "seat"}
     | {"term ending date", "term years", "term expires", "title / term expires", "e-mail"}
@@ -139,6 +145,8 @@ def _line_member(line: str) -> tuple[str, str] | None | bool:
     match = re.match(r"^(.+?)\s*(?:,|\s[—–-])\s*(.+)$", text)
     if match:
         head, role = match[1], match[2].strip()
+        if _ROLE_LINE.match(head) and _board_name(role):
+            head, role = role, head  # "Chair - Lauren Roth": the title comes before the name
     name = _board_name(head)
     if name is None or _ROLE_LINE.match(name):  # "Vice Chair, Resident" is a title
         return None
