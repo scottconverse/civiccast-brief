@@ -748,8 +748,7 @@ def _add_run_routes(
                 error="The weekly job needs the desk started with a city folder.", code=400
             )
         settings, _ = weekly_settings()
-        steps = weekly_job.job_steps(settings, state.city_dir, state.store.path, state.weekly_work)
-        steps[0] = [*steps[0], "--limit", "1", "--review-only"]
+        steps = weekly_job.test_steps(settings, state.city_dir, state.store.path, state.weekly_work)
         started = await run_in_threadpool(station.run_now_with, steps, "test")
         if started is None:
             return _redirect("/runs?notice=busy")
@@ -1527,6 +1526,37 @@ def make_desk_app(
     return app
 
 
+def city_station(
+    db: str | Path,
+    city_dir: str | Path,
+    *,
+    weekly_work: str | Path,
+) -> Station:
+    """One city's Station, built the same way everywhere.
+
+    The hub's per-city desks, ``review serve --city`` and ``review run-due`` all come through
+    here, so all three read weekly.json and site.json the same way and get the same steps. A
+    broken weekly.json starts the station with the schedule off, as ``_serve`` always has."""
+    weekly_work = Path(weekly_work)
+    weekly_work.mkdir(parents=True, exist_ok=True)
+    settings = weekly_job.DEFAULT
+    try:
+        settings = weekly_job.load(city_dir)
+    except weekly_job.WeeklyJobError as exc:
+        print(f"warning: {exc}; starting with the schedule off", file=sys.stderr)
+    site, site_warning = site_settings.load(Path(db).parent / site_settings.SETTINGS_NAME)
+    if site_warning:
+        print(f"warning: {site_warning}", file=sys.stderr)
+    return Station(
+        db,
+        weekly_job.job_steps(settings, city_dir, db, weekly_work),
+        settings.schedule,
+        cwd=Path(db).parent,
+        scheduled=settings.enabled,
+        publish=site_settings.publish_steps(site, city_dir, db, weekly_work),
+    )
+
+
 def city_desk(
     store: ReviewStore,
     city_dir: str | Path,
@@ -1541,26 +1571,9 @@ def city_desk(
     """One city's plain desk and its weekly-job Station, built the same way everywhere.
 
     ``review serve --city`` and the hub's per-city desks both come through here, so the two
-    read weekly.json, make the Station and mount the desk with the same code. A broken
-    weekly.json starts the desk with the schedule off, as ``_serve`` always has."""
-    weekly_work = Path(weekly_work)
-    weekly_work.mkdir(parents=True, exist_ok=True)
-    settings = weekly_job.DEFAULT
-    try:
-        settings = weekly_job.load(city_dir)
-    except weekly_job.WeeklyJobError as exc:
-        print(f"warning: {exc}; starting with the schedule off", file=sys.stderr)
-    site, site_warning = site_settings.load(Path(store.path).parent / site_settings.SETTINGS_NAME)
-    if site_warning:
-        print(f"warning: {site_warning}", file=sys.stderr)
-    station = Station(
-        store.path,
-        weekly_job.job_steps(settings, city_dir, store.path, weekly_work),
-        settings.schedule,
-        cwd=Path(store.path).parent,
-        scheduled=settings.enabled,
-        publish=site_settings.publish_steps(site, city_dir, store.path, weekly_work),
-    )
+    read weekly.json, make the Station and mount the desk with the same code. The Station
+    itself comes from :func:`city_station`, which ``review run-due`` also uses."""
+    station = city_station(store.path, city_dir, weekly_work=weekly_work)
     app = make_desk_app(
         store,
         city_dir=city_dir,

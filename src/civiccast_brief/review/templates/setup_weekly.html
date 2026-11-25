@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Every week</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+<p class="muted">One schedule for every city. Each city finds its week's meetings and writes each
+brief when it is due. The desk keeps running its own schedule while it is open; the Windows task
+below is what makes the weekly job run with the desk closed and after a reboot.</p>
+
+<form method="post" action="/setup/weekly">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="save">
+  <fieldset>
+    <legend>The schedule</legend>
+    <label for="day">Day</label>
+    <select id="day" name="day">
+      {% for day in weekdays %}
+      <option value="{{ day }}"{% if form.day == day %} selected{% endif %}>{{ day.capitalize() }}</option>
+      {% endfor %}
+    </select>
+    <label for="time">Time</label>
+    <input type="text" id="time" name="time" value="{{ form.time }}" placeholder="06:00">
+    <label for="timezone">Time zone</label>
+    <input class="wide" type="text" id="timezone" name="timezone" value="{{ form.timezone }}"
+           placeholder="America/Denver">
+    <label><input type="checkbox" name="diarize" value="1"
+      {% if form.diarize %}checked{% endif %}> Diarize the speakers' voices</label>
+  </fieldset>
+  <div class="actions">
+    <button type="submit" class="primary" data-busy="Saving the schedule…">Save the schedule for every city</button>
+  </div>
+</form>
+
+<h2>The Windows task</h2>
+<p class="muted">One task, <code>CivicCast Brief weekly</code>, runs every city in turn every hour,
+and at sign-in. It runs as you, with no administrator rights and no stored password, so it only
+runs while you are signed in to Windows. After a reboot it runs at your next sign-in, and catches
+up a week that passed while the PC was off. When a city's job is already running, the task waits
+for the next hour rather than start a second copy.</p>
+{% if task_error %}
+<p class="notice error" role="alert">Could not read the Windows task: {{ task_error }}</p>
+{% elif task and task.installed %}
+<dl class="facts">
+  <dt>State</dt><dd>{{ task.state or "—" }}</dd>
+  <dt>Next run</dt><dd>{% if task.next_run %}{{ task.next_run.strftime('%a %Y-%m-%d %H:%M %Z') }}{% else %}—{% endif %}</dd>
+  <dt>Last run</dt><dd>{% if task.last_run %}{{ task.last_run.strftime('%a %Y-%m-%d %H:%M %Z') }}{% else %}—{% endif %}</dd>
+  <dt>Last result</dt><dd>{{ task.last_result_text }}</dd>
+</dl>
+{% else %}
+<p><span class="status">Not set up</span> — the weekly job only runs while the desk is open.</p>
+{% endif %}
+<div class="actions">
+  <form method="post" action="/setup/weekly">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="action" value="install">
+    <button type="submit" class="primary" data-busy="Setting up the Windows task…">Set up the Windows task</button>
+  </form>
+  <form method="post" action="/setup/weekly">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="action" value="remove">
+    <button type="submit" data-busy="Removing the Windows task…"
+            data-confirm="Remove the Windows task? The weekly job will then run only while the desk is open.">Remove the Windows task</button>
+  </form>
+</div>
+
+<h2>What each city gets</h2>
+<table>
+  <thead><tr><th>City</th><th>Schedule</th><th>Next run</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.name }} <span class="muted">({{ row.slug }})</span></td>
+    <td>
+      {% if row.problem %}<span class="status failed">{{ row.problem }}</span>
+      {% elif row.enabled %}<span class="status ok">On</span>
+      {% else %}<span class="status">Off</span>{% endif %}
+    </td>
+    <td>{% if row.next_at %}{{ row.next_at.strftime('%a %Y-%m-%d %H:%M %Z') }}{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="next">
+  <a href="/setup/test">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/">Finish: All cities &rarr;</a>
+  {% else %}<span class="muted">Finished when the Windows task is set up and every city's
+    schedule is on.</span>{% endif %}
+</div>
+{% endblock %}

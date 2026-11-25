@@ -13,6 +13,11 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - A **Website** step in the setup wizard: each city's site goes nowhere, into a folder on this
   PC, or to Cloudflare in your own account, and the desk's job builds and deploys it after each
   weekly run and after you publish.
+- Two more setup wizard steps: **Test** runs each city's newest meeting through its real models,
+  one city at a time, leaving everything for review; **Every week** sets one schedule for every
+  city and registers one Windows scheduled task (`CivicCast Brief weekly`, current user, no admin,
+  no stored password) that runs `review run-due --cities DIR` every hour and at sign-in, so the
+  weekly job runs with the desk closed and catches up a missed week.
 - One desk can hold several cities: `review serve --cities DIR` mounts a desk per city folder
   (`DIR\<slug>\city\`, `desk.db`, `runs\weekly\`) behind one sign-in, with a city switcher and an
   **Add a city** form on the home page. A single-city desk is unchanged.

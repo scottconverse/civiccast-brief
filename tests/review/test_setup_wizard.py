@@ -6,6 +6,9 @@ import json
 import sys
 import threading
 import time
+from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -531,7 +534,7 @@ def test_the_website_page_offers_the_three_choices_and_a_row_per_city(hub_app):
         "cmdkey /generic:CivicCastBrief/cloudflare-deploy /user:token /pass:YOUR-TOKEN" in page.text
     )
     assert page.text.count("data-busy=") >= 2
-    assert "Next" not in page.text or "Finish" in page.text
+    assert 'href="/setup/test">Next: Test' in page.text
 
 
 def test_saving_the_website_writes_each_city_s_site_json_with_the_slug_filled_in(hub_app):
@@ -735,6 +738,14 @@ def test_the_city_list_links_to_setup(hub_app):
         ("post", "/setup/check", {"action": "leave-out", "slug": "alpha"}),
         ("post", "/setup/models-voices", {"action": "copy"}),
         ("post", "/setup/website", {"action": "save", "target": "none"}),
+        ("post", "/setup/test", {"action": "test"}),
+        (
+            "post",
+            "/setup/weekly",
+            {"action": "save", "day": "monday", "time": "06:00", "timezone": "America/Denver"},
+        ),
+        ("post", "/setup/weekly", {"action": "install"}),
+        ("post", "/setup/weekly", {"action": "remove"}),
     ],
 )
 def test_every_post_needs_the_form_token(hub_app, method, path, data):
@@ -751,3 +762,247 @@ def test_the_wizard_needs_a_sign_in(hub_app):
     reply = anon.get("/setup", follow_redirects=False)
     assert reply.status_code == 303
     assert reply.headers["location"] == "/sign-in"
+
+
+# ----- the Test step -------------------------------------------------------------------------
+
+
+class RunStation(FakeStation):
+    """A Station whose Test runs finish at once and whose start/end order is recorded."""
+
+    EVENTS: ClassVar[list[tuple[str, str]]] = []
+
+    def __init__(self, db, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.db = db
+        self.slug = Path(db).parent.name
+        self.publish = [list(step) for step in kwargs.get("publish", [])]
+        self.ran: list[list[list[str]]] = []
+        self.reconfigured: list[dict] = []
+        self._runs: dict[int, SimpleNamespace] = {}
+        self._ended: set[int] = set()
+        self._next = 1
+
+    def run_now_with(self, steps, trigger: str = "test") -> int:
+        run_id = self._next
+        self._next += 1
+        self.ran.append([list(step) for step in steps])
+        self._runs[run_id] = SimpleNamespace(
+            id=run_id, trigger=trigger, status="ok", log="> the command\nan item is ready"
+        )
+        type(self).EVENTS.append(("start", self.slug))
+        return run_id
+
+    def run(self, run_id: int):
+        run = self._runs.get(run_id)
+        if run is not None and run_id not in self._ended:
+            self._ended.add(run_id)
+            type(self).EVENTS.append(("end", self.slug))
+        return run
+
+    def runs(self, limit: int = 20) -> list[SimpleNamespace]:
+        return sorted(self._runs.values(), key=lambda item: item.id, reverse=True)[:limit]
+
+    def reconfigure(self, **kwargs) -> None:
+        self.reconfigured.append(kwargs)
+
+
+@pytest.fixture
+def rich_hub_app(tmp_path, monkeypatch):
+    monkeypatch.setattr(web_module, "Station", RunStation)
+    RunStation.EVENTS = []
+    cities = tmp_path / "cities"
+    write_city(cities, "alpha", name="Alpha City")
+    write_city(cities, "bravo", name="Bravo Town")
+    app = make_hub_app(tmp_path / "hub.db", cities)
+    return app, cities
+
+
+def add_review_item(app, slug: str, meeting: str) -> None:
+    app.state.hub.load(slug).store.add_item(
+        meeting_id=meeting,
+        title="A meeting",
+        meeting_date="2026-11-04",
+        body="City Council",
+        speakers={"voice 01": "unknown"},
+        recap="Recap.",
+        script="[S1] Script.",
+    )
+
+
+def task_runner(*, installed: bool = False):
+    """A fake PowerShell: answers the status call and records install and remove argv."""
+    calls: list[list[str]] = []
+
+    def runner(argv):
+        calls.append(list(argv))
+        script = argv[-1]
+        if "Register-ScheduledTask" in script:
+            return 0, "", ""
+        if "Unregister-ScheduledTask" in script:
+            return 0, "removed", ""
+        if installed:
+            return (
+                0,
+                json.dumps(
+                    {
+                        "installed": True,
+                        "state": "Ready",
+                        "next": "2026-11-30T06:00:00-07:00",
+                        "last": "",
+                        "result": 267011,
+                    }
+                ),
+                "",
+            )
+        return 0, '{"installed": false}', ""
+
+    return runner, calls
+
+
+def test_test_every_city_runs_one_at_a_time_with_the_desk_s_test_steps(rich_hub_app):
+    app, _ = rich_hub_app
+    add_review_item(app, "alpha", "a1")
+    add_review_item(app, "bravo", "b1")
+    client = client_for(app)
+    assert "Waiting" in client.get("/setup/test").text
+
+    reply = client.post(
+        "/setup/test", data={"token": token(client), "action": "test"}, follow_redirects=False
+    )
+    assert reply.status_code == 303 and reply.headers["location"] == "/setup/test"
+    wait(app.state.hub.test_jobs)
+
+    assert RunStation.EVENTS == [
+        ("start", "alpha"),
+        ("end", "alpha"),
+        ("start", "bravo"),
+        ("end", "bravo"),
+    ]
+    page = client.get("/setup/test")
+    assert page.text.count("OK — a meeting waits for review") == 2
+    assert "Next: Every week" in page.text
+
+    steps = app.state.hub.desks["alpha"].station.ran[0]
+    assert "--limit" in steps[0] and "--review-only" in steps[0]
+    assert "run" in steps[0] and "civiccast_brief.weekly" in steps[0]
+
+
+def test_a_city_is_done_only_with_an_ok_run_and_a_review_item(rich_hub_app):
+    app, _ = rich_hub_app
+    add_review_item(app, "alpha", "a1")  # bravo has no item waiting
+    client = client_for(app)
+    client.post("/setup/test", data={"token": token(client), "action": "test"})
+    wait(app.state.hub.test_jobs)
+
+    page = client.get("/setup/test")
+    assert "OK — a meeting waits for review" in page.text
+    assert "no item waits for review" in page.text.lower()
+    assert "Next: Every week" not in page.text
+
+
+def test_the_test_step_points_at_the_run_and_the_city_s_items(rich_hub_app):
+    app, _ = rich_hub_app
+    add_review_item(app, "alpha", "a1")
+    add_review_item(app, "bravo", "b1")
+    client = client_for(app)
+    client.post("/setup/test", data={"token": token(client), "action": "test"})
+    wait(app.state.hub.test_jobs)
+
+    page = client.get("/setup/test").text
+    assert 'href="/c/alpha/runs/1"' in page
+    assert 'href="/c/alpha/">Items</a>' in page
+
+
+# ----- the Every week step -------------------------------------------------------------------
+
+
+def test_every_week_saves_each_city_and_reconfigures_its_station(rich_hub_app):
+    app, cities = rich_hub_app
+    app.state.hub.task_runner, _calls = task_runner(installed=True)
+    client = client_for(app)
+    client.get("/c/alpha/")
+    client.get("/c/bravo/")
+    (cities / "alpha" / "city" / "weekly.json").write_text(
+        json.dumps(
+            {
+                "enabled": False,
+                "schedule": {"day": "monday", "time": "06:00", "timezone": "America/Denver"},
+                "days": 7,
+                "diarize": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    reply = client.post(
+        "/setup/weekly",
+        data={
+            "token": token(client),
+            "action": "save",
+            "day": "tuesday",
+            "time": "07:30",
+            "timezone": "America/Denver",
+            "diarize": "1",
+        },
+        follow_redirects=False,
+    )
+    assert reply.status_code == 303
+    assert reply.headers["location"] == "/setup/weekly?notice=saved"
+
+    for slug, days in (("alpha", 7), ("bravo", 14)):
+        saved = json.loads((cities / slug / "city" / "weekly.json").read_text(encoding="utf-8"))
+        assert saved["enabled"] is True
+        assert saved["schedule"] == {
+            "day": "tuesday",
+            "time": "07:30",
+            "timezone": "America/Denver",
+        }
+        assert saved["diarize"] is True
+        assert saved["days"] == days
+
+    station = app.state.hub.desks["alpha"].station
+    assert station.reconfigured
+    call = station.reconfigured[-1]
+    assert call["scheduled"] is True
+    assert call["schedule"].weekday == 1  # Tuesday
+    assert "civiccast_brief.weekly" in call["steps"][0]
+
+
+def test_the_task_buttons_call_powershell_and_show_its_status(rich_hub_app):
+    app, _ = rich_hub_app
+    runner, calls = task_runner(installed=False)
+    app.state.hub.task_runner = runner
+    client = client_for(app)
+    assert "Not set up" in client.get("/setup/weekly").text
+
+    installed = client.post(
+        "/setup/weekly", data={"token": token(client), "action": "install"}, follow_redirects=False
+    )
+    assert installed.headers["location"] == "/setup/weekly?notice=installed"
+    assert "Register-ScheduledTask" in calls[-1][-1]
+
+    removed = client.post(
+        "/setup/weekly", data={"token": token(client), "action": "remove"}, follow_redirects=False
+    )
+    assert removed.headers["location"] == "/setup/weekly?notice=removed"
+    assert "Unregister-ScheduledTask" in calls[-1][-1]
+
+
+def test_every_week_is_finished_when_the_task_is_set_and_every_schedule_is_on(rich_hub_app):
+    app, _ = rich_hub_app
+    app.state.hub.task_runner, _calls = task_runner(installed=True)
+    client = client_for(app)
+    client.post(
+        "/setup/weekly",
+        data={
+            "token": token(client),
+            "action": "save",
+            "day": "monday",
+            "time": "06:00",
+            "timezone": "America/Denver",
+        },
+    )
+    page = client.get("/setup/weekly")
+    assert "Finish: All cities" in page.text
+    assert page.text.count('<span class="status ok">On</span>') == 2

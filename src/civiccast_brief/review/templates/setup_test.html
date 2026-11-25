@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Test</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+<p class="muted">This runs <strong>the city's real models</strong> on its newest meeting — captions,
+recap, story and script — so it can take several minutes for each city. Cities run one at a time,
+and this page refreshes itself while they do. Everything it makes waits in Items for review;
+nothing is published, and no website is built.</p>
+<form method="post" action="/setup/test" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="test">
+  <button type="submit" class="primary" data-busy="Testing every city…">Test every city</button>
+  {% if running %}<span class="muted">A test is running. Pressing again does nothing.</span>{% endif %}
+</form>
+<table>
+  <thead><tr><th>City</th><th>Status</th><th>Results</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.name }} <span class="muted">({{ row.slug }})</span></td>
+    <td>
+      {% if row.state == "waiting" %}<span class="muted">Waiting</span>
+      {% elif row.state == "running" %}<span class="status">Running…</span>
+      {% elif row.state == "ok" %}<span class="status ok">OK — a meeting waits for review</span>
+      {% elif row.state == "failed" %}<span class="status failed">Failed: {{ row.message }}</span>
+      {% else %}{{ row.state }}{% endif %}
+    </td>
+    <td>
+      {% if row.run_id %}<a href="/c/{{ row.slug }}/runs/{{ row.run_id }}">The run</a>{% endif %}
+      {% if row.run_id %} &middot; {% endif %}
+      <a href="/c/{{ row.slug }}/">Items</a>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="next">
+  <a href="/setup/website">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/setup/weekly">Next: Every week &rarr;</a>
+  {% else %}<span class="muted">Next is allowed when every city's test run is OK and at least
+    one meeting waits in its Items for review.</span>{% endif %}
+</div>
+{% endblock %}
