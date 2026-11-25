@@ -279,6 +279,17 @@ def test_a_month_folder_is_known_by_its_name(name, month):
         ("2000-2019 Planning Commission", None),
         ("1999 & PRIOR Horticulture and Forestry Advisory Board Agendas and Pack", None),
         ("Planning Commission BYLAWS", None),
+        ("MINUTES Estes Park Planning Commission 2026", 2026),
+        ("Planning Commission 2005-2019", None),
+        ("Planning Commission 1999 & 2000", None),
+        (
+            (
+                "Estes Park Planning Commission Minutes (1960-1980's and 1999-2026) Refer to "
+                "EPURA and EVPC"
+            ),
+            None,
+        ),
+        ("MINUTES Estes Park Planning Commission 2026-10-20", None),
     ],
 )
 def test_only_a_single_years_folder_is_a_year_folder(name, year):
@@ -336,3 +347,42 @@ def test_an_address_that_is_a_boards_year_folder_is_read_as_that_year(fake, web)
     assert proof.document == boulder_file(205847)
     # The year folder itself, its empty November, then October and its two meetings.
     assert [laserfiche.parse_url(u)[2] for u in fake.opened][:3] == [198102, 198568, 198567]
+
+
+def test_a_year_folder_named_with_the_year_last_is_read(fake):
+    """Estes Park names its year folders "MINUTES Estes Park Planning Commission 2026" and its
+    documents "... 2026-10-20": the year is last in the folder's name."""
+    estes = "https://dms.estes.org/WebLink/Browse.aspx?id=132991&dbid=0&repo=TownofEstesPark"
+
+    def folders(folder_id: int, name: str, rows: list[dict[str, Any]]) -> Any:
+        return {"data": {"name": name, "totalEntries": len(rows), "results": rows}}
+
+    def year_row(entry: int, name: str) -> dict[str, Any]:
+        return {"entryId": entry, "type": 0, "name": name}
+
+    def doc_row(entry: int, name: str) -> dict[str, Any]:
+        return {"entryId": entry, "type": -2, "name": name, "isEdoc": True}
+
+    fake.listings[132991] = folders(
+        132991,
+        "Estes Park Planning Commission",
+        [
+            year_row(1, "MINUTES Estes Park Planning Commission 2026"),
+            year_row(2, "MINUTES Estes Park Planning Commission 2025"),
+        ],
+    )
+    fake.listings[1] = folders(
+        1,
+        "MINUTES Estes Park Planning Commission 2026",
+        [
+            doc_row(10, "MINUTES Estes Park Planning Commission 2026-10-20"),
+            doc_row(11, "MINUTES Estes Park Planning Commission 2026-09-15"),
+        ],
+    )
+    fake.listings[2] = folders(2, "MINUTES Estes Park Planning Commission 2025", [])
+    listed, notes = laserfiche.docs(fake, estes, "Planning Commission", date(2026, 11, 25))
+    assert [d.title for d in listed] == [
+        "MINUTES Estes Park Planning Commission 2026-10-20",
+        "MINUTES Estes Park Planning Commission 2026-09-15",
+    ]
+    assert notes[0] == "the folder has 2 entries, 2 of them year folders"
