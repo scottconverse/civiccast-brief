@@ -181,6 +181,8 @@ def write_city_rosters(
     for source in sources:
         if source.kind == "primegov":
             lines += boards.write_primegov_rosters(folder, source, name, state, fetcher, today)
+        elif source.kind == "civicweb":
+            lines += boards.write_civicweb_rosters(folder, source, name, state, fetcher, today)
     lines += boards.write_page_rosters(folder, sources, name, state, fetcher, today)
     lines += boards.copy_shared_rosters(folder, sources)
     try:

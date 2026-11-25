@@ -1,4 +1,4 @@
-"""Board rosters read from a PrimeGov portal's member lists (Longmont's, saved 2026-11-11)."""
+"""Board rosters read from a portal's member lists (Longmont's PrimeGov, Loveland's CivicWeb)."""
 
 from __future__ import annotations
 
@@ -84,6 +84,144 @@ def test_a_board_roster_with_members_is_not_changed(tmp_path, web, capsys):
     cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
     assert own.read_text() == before
     assert "kept planning-and-zoning-commission.json" in capsys.readouterr().out
+
+
+# ----- A CivicWeb portal's member pages (Loveland's, saved 2026-11-25) --------------------------
+
+CIVICWEB = "https://cilovelandco.civicweb.net"
+CIVICWEB_TYPES = CIVICWEB + "/Portal/MeetingTypeList.aspx"
+PLANNING_MEMBERS = CIVICWEB + "/portal/members.aspx?id=58"
+LOVELAND_TODAY = date(2026, 11, 25)
+
+#: The Planning Commission's members, in the portal's order.
+LOVELAND_PLANNING = [
+    ("Sarah Warnock", "06 Jan 2026 - 31 Dec 2028"),
+    ("Julia Fitzpatrick", "15 Sep 2026 - 31 Dec 2027"),
+    ("David Powell", "06 Jan 2026 - 31 Dec 2028"),
+    ("Kiel Schuett", "01 Jan 2024 - 29 Dec 2026"),
+    ("Tracy Geraghty", "15 Sep 2026 - 31 Dec 2026"),
+    ("Tammy Fisher", "06 Jan 2026 - 31 Dec 2028"),
+    ("Gregory Dewey", "07 Jan 2025 - 31 Dec 2027"),
+    ("Barry Long", "02 Apr 2025 - 31 Dec 2027"),
+    ("David Herrera", "17 Jan 2024 - 31 Dec 2026"),
+    ("Troy Bliss", "01 Oct 2025 - 01 Jan 2028"),
+    ("Geoff Frahm", "02 Dec 2025 - Ongoing"),
+]
+
+
+def _civicweb(web):
+    web.fixture(CIVICWEB_TYPES, "civicweb-loveland-meeting-types.html")
+    web.fixture(PLANNING_MEMBERS, "civicweb-loveland-members-58.html")
+
+
+def _civicweb_city(tmp_path, bodies):
+    folder = tmp_path / "loveland"
+    folder.mkdir()
+    merge_sources(folder, [make_source("civicweb", {"tenant": "cilovelandco", "bodies": bodies})])
+    (folder / "city.json").write_text(json.dumps({"slug": "loveland", "name": "Loveland"}))
+    (folder / "roster.json").write_text(
+        json.dumps({"city": "Loveland", "state": "Colorado", "body": "City Council", "members": []})
+    )
+    return folder
+
+
+def _source(bodies):
+    return make_source("civicweb", {"tenant": "cilovelandco", "bodies": bodies})
+
+
+def test_civicweb_members_page_gives_each_current_member(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    path = folder / "rosters" / "planning-commission.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert [(m["name"], m["role"]) for m in data["members"]] == [
+        (name, "City Council Member Ward I" if name == "Geoff Frahm" else "Member")
+        for name, _term in LOVELAND_PLANNING
+    ]
+    assert data["members"][0] == {
+        "name": "Sarah Warnock",
+        "first": "Sarah",
+        "last": "Warnock",
+        "role": "Member",
+    }
+    assert data["sources"] == [PLANNING_MEMBERS]
+    assert (data["city"], data["state"], data["body"]) == ("Loveland", "Colorado", "Planning Commission")  # fmt: skip
+    assert "as the city's CivicWeb portal lists them" in data["note"]
+    assert lines == [f"Planning Commission: wrote planning-commission.json, 11 members from {PLANNING_MEMBERS}"]  # fmt: skip
+
+
+def test_a_civicweb_member_whose_term_ended_is_dropped(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), date(2027, 1, 5)
+    )  # fmt: skip
+    data = json.loads((folder / "rosters" / "planning-commission.json").read_text(encoding="utf-8"))
+    names = [m["name"] for m in data["members"]]
+    assert len(names) == 8
+    # Their terms ended on 29 and 31 December 2026.
+    assert "Kiel Schuett" not in names
+    assert "Tracy Geraghty" not in names
+    assert "David Herrera" not in names
+
+
+def test_a_civicweb_body_with_a_roster_is_left_alone(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    own = folder / "rosters" / "planning-commission.json"
+    own.parent.mkdir()
+    own.write_text(json.dumps({"body": "Planning Commission", "members": [{"name": "A B"}]}))
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    assert lines == []
+    assert PLANNING_MEMBERS not in web.asked
+
+
+def test_a_civicweb_body_with_no_member_page_says_so(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Water Board"])
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Water Board"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    assert lines == ["Water Board: the portal lists no member page for it"]
+    assert not (folder / "rosters").exists()
+
+
+def test_a_civicweb_members_page_that_cannot_be_read_is_one_line(tmp_path, web):
+    web.fixture(CIVICWEB_TYPES, "civicweb-loveland-meeting-types.html")
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    assert len(lines) == 1
+    assert lines[0].startswith("Planning Commission: the member list could not be read")
+    assert not (folder / "rosters").exists()
+
+
+def test_a_civicweb_roster_keeps_no_address(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    text = (folder / "rosters" / "planning-commission.json").read_text(encoding="utf-8")
+    assert "@" not in text and "mailto" not in text
+
+
+def test_city_rosters_reads_a_civicweb_portal(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["City Council", "Planning Commission"])
+    lines = cli.write_city_rosters(
+        folder, fetcher=web.fetcher(), open_page=lambda url: None, close_chrome=lambda: None
+    )
+    assert (folder / "rosters" / "planning-commission.json").exists()
+    # The council's meeting type finds roster.json, and no line is written for it.
+    assert not (folder / "rosters" / "city-council.json").exists()
+    assert not any(line.startswith("City Council:") for line in lines)
 
 
 # ----- School boards ---------------------------------------------------------------------------
