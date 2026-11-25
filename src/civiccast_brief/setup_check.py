@@ -40,6 +40,7 @@ FIX_YTDLP: Final = (
 )
 FIX_CHROME: Final = "Install Chrome from https://www.google.com/chrome/."
 FIX_CLAUDE: Final = "Install Claude Code and sign in with claude."
+FIX_LFM3_EXE: Final = "Install llama.cpp with WinGet, which puts llama-tts on this PC."
 
 #: The HTTP getter's shape: the URL and the timeout, giving the parsed JSON body.
 GetJson = Callable[[str, float], Any]
@@ -261,18 +262,43 @@ def probe_lfm3(
     environ: Mapping[str, str] | None = None,
     is_file: Exists = _is_file,
 ) -> Check:
-    """llama-tts, the voice engine that runs on this PC (need "voice")."""
-    executable = engines.lfm3_executable(engines.LfmConfig(), which=which, environ=_env(environ))
-    if is_file(executable):
-        return Check("lfm3", "LFM3 voice", "voice", True, f"Found at {executable}.", "")
-    return Check(
-        "lfm3",
-        "LFM3 voice",
-        "voice",
-        False,
-        f"llama-tts was not found at {executable}.",
-        "Install llama.cpp with WinGet, which puts llama-tts on this PC.",
-    )
+    """llama-tts and its two model files, the voice engine that runs on this PC (need "voice").
+
+    LfmLocal.render refuses to run unless all three exist, so the row is only ok when all three
+    do. The paths come from the code defaults: the weekly run builds LfmConfig from the city's
+    voices.json only inside the audio command (via ``--config``), so there is no simple existing
+    way to read a city's configured paths here, and the page is not tied to one city folder.
+    """
+    cfg = engines.LfmConfig()
+    executable = engines.lfm3_executable(cfg, which=which, environ=_env(environ))
+    missing = [
+        (label, path)
+        for label, path in (
+            ("llama-tts", executable),
+            ("LFM3 model", cfg.model),
+            ("LFM3 mmproj", cfg.mmproj),
+        )
+        if not is_file(path)
+    ]
+    if not missing:
+        return Check(
+            "lfm3",
+            "LFM3 voice",
+            "voice",
+            True,
+            f"Found at {executable}, with its model files.",
+            "",
+        )
+    detail = "; ".join(f"{label} not found: {path}" for label, path in missing)
+    exe_missing = any(label == "llama-tts" for label, _path in missing)
+    return Check("lfm3", "LFM3 voice", "voice", False, detail, _lfm3_fix(exe_missing, cfg))
+
+
+def _lfm3_fix(exe_missing: bool, cfg: engines.LfmConfig) -> str:
+    """The exe's fix when it is missing, otherwise where to put the two model files."""
+    if exe_missing:
+        return FIX_LFM3_EXE
+    return f"Put the LFM3 model files at {cfg.model} and {cfg.mmproj}."
 
 
 def run_checks(

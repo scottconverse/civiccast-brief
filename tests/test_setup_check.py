@@ -145,13 +145,32 @@ def test_gemini_keeps_only_a_yes_or_no_and_never_the_key():
     assert "GEMINI_API_KEY" in checks[2].fix
 
 
-def test_lfm3_needs_the_executable_to_exist():
+def test_lfm3_needs_the_executable_and_both_model_files_to_exist():
     ok = setup_check.probe_lfm3(which=which_having("llama-tts"), environ={}, is_file=lambda p: True)
     assert ok.ok is True and ok.need == "voice" and ok.fix == ""
     missing = setup_check.probe_lfm3(
         which=which_having(), environ={"LOCALAPPDATA": r"C:\Local"}, is_file=lambda p: False
     )
     assert missing.ok is False and missing.need == "voice"
+
+
+def test_lfm3_with_the_exe_but_no_model_files_is_not_ok():
+    exe = "C:\\tools\\llama-tts.exe"
+    check = setup_check.probe_lfm3(
+        which=which_having("llama-tts"), environ={}, is_file=lambda p: p == exe
+    )
+    cfg = setup_check.engines.LfmConfig()
+    assert check.ok is False and check.need == "voice"
+    assert cfg.model in check.detail and cfg.mmproj in check.detail
+    assert "llama-tts" not in check.fix
+    assert check.fix == f"Put the LFM3 model files at {cfg.model} and {cfg.mmproj}."
+
+
+def test_lfm3_with_all_three_files_is_ok():
+    check = setup_check.probe_lfm3(
+        which=which_having("llama-tts"), environ={}, is_file=lambda p: True
+    )
+    assert check.ok is True and check.need == "voice" and check.fix == ""
 
 
 def test_voice_ok_with_gemini_only_lfm3_only_or_neither():
