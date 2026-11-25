@@ -253,7 +253,16 @@ def guesses(name: str, state: str) -> list[str]:
         f"{n}.gov",
         f"{n}{st}.org",
         f"ci.{n}.{st}.us",
+        # Forms real Colorado towns use: berthoud.org and estespark.colorado.gov (2026-11-25).
+        f"{n}.org",
+        f"{n}.{full}.gov",
+        f"townof{n}.org",
+        f"townof{n}.gov",
+        f"townof{n}.com",
+        f"{n}.com",
+        f"{n}{st}.us",
     ]
+    hosts = list(dict.fromkeys(hosts))
     return [f"https://www.{h}/" for h in hosts] + [f"https://{h}/" for h in hosts]
 
 
@@ -346,6 +355,15 @@ def _find_website(
         return page
     for url in guesses(result.name, result.state):
         page = fetcher.try_get(url)
+        if page is None and open_in_browser is not None:
+            # A site that answers the plain client 403 (or a challenge) may open in a browser;
+            # try that once for this guess, as the site and board readers do (2026-11-25).
+            problem = fetcher.last_error
+            if "HTTP 403" in problem or "challenge" in problem.casefold():
+                try:
+                    page = open_in_browser(url)
+                except Exception:  # noqa: BLE001 - a guess that will not open just moves on
+                    page = None
         if page is not None and result.name.casefold() in page_text(page.text).casefold():
             result.website = page.url
             result.notes.append(f"website guessed from the name: {page.url}")

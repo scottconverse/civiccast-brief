@@ -3,9 +3,84 @@
 from __future__ import annotations
 
 import sys
+import threading
 import types
 
+import pytest
+
 from civiccast_brief.citybuild import browser
+
+
+@pytest.fixture(autouse=True)
+def _no_shared_state():
+    """No test inherits another's browser or fake."""
+    browser.use(None)
+    getattr(browser._shared, "__dict__", {}).pop("browser", None)
+    yield
+    browser.use(None)
+    getattr(browser._shared, "__dict__", {}).pop("browser", None)
+
+
+@pytest.fixture
+def fake_chrome(monkeypatch):
+    made: list[types.SimpleNamespace] = []
+
+    class FakeChrome:
+        def __init__(self) -> None:
+            self.closed = False
+            made.append(self)
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(browser, "Chrome", FakeChrome)
+    return made
+
+
+def _run(work):
+    box = {}
+    thread = threading.Thread(target=work, args=(box,))
+    thread.start()
+    thread.join()
+    return box
+
+
+def test_each_thread_gets_its_own_chrome(fake_chrome):
+    a = _run(lambda box: box.update(browser=browser.shared()))
+    b = _run(lambda box: box.update(browser=browser.shared()))
+    assert a["browser"] is not b["browser"]
+    assert len(fake_chrome) == 2
+
+
+def test_close_shared_leaves_another_threads_chrome_open(fake_chrome):
+    opened: dict[str, object] = {}
+    holding = threading.Event()
+    done = threading.Event()
+
+    def worker() -> None:
+        opened["b"] = browser.shared()
+        holding.set()
+        done.wait(5)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    assert holding.wait(5)
+    mine = browser.shared()
+    browser.close_shared()
+    assert mine.closed is True  # type: ignore[attr-defined]
+    assert opened["b"].closed is False  # type: ignore[attr-defined]
+    done.set()
+    thread.join()
+
+
+def test_use_gives_the_same_fake_to_every_thread():
+    fake = types.SimpleNamespace()
+    browser.use(fake)
+    a = _run(lambda box: box.update(browser=browser.shared()))
+    b = _run(lambda box: box.update(browser=browser.shared()))
+    assert a["browser"] is fake and b["browser"] is fake
+    browser.close_shared()
+    assert not hasattr(fake, "closed")
 
 
 class _Cdp:
