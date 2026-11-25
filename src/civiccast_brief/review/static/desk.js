@@ -1,3 +1,14 @@
+// A button with data-confirm asks first. Capture phase, so it runs before the busy handler below
+// and a cancelled form is never marked as sent.
+document.addEventListener("submit", function (event) {
+  var form = event.target;
+  var button = event.submitter || form.querySelector("button[type=submit]");
+  if (button && button.dataset.confirm && !window.confirm(button.dataset.confirm)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}, true);
+
 // Shows that a pressed button is working: it is disabled and says what it is doing until the
 // next page loads. Every action also ends on a page that says what happened.
 document.addEventListener("submit", function (event) {

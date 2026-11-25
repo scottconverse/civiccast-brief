@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Models and voices</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if first %}
+<p class="muted">These are the model picks and voices the cities will use. The last step:
+change them on {{ first.name }}'s pages, then press <strong>Use these for every city</strong> to
+copy them into the others. Both settings are optional today.</p>
+<h3>Models</h3>
+<table>
+  <thead><tr><th>Task</th><th>Default pick</th><th>Body overrides</th></tr></thead>
+  <tbody>
+  {% for row in models %}
+  <tr><td>{{ row.task }}</td><td>{{ row.default }}</td><td>{{ row.bodies or "—" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a href="/c/{{ first.slug }}/settings">Change {{ first.name }}'s models</a></p>
+<h3>Voices</h3>
+<table>
+  <thead><tr><th>Engine</th><th>Retry with</th><th>Voices</th></tr></thead>
+  <tbody>
+  <tr>
+    <td>{{ voice.engine }}</td>
+    <td>{{ voice.fallback }}</td>
+    <td>
+      {% for field, name in voice.voices.items() %}{{ field }}: {{ name or "(default)" }}{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if not voice.voices %}—{% endif %}
+    </td>
+  </tr>
+  </tbody>
+</table>
+<p><a href="/c/{{ first.slug }}/voices">Change {{ first.name }}'s voices</a></p>
+<form method="post" action="/setup/models-voices">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="copy">
+  <p><button type="submit" data-busy="Copying…">Use these for every city</button></p>
+</form>
+{% else %}
+<p class="notice error" role="alert">Add a city on the Cities step first.</p>
+{% endif %}
+<div class="next">
+  <a href="/setup/rosters">&larr; Back</a>
+  <a href="/">Finish: All cities &rarr;</a>
+</div>
+{% endblock %}

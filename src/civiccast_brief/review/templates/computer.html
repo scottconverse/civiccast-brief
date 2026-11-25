@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% set nav = "computer" %}
 {% block content %}
+{% include "_setup_steps.html" %}
 <h2>This computer</h2>
 {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
 <p class="muted">What this PC has for CivicCast Brief, and what to do about anything missing.
@@ -36,4 +37,12 @@ Required rows must all be OK before a weekly run will work.</p>
   {% endfor %}
   </tbody>
 </table>
+{% if setup_next_ready %}
+<div class="next">
+  <a href="/setup/cities">Next: Cities</a>
+</div>
+{% elif setup_blockers %}
+<p class="notice error" role="alert">Next is not allowed yet. Fix these rows:
+{{ setup_blockers | join(", ") }}.</p>
+{% endif %}
 {% endblock %}

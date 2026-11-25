@@ -63,8 +63,9 @@ found and what to do about anything missing.
    [Install](#install). It installs everything for your user, with no administrator rights, and
    says what is still missing.
 2. **Open the desk.** Double-click `desk.cmd`. Your browser opens the editor desk at
-   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. Open
-   **This computer** to see what the PC still needs.
+   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. The desk
+   opens on **Cities**; press **Set up** to walk through this computer, the cities, finding and
+   checking their sources, rosters, and models and voices, for one city or several at once.
 3. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
    city's name and state (and its website if you know it), press **Search**, tick what it found,
    and press **Add**.

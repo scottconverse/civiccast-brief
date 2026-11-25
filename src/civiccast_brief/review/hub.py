@@ -23,7 +23,7 @@ import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
 from civiccast_brief import city as city_file
+from civiccast_brief import setup_check
+from civiccast_brief.review import setup_wizard
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import (
@@ -90,6 +92,8 @@ class Hub:
         self.token = secrets.token_urlsafe(24)
         self.templates = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
         self.desks: dict[str, CityDesk] = {}
+        #: The setup wizard's one background job (Find or Check), shared by every city.
+        self.setup_jobs = setup_wizard.SetupJobs()
         #: True between lifespan startup and shutdown, when loaded cities' Stations run.
         self.running = False
 
@@ -425,6 +429,315 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         params = {key: value for key, value in (("name", name), ("state", region)) if value}
         target = f"/c/{slug}/sources/find"
         return _redirect(f"{target}?{urlencode(params)}" if params else target)
+
+    # ----- the setup wizard -----------------------------------------------------------------
+
+    def city_specs() -> list[setup_wizard.CitySpec]:
+        return [
+            setup_wizard.CitySpec(
+                slug, hub.cities_dir / slug, setup_wizard.read_setup(hub.cities_dir / slug)
+            )
+            for slug in hub.slugs()
+        ]
+
+    def display_name(spec: setup_wizard.CitySpec) -> str:
+        return spec.setup.name or spec.slug
+
+    def setup_page(name: str, step: str, status: int = 200, **context: Any) -> HTMLResponse:
+        context["setup_steps"] = [
+            {"key": key, "label": label, "number": number, "current": key == step}
+            for number, (key, label) in enumerate(setup_wizard.STEPS, start=1)
+        ]
+        context.setdefault("title", "Set up")
+        return page(name, status=status, **context)
+
+    def first_unfinished(checks: list[setup_check.Check]) -> str:
+        """The first step whose files (or the PC) do not yet meet its rule."""
+        if not setup_wizard.computer_ready(checks, require_signin=False):
+            return "computer"
+        specs = city_specs()
+        if not specs:
+            return "cities"
+        if any(not setup_wizard.has_sources(spec.city_dir) for spec in specs):
+            return "find"
+        if any(
+            not setup_wizard.check_all_read(setup_wizard.read_proofs(spec.city_dir))
+            for spec in specs
+        ):
+            return "check"
+        if any(not setup_wizard.rosters(spec.city_dir) for spec in specs):
+            return "rosters"
+        return "models-voices"
+
+    @app.get("/setup", response_class=HTMLResponse)
+    async def setup_start() -> Response:
+        checks = await run_in_threadpool(setup_check.run_checks)
+        return _redirect(f"/setup/{first_unfinished(checks)}")
+
+    def computer_step(checks: list[setup_check.Check], notice: str) -> HTMLResponse:
+        return setup_page(
+            "computer.html",
+            "computer",
+            title="This computer",
+            checks=checks,
+            notice=notice,
+            setup_next_ready=setup_wizard.computer_ready(checks, require_signin=True),
+            setup_blockers=setup_wizard.blocking_rows(checks),
+        )
+
+    @app.get("/setup/computer", response_class=HTMLResponse)
+    async def setup_computer_get() -> HTMLResponse:
+        checks = await run_in_threadpool(setup_check.run_checks)
+        return computer_step(checks, "")
+
+    @app.post("/setup/computer")
+    async def setup_computer_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        signed_in = form.get("claude") == "1"
+        checks = await run_in_threadpool(setup_check.run_checks, claude_signin=signed_in)
+        notice = "Claude sign-in checked." if signed_in else "Checked again."
+        return computer_step(checks, notice)
+
+    def cities_step(
+        text: str = "",
+        errors: list[setup_wizard.LineError] | None = None,
+        added: list[str] | None = None,
+        kept: list[str] | None = None,
+        failed: list[str] | None = None,
+        status: int = 200,
+    ) -> HTMLResponse:
+        return setup_page(
+            "setup_cities.html",
+            "cities",
+            status=status,
+            title="Cities",
+            text=text,
+            errors=errors or [],
+            added=added or [],
+            kept=kept or [],
+            failed=failed or [],
+            city_rows=hub.rows(),
+            setup_next_ready=bool(hub.slugs()),
+        )
+
+    @app.get("/setup/cities", response_class=HTMLResponse)
+    def setup_cities_get() -> HTMLResponse:
+        return cities_step()
+
+    @app.post("/setup/cities")
+    async def setup_cities_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        text = form.get("cities", "")
+        good, bad_lines = setup_wizard.parse_cities(text)
+        added: list[str] = []
+        kept: list[str] = []
+        failed: list[str] = []
+        for city in good:
+            folder = hub.cities_dir / slug_from_name(city.name)
+            if (folder / "city").is_dir():
+                slug = folder.name
+                kept.append(city.name)
+            else:
+                try:
+                    slug = hub.add(city.name, city.state)
+                except HubError as exc:
+                    failed.append(f"{city.name} ({exc})")
+                    continue
+                added.append(city.name)
+            # Keep a website already saved for this city when the typed line leaves it out.
+            previous = setup_wizard.read_setup(hub.cities_dir / slug)
+            setup_wizard.write_setup(
+                hub.cities_dir / slug,
+                setup_wizard.CitySetup(city.name, city.state, city.website or previous.website),
+            )
+        return cities_step(
+            text=text,
+            errors=bad_lines,
+            added=added,
+            kept=kept,
+            failed=failed,
+            status=400 if bad_lines else 200,
+        )
+
+    def find_rows() -> list[dict[str, Any]]:
+        jobs = hub.setup_jobs
+        done = {row.slug: row for row in jobs.status()} if jobs.kind == "find" else {}
+        rows: list[dict[str, Any]] = []
+        for spec in city_specs():
+            row = done.get(spec.slug)
+            if row is not None:
+                state, message, count = row.state, row.message, row.count
+            elif setup_wizard.has_sources(spec.city_dir):
+                state, message, count = "saved", "", setup_wizard.source_count(spec.city_dir)
+            else:
+                state, message, count = "waiting", "", 0
+            rows.append(
+                {
+                    "slug": spec.slug,
+                    "name": display_name(spec),
+                    "state": state,
+                    "message": message,
+                    "count": count,
+                }
+            )
+        return rows
+
+    def find_step(status: int = 200) -> HTMLResponse:
+        specs = city_specs()
+        return setup_page(
+            "setup_find.html",
+            "find",
+            status=status,
+            title="Find sources",
+            rows=find_rows(),
+            running=hub.setup_jobs.running() and hub.setup_jobs.kind == "find",
+            setup_next_ready=bool(specs)
+            and all(setup_wizard.has_sources(spec.city_dir) for spec in specs),
+        )
+
+    @app.get("/setup/find", response_class=HTMLResponse)
+    def setup_find_get() -> HTMLResponse:
+        return find_step()
+
+    @app.post("/setup/find")
+    async def setup_find_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        todo = [spec for spec in city_specs() if not setup_wizard.has_sources(spec.city_dir)]
+        hub.setup_jobs.start_find(todo)
+        return _redirect("/setup/find")
+
+    def check_step(error: str = "", status: int = 200) -> HTMLResponse:
+        specs = city_specs()
+        cities = [
+            {
+                "slug": spec.slug,
+                "name": display_name(spec),
+                "proofs": setup_wizard.read_proofs(spec.city_dir) or [],
+            }
+            for spec in specs
+        ]
+        jobs = hub.setup_jobs
+        names = {spec.slug: display_name(spec) for spec in specs}
+        job_rows = [
+            {
+                "slug": row.slug,
+                "name": names.get(row.slug, row.slug),
+                "state": row.state,
+                "message": row.message,
+            }
+            for row in jobs.status()
+        ]
+        return setup_page(
+            "setup_check.html",
+            "check",
+            status=status,
+            title="Check sources",
+            check_cities=cities,
+            job_rows=job_rows,
+            running=jobs.running() and jobs.kind == "check",
+            error=error,
+            setup_next_ready=bool(specs)
+            and all(
+                setup_wizard.check_all_read(setup_wizard.read_proofs(spec.city_dir))
+                for spec in specs
+            ),
+        )
+
+    @app.get("/setup/check", response_class=HTMLResponse)
+    def setup_check_get() -> HTMLResponse:
+        return check_step()
+
+    @app.post("/setup/check")
+    async def setup_check_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if form.get("action") == "leave-out":
+            slug = form.get("slug", "")
+            if slug not in hub.slugs():
+                return check_step(error=f"No city {slug!r} is here.", status=404)
+            if hub.setup_jobs.running():
+                return check_step(
+                    error="Wait until the current Find or Check finishes, then leave the city out.",
+                    status=409,
+                )
+            left_out = hub.cities_dir / "_left-out"
+            left_out.mkdir(exist_ok=True)
+            target = left_out / slug
+            if target.exists():
+                return check_step(error=f"{target} is already there.", status=400)
+            desk = hub.desks.pop(slug, None)
+            if desk is not None:
+                desk.station.stop()
+                desk.store.close()
+            try:
+                (hub.cities_dir / slug).rename(target)
+            except OSError as exc:
+                # Put the city back so its desk and Station work again.
+                with suppress(ReviewError, StationError, OSError, sqlite3.Error):
+                    hub.load(slug)
+                return check_step(error=f"Could not move {slug}: {exc}", status=500)
+            return _redirect("/setup/check")
+        hub.setup_jobs.start_check(city_specs())
+        return _redirect("/setup/check")
+
+    def rosters_step() -> HTMLResponse:
+        specs = city_specs()
+        cities = [
+            {
+                "slug": spec.slug,
+                "name": display_name(spec),
+                "rosters": setup_wizard.rosters(spec.city_dir),
+            }
+            for spec in specs
+        ]
+        return setup_page(
+            "setup_rosters.html",
+            "rosters",
+            title="Rosters",
+            roster_cities=cities,
+            setup_next_ready=bool(cities) and all(city["rosters"] for city in cities),
+        )
+
+    @app.get("/setup/rosters", response_class=HTMLResponse)
+    def setup_rosters_get() -> HTMLResponse:
+        return rosters_step()
+
+    def models_step(notice: str = "") -> HTMLResponse:
+        specs = city_specs()
+        first = specs[0] if specs else None
+        city_dir = first.city_dir if first is not None else None
+        return setup_page(
+            "setup_models_voices.html",
+            "models-voices",
+            title="Models and voices",
+            notice=notice,
+            first={"slug": first.slug, "name": display_name(first)} if first else None,
+            models=setup_wizard.model_rows(city_dir),
+            voice=setup_wizard.voice_summary(city_dir),
+        )
+
+    @app.get("/setup/models-voices", response_class=HTMLResponse)
+    def setup_models_get() -> HTMLResponse:
+        return models_step()
+
+    @app.post("/setup/models-voices")
+    async def setup_models_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        specs = city_specs()
+        if not specs:
+            return models_step("Add a city on the Cities step first.")
+        lines = setup_wizard.copy_settings(specs[0].city_dir, [spec.city_dir for spec in specs[1:]])
+        notice = " ".join(lines) or "Every other city already has the same files."
+        return models_step(notice)
 
     app.mount("/c", CityDispatcher(hub))
     return app

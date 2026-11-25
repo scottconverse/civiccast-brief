@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Cities</h2>
+<p class="muted">Type one city per line: <code>City, ST</code> or
+<code>City, ST, https://website</code>. Paste a whole county's towns if you like. The state can be
+CO or Colorado.</p>
+{% if errors %}
+<div class="notice error" role="alert">
+  <p>{{ errors | length }} line{{ "" if errors | length == 1 else "s" }} could not be used:</p>
+  <ul>
+  {% for e in errors %}
+    <li>Line {{ e.line }}: <q>{{ e.text }}</q> &mdash; {{ e.why }}</li>
+  {% endfor %}
+  </ul>
+  <p>The other lines were still added.</p>
+</div>
+{% endif %}
+{% if added or kept or failed %}
+<div class="notice" role="status">
+  {% if added %}<p>Added: {{ added | join(", ") }}.</p>{% endif %}
+  {% if kept %}<p>Already here, so kept: {{ kept | join(", ") }}.</p>{% endif %}
+  {% if failed %}<p>Not added: {{ failed | join("; ") }}.</p>{% endif %}
+</div>
+{% endif %}
+<form method="post" action="/setup/cities">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label for="cities">Cities</label>
+  <textarea id="cities" name="cities" class="tall"
+            placeholder="Longmont, CO&#10;Lyons, CO, https://www.lyonscolorado.com">{{ text }}</textarea>
+  <p><button type="submit" class="primary" data-busy="Adding the cities…">Add these cities</button></p>
+</form>
+<h2>Cities already here</h2>
+{% if city_rows %}
+<table>
+  <thead><tr><th>City</th><th>State</th></tr></thead>
+  <tbody>
+  {% for c in city_rows %}
+  <tr><td><a href="/c/{{ c.slug }}/">{{ c.name }}</a></td><td>{{ c.state }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">None yet.</p>
+{% endif %}
+<div class="next">
+  <a href="/setup/computer">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/setup/find">Next: Find sources &rarr;</a>{% endif %}
+</div>
+{% endblock %}
