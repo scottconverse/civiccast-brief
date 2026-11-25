@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -181,7 +182,7 @@ def test_the_plain_desk_shows_the_schedule_form_and_what_the_job_runs(plain):
     assert 'value="14"' in page
     assert "America/Denver" in page
     assert "What the job runs" in page
-    assert "runs\\weekly" in page  # the work folder the job passes as --work
+    assert str(Path("runs") / "weekly") in page  # the work folder the job passes as --work
     assert "civiccast_brief.weekly" in page
     assert 'data-busy="Saving…"' in page
     assert 'data-busy="Starting…"' in page

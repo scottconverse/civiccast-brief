@@ -79,7 +79,7 @@ def test_the_portal_client_stays_open_while_the_week_runs(tmp_path, monkeypatch,
 
     open_during_run = []
 
-    def run_week(settings, meetings, last):
+    def run_week(settings, meetings, last, limit=None):
         open_during_run.append(not clients[0].is_closed)
         return NS(lines=[], failed=0)
 
