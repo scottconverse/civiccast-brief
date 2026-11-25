@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from civiccast_brief.audio.errors import ToolError
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 
 def tools_available() -> bool:
@@ -23,6 +24,7 @@ def _run(argv: list[str], what: str) -> subprocess.CompletedProcess[str]:
             encoding="utf-8",
             errors="replace",
             check=False,
+            **hidden_process_kwargs(),
         )
     except FileNotFoundError as exc:
         raise ToolError(f"{argv[0]} is not on PATH; install ffmpeg") from exc

@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
+
 #: The wrangler the repo's worker pins (worker/signup/package.json).
 WRANGLER_VERSION: Final = "4.158.0"
 TOKEN_CREDENTIAL: Final = "CivicCastBrief/cloudflare-deploy"
@@ -59,6 +61,7 @@ def run_command(argv: Sequence[str], env: dict[str, str]) -> tuple[int, str]:
             errors="replace",
             stdin=subprocess.DEVNULL,
             check=False,
+            **hidden_process_kwargs(),
         )
     except OSError as exc:
         return 127, f"could not start {argv[0]}: {exc}"

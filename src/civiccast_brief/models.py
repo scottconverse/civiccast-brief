@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from civiccast_brief.script import llm
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 TASKS: Final = ("recap", "judge", "article", "script", "roundup")
 PROVIDERS: Final = ("claude", "ollama")
@@ -225,6 +226,7 @@ def run_process(cmd: list[str], stdin: str, env: Mapping[str, str]) -> tuple[int
             cwd=cwd,
             timeout=CLAUDE_TIMEOUT_S,
             check=False,
+            **hidden_process_kwargs(),
         )
     return done.returncode, done.stdout, done.stderr
 

@@ -25,6 +25,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
+
 #: The task's name in Task Scheduler.
 TASK_NAME: Final = "CivicCast Brief weekly"
 #: The PowerShell executable the module runs. ``powershell.exe`` is on PATH on Windows.
@@ -49,6 +51,7 @@ def run_powershell(argv: Sequence[str]) -> tuple[int, str, str]:
         encoding="utf-8",
         errors="replace",
         check=False,
+        **hidden_process_kwargs(),
     )
     return proc.returncode, proc.stdout, proc.stderr
 

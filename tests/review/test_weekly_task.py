@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import pytest
 
 from civiccast_brief.review import weekly_task
+from civiccast_brief.speech import windows_process
 
 PREFIX = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command"]
 
@@ -147,6 +149,42 @@ def test_a_powershell_failure_is_shown_plainly_and_never_leaks_a_secret() -> Non
     assert "Access is denied." in text
     assert "\n" not in text  # one plain line
     assert "code 1" in text
+
+
+def _hidable(monkeypatch, platform: str) -> None:
+    """Make the helper believe a windowless pythonw parent is running."""
+    monkeypatch.setattr(windows_process.sys, "platform", platform)
+    monkeypatch.setattr(windows_process.sys, "executable", r"C:\Python\pythonw.exe")
+
+
+def test_powershell_runs_with_its_console_hidden_on_windows(monkeypatch) -> None:
+    _hidable(monkeypatch, "win32")
+    calls: list[dict[str, object]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(dict(kwargs))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(weekly_task.subprocess, "run", fake_run)
+
+    weekly_task.run_powershell(["powershell.exe", "-Command", "x"])
+
+    assert calls[0]["creationflags"] == subprocess.CREATE_NO_WINDOW
+
+
+def test_powershell_adds_no_flag_on_other_systems(monkeypatch) -> None:
+    _hidable(monkeypatch, "linux")
+    calls: list[dict[str, object]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(dict(kwargs))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(weekly_task.subprocess, "run", fake_run)
+
+    weekly_task.run_powershell(["powershell.exe", "-Command", "x"])
+
+    assert "creationflags" not in calls[0]
 
 
 def test_status_of_unreadable_output_is_a_plain_error() -> None:
