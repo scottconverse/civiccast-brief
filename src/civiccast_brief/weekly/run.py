@@ -150,6 +150,35 @@ def folder_for(meeting: Found) -> str:
     return f"{meeting.day.isoformat()}-{slug(meeting.body)}-{slug(meeting.video)}"
 
 
+#: A meeting names its body by type ("City Council Special Meeting"); the roster names the body.
+_MEETING_TYPES = (
+    "regular meeting",
+    "special meeting",
+    "study session",
+    "work session",
+    "regular session",
+    "special session",
+    "meeting",
+)
+
+
+def _base_name(body: str, city_name: str) -> str:
+    """The body without a leading city name and one trailing meeting-type phrase."""
+    text = " ".join(body.lower().split())
+    name = " ".join(city_name.lower().split())
+    if name:
+        for prefix in (f"city of {name} ", f"town of {name} ", f"{name} "):
+            if text.startswith(prefix):
+                text = text[len(prefix) :]
+                break
+    for phrase in sorted(_MEETING_TYPES, key=len, reverse=True):
+        suffix = f" {phrase}"
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    return " ".join(text.split())
+
+
 def roster_for(city: Path, body: str) -> Path | None:
     """``rosters/<body>.json``, else ``roster.json`` when it is that body's roster."""
     own = city / "rosters" / f"{slug(body)}.json"
@@ -159,6 +188,21 @@ def roster_for(city: Path, body: str) -> Path | None:
     if default.is_file():
         data = json.loads(default.read_text(encoding="utf-8"))
         if " ".join(str(data.get("body", "")).lower().split()) == " ".join(body.lower().split()):
+            return default
+    # A meeting type of the same council finds that council's roster: the base names match.
+    city_name = ""
+    city_file = city / CITY_FILE
+    if city_file.is_file():
+        city_name = str(json.loads(city_file.read_text(encoding="utf-8")).get("name", ""))
+    base = _base_name(body, city_name)
+    if not base:
+        return None
+    own_base = city / "rosters" / f"{slug(base)}.json"
+    if own_base.is_file():
+        return own_base
+    if default.is_file():
+        data = json.loads(default.read_text(encoding="utf-8"))
+        if _base_name(str(data.get("body", "")), city_name) == base:
             return default
     return None
 

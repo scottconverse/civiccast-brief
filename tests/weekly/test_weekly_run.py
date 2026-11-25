@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from civiccast_brief.weekly.find import Agenda, Found
-from civiccast_brief.weekly.run import STATE_NAME, Settings, Site, Steps, run_week
+from civiccast_brief.weekly.run import STATE_NAME, Settings, Site, Steps, roster_for, run_week
 
 COUNCIL = "City Council"
 PZ = "Planning and Zoning Commission"
@@ -158,6 +158,48 @@ def _settings(tmp_path, site=None, **kw):
     return Settings(
         city=_city(tmp_path, **kw), work=tmp_path / "work", db=tmp_path / "desk.db", site=site
     )
+
+
+def _loveland(tmp_path):
+    """Loveland's city folder: a city name, and one roster for the City Council."""
+    city = tmp_path / "loveland"
+    (city / "rosters").mkdir(parents=True)
+    (city / "city.json").write_text(json.dumps({"name": "Loveland"}), encoding="utf-8")
+    (city / "roster.json").write_text(json.dumps({"body": COUNCIL}), encoding="utf-8")
+    return city
+
+
+def test_a_council_meeting_type_uses_the_council_roster(tmp_path):
+    city = _loveland(tmp_path)
+    for body in (
+        "LOVELAND CITY COUNCIL SPECIAL MEETING",
+        "LOVELAND CITY COUNCIL STUDY SESSION",
+        "LOVELAND CITY COUNCIL MEETING",
+        "City Council Regular Meeting",
+    ):
+        assert roster_for(city, body) == city / "roster.json"
+
+
+def test_another_body_gets_no_roster_from_a_meeting_type(tmp_path):
+    city = _loveland(tmp_path)
+    assert roster_for(city, "LOVELAND URBAN RENEWAL AUTHORITY BOARD") is None
+    assert roster_for(city, "Planning Commission") is None
+
+
+def test_a_meeting_type_finds_the_bodys_own_roster_file(tmp_path):
+    city = _loveland(tmp_path)
+    own = city / "rosters" / "planning-commission.json"
+    own.write_text(json.dumps({"body": "Planning Commission"}), encoding="utf-8")
+    assert roster_for(city, "Planning Commission Study Session") == own
+
+
+def test_the_plain_body_and_a_city_without_city_json_still_find_their_roster(tmp_path):
+    city = _loveland(tmp_path)
+    assert roster_for(city, COUNCIL) == city / "roster.json"
+    bare = tmp_path / "bare"
+    (bare / "rosters").mkdir(parents=True)
+    (bare / "roster.json").write_text(json.dumps({"body": COUNCIL}), encoding="utf-8")
+    assert roster_for(bare, COUNCIL) == bare / "roster.json"
 
 
 AGENDA = Agenda("https://longmont.primegov.com/agenda/9", ("1. Call to order",))
