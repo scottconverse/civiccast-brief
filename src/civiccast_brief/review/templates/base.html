@@ -74,6 +74,7 @@
   {% endif %}
   {% if signed_in and not hub %}
   <nav aria-label="Desk">
+    <a href="{{ root }}/setup/computer" {% if nav == "computer" %}aria-current="page"{% endif %}>This computer</a>
     <a href="{{ root }}/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
     <a href="{{ root }}/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
     <a href="{{ root }}/voices" {% if nav == "voices" %}aria-current="page"{% endif %}>Voices</a>

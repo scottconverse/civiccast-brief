@@ -5,6 +5,7 @@
 {% if setup %}
 <section class="setup" aria-labelledby="setup-title">
   <h2 id="setup-title">Set up {{ setup.city or "your city" }}</h2>
+  <p><a href="{{ root }}/setup/computer">First, check this computer</a></p>
   <p class="muted">{{ setup.required_done }} of {{ setup.required_total }} required steps done.</p>
   <ol class="setup-steps">
   {% for step in setup.steps %}

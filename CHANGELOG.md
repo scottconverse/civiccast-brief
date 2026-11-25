@@ -9,6 +9,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - One desk can hold several cities: `review serve --cities DIR` mounts a desk per city folder
   (`DIR\<slug>\city\`, `desk.db`, `runs\weekly\`) behind one sign-in, with a city switcher and an
   **Add a city** form on the home page. A single-city desk is unchanged.
+- New **This computer** page: one table says whether ffmpeg, yt-dlp, Chrome, Ollama (with the
+  writer model), Claude Code and a voice engine are ready, with the fix for anything missing and
+  a button to check Claude sign-in.
 - The Items page shows a **Set up your city** checklist until the desk is set up: city, sources,
   check, roster, models, voices, a test meeting and the weekly schedule. Each tick is read from
   the city folder's files and the run records; the panel goes away when every required step is

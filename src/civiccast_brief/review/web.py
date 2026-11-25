@@ -8,6 +8,8 @@ Pages:
   - ``/city``: the city's name, short web name, state and contact emails (city.json).
   - ``/sources``: the city's meeting sources (add, edit, remove).
   - ``/sources/find``: search a city's site and the meeting platforms, then add what was found.
+  - ``/setup/computer``: what this PC has for CivicCast Brief, and what to do about anything
+    missing (``civiccast_brief.setup_check``).
 
 Jinja2 autoescaping is on, so editor text is shown as text. A small script (``/static/desk.js``)
 shows "Working..." on the pressed button; every action also ends on a page that says what
@@ -49,6 +51,7 @@ from starlette.concurrency import run_in_threadpool
 
 from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
+from civiccast_brief import setup_check
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
 from civiccast_brief.review import desk, setup_steps, voices, weekly_job
@@ -1129,6 +1132,21 @@ def make_desk_app(
         except OSError as exc:
             return state.voices_page(form=form, error=f"Not saved: {exc}", status=400)
         return _redirect("/voices?saved=1")
+
+    @app.get("/setup/computer", response_class=HTMLResponse)
+    async def computer_page() -> HTMLResponse:
+        checks = await run_in_threadpool(setup_check.run_checks)
+        return state.page("computer.html", title="This computer", checks=checks, notice="")
+
+    @app.post("/setup/computer")
+    async def check_computer(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        signed_in = form.get("claude") == "1"
+        checks = await run_in_threadpool(setup_check.run_checks, claude_signin=signed_in)
+        notice = "Claude sign-in checked." if signed_in else "Checked again."
+        return state.page("computer.html", title="This computer", checks=checks, notice=notice)
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:

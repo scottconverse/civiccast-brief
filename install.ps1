@@ -231,5 +231,6 @@ if ($script:Missing.Count -eq 0) {
     foreach ($m in $script:Missing) { Write-Host " - $m" }
 }
 Write-Host "Start the editor desk:  `"$launcher`""
+Write-Host "Then open This computer in the desk to see anything still missing."
 Write-Host "Set up a city: in the desk, Sources > Find a city's sources. Or:"
 Write-Host "  `"$python`" -m civiccast_brief city find --name `"Your City`" --state CO --dry-run"
