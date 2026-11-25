@@ -376,6 +376,60 @@ def test_leaving_out_a_missing_city_is_refused(hub_app):
     assert page.status_code == 404 and "No city" in page.text
 
 
+def test_leaving_out_waits_while_find_or_check_runs(hub_app):
+    app, cities = hub_app
+    client = client_for(app)
+    release = threading.Event()
+
+    def slow_check(folder, *, captions=False, fetcher=None):
+        release.wait(2.0)
+        return []
+
+    app.state.hub.setup_jobs = SetupJobs(
+        check_city=slow_check, fetcher_factory=lambda: object(), close_chrome=lambda: None
+    )
+    client.post("/setup/check", data={"token": token(client), "action": "check"})
+    end = time.monotonic() + 2.0
+    while not app.state.hub.setup_jobs.running() and time.monotonic() < end:
+        time.sleep(0.01)
+    assert app.state.hub.setup_jobs.running()
+
+    page = client.post(
+        "/setup/check",
+        data={"token": token(client), "action": "leave-out", "slug": "alpha"},
+    )
+    assert page.status_code == 409
+    assert "Wait until the current Find or Check finishes" in page.text
+    assert (cities / "alpha" / "city").is_dir()
+    assert not (cities / "_left-out" / "alpha").exists()
+
+    release.set()
+    wait(app.state.hub.setup_jobs)
+
+
+def test_a_failed_move_puts_the_city_back_and_says_why(hub_app, monkeypatch):
+    app, cities = hub_app
+    client = client_for(app)
+    real_rename = type(cities).rename
+
+    def broken_rename(self, target):
+        if self.name == "alpha":
+            raise OSError("the folder is in use")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(type(cities), "rename", broken_rename)
+    page = client.post(
+        "/setup/check",
+        data={"token": token(client), "action": "leave-out", "slug": "alpha"},
+    )
+    assert page.status_code == 500
+    assert "Could not move alpha: the folder is in use" in page.text
+    assert (cities / "alpha" / "city").is_dir()
+    assert "alpha" in app.state.hub.slugs()
+    city_page = client.get("/c/alpha/")
+    assert city_page.status_code == 200
+
+
 # ----- Rosters and copying -------------------------------------------------------------------
 
 

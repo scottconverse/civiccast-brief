@@ -23,7 +23,7 @@ import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -662,6 +662,11 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
             slug = form.get("slug", "")
             if slug not in hub.slugs():
                 return check_step(error=f"No city {slug!r} is here.", status=404)
+            if hub.setup_jobs.running():
+                return check_step(
+                    error="Wait until the current Find or Check finishes, then leave the city out.",
+                    status=409,
+                )
             left_out = hub.cities_dir / "_left-out"
             left_out.mkdir(exist_ok=True)
             target = left_out / slug
@@ -671,7 +676,13 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
             if desk is not None:
                 desk.station.stop()
                 desk.store.close()
-            (hub.cities_dir / slug).rename(target)
+            try:
+                (hub.cities_dir / slug).rename(target)
+            except OSError as exc:
+                # Put the city back so its desk and Station work again.
+                with suppress(ReviewError, StationError, OSError, sqlite3.Error):
+                    hub.load(slug)
+                return check_step(error=f"Could not move {slug}: {exc}", status=500)
             return _redirect("/setup/check")
         hub.setup_jobs.start_check(city_specs())
         return _redirect("/setup/check")
