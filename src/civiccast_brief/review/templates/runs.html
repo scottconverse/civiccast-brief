@@ -8,7 +8,9 @@
 {% if editable %}
 <h3>Test one meeting</h3>
 <p>Runs the newest meeting from the last {{ days }} days, the same way the weekly job does: captions,
-recap, story and script. It lands in Items for review. Nothing is published.</p>
+recap, story and script. Items that pass their checks are published on the desk, as in the weekly
+job, and go to the website with the next publish. Items that fail a check wait in Items for review.
+The test run itself does not build or deploy the website.</p>
 <form method="post" action="{{ root }}/runs/test" class="actions">
   <input type="hidden" name="token" value="{{ token }}">
   <button type="submit" data-busy="Starting…"{% if job and job.running %} disabled{% endif %}>Test one meeting</button>

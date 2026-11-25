@@ -322,6 +322,13 @@ def test_the_weekly_job_page_shows_the_test_section_above_the_schedule(plain):
     assert "last N days" not in page
 
 
+def test_the_weekly_job_page_says_what_test_one_meeting_publishes(plain):
+    app, _, _, _ = plain
+    page = signed_in(app).get("/runs").text
+    assert "Nothing is published" not in page
+    assert "go to the website with the next publish" in page
+
+
 def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):
     clock = Clock(datetime(2026, 11, 11, 12, 0, tzinfo=DENVER))
     steps = Steps()

@@ -456,7 +456,8 @@ class Station:
                     if code != 0:
                         output(f"stopped: that step ended with code {code}")
                         break
-            # A one-off run of its own steps (the desk's Test one meeting) publishes nothing.
+            # A one-off run of its own steps (the desk's Test one meeting) builds and deploys
+            # nothing.
             if self.publish_steps and steps is None:
                 if code != 0:
                     output("publishing what the desk already published:")

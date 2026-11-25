@@ -370,7 +370,8 @@ what failed. Exit 0 means everything finished.
 
 The desk started with `--city` has a **Weekly job** page (in the nav) that sets this run's
 schedule from a form, saved in `weekly.json` in the city folder; **Run now** runs it at once.
-That job finds the week's meetings and writes and stages each brief on the desk for review.
+That job finds the week's meetings, writes each brief, and publishes it on the desk when its checks
+pass; the rest wait in Items for review.
 **Test one meeting** runs the same command with `--limit 1`, so only the newest meeting that would
 be run goes through; the roundup is skipped.
 
