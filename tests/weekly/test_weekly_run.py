@@ -6,8 +6,9 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
+from civiccast_brief.meeting.capture import CAPTIONS_NOT_YET_REASON
 from civiccast_brief.weekly.find import Agenda, Found
-from civiccast_brief.weekly.run import STATE_NAME, Settings, Site, Steps, run_week
+from civiccast_brief.weekly.run import STATE_NAME, Settings, Site, Steps, roster_for, run_week
 
 COUNCIL = "City Council"
 PZ = "Planning and Zoning Commission"
@@ -158,6 +159,48 @@ def _settings(tmp_path, site=None, **kw):
     return Settings(
         city=_city(tmp_path, **kw), work=tmp_path / "work", db=tmp_path / "desk.db", site=site
     )
+
+
+def _loveland(tmp_path):
+    """Loveland's city folder: a city name, and one roster for the City Council."""
+    city = tmp_path / "loveland"
+    (city / "rosters").mkdir(parents=True)
+    (city / "city.json").write_text(json.dumps({"name": "Loveland"}), encoding="utf-8")
+    (city / "roster.json").write_text(json.dumps({"body": COUNCIL}), encoding="utf-8")
+    return city
+
+
+def test_a_council_meeting_type_uses_the_council_roster(tmp_path):
+    city = _loveland(tmp_path)
+    for body in (
+        "LOVELAND CITY COUNCIL SPECIAL MEETING",
+        "LOVELAND CITY COUNCIL STUDY SESSION",
+        "LOVELAND CITY COUNCIL MEETING",
+        "City Council Regular Meeting",
+    ):
+        assert roster_for(city, body) == city / "roster.json"
+
+
+def test_another_body_gets_no_roster_from_a_meeting_type(tmp_path):
+    city = _loveland(tmp_path)
+    assert roster_for(city, "LOVELAND URBAN RENEWAL AUTHORITY BOARD") is None
+    assert roster_for(city, "Planning Commission") is None
+
+
+def test_a_meeting_type_finds_the_bodys_own_roster_file(tmp_path):
+    city = _loveland(tmp_path)
+    own = city / "rosters" / "planning-commission.json"
+    own.write_text(json.dumps({"body": "Planning Commission"}), encoding="utf-8")
+    assert roster_for(city, "Planning Commission Study Session") == own
+
+
+def test_the_plain_body_and_a_city_without_city_json_still_find_their_roster(tmp_path):
+    city = _loveland(tmp_path)
+    assert roster_for(city, COUNCIL) == city / "roster.json"
+    bare = tmp_path / "bare"
+    (bare / "rosters").mkdir(parents=True)
+    (bare / "roster.json").write_text(json.dumps({"body": COUNCIL}), encoding="utf-8")
+    assert roster_for(bare, COUNCIL) == bare / "roster.json"
 
 
 AGENDA = Agenda("https://longmont.primegov.com/agenda/9", ("1. Call to order",))
@@ -340,6 +383,35 @@ def test_a_live_event_that_has_not_started_is_not_run_and_is_retried_later(tmp_p
     assert report.failed == 0
     assert "2026-11-03 City Council Regular Session: done" in report.lines
     assert [step for step, _ in again.calls if step == "meeting"] == ["meeting"]
+
+
+class CaptionsNotYetFake(Fake):
+    """The first meeting run says YouTube has not posted the captions yet."""
+
+    def __init__(self):
+        super().__init__()
+        self.not_yet = 1
+
+    def meeting(self, argv):
+        if self.not_yet:
+            self.not_yet -= 1
+            self.calls.append(("meeting", list(argv)))
+            return 4
+        return super().meeting(argv)
+
+
+def test_captions_not_posted_yet_leaves_the_meeting_waiting(tmp_path):
+    fake = CaptionsNotYetFake()
+    settings = _settings(tmp_path)
+    report = run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+
+    assert report.failed == 0
+    assert f"2026-11-03 City Council Regular Session: {CAPTIONS_NOT_YET_REASON}" in report.lines
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"][COUNCIL_MEETING.key]["status"] == "waiting"
+    assert state["meetings"][COUNCIL_MEETING.key]["error"] == CAPTIONS_NOT_YET_REASON
+    # Nothing after the meeting ran.
+    assert fake.names() == [("meeting", "run")]
 
 
 def test_a_failed_story_does_not_redo_the_steps_before_it(tmp_path):
@@ -1564,6 +1636,74 @@ def test_limit_counts_only_meetings_not_done_and_without_a_reason(tmp_path):
     assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == ["oWZpzjzjwnE"]
     assert "2026-11-05 Planning and Zoning Commission: done in an earlier run" not in report.lines
     assert "roundup: skipped (--limit)" in report.lines
+
+
+OLDER_MEETING = Found(
+    COUNCIL, date(2026, 11, 1), "City Council Special Session", "p", "OLDEROLDER1"
+)
+
+
+class NewestNotYetFake(Fake):
+    """The newest meeting's video has no captions yet; the others run normally."""
+
+    def meeting(self, argv):
+        if _positional(argv) == "PZPZPZPZPZ1":
+            self.calls.append(("meeting", list(argv)))
+            return 4
+        return super().meeting(argv)
+
+
+def test_limit_goes_on_to_the_next_newest_when_the_captions_are_not_posted_yet(tmp_path):
+    fake = NewestNotYetFake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, OLDER_MEETING, PZ_MEETING],
+        LAST,
+        fake.steps(),
+        limit=1,
+    )
+
+    assert report.failed == 0
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == [
+        "PZPZPZPZPZ1",
+        "oWZpzjzjwnE",
+    ]
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"]["youtube:PZPZPZPZPZ1"]["status"] == "waiting"
+    assert state["meetings"]["youtube:oWZpzjzjwnE"]["status"] == "done"
+    # The older meeting was never tried, so it is not recorded in the state.
+    assert "youtube:OLDEROLDER1" not in state["meetings"]
+    assert "roundup: skipped (--limit)" in report.lines
+
+
+class NewestFailsFake(Fake):
+    """The newest meeting's meeting step fails; nothing after it should be tried."""
+
+    def meeting(self, argv):
+        if _positional(argv) == "PZPZPZPZPZ1":
+            self.calls.append(("meeting", list(argv)))
+            return 1
+        return super().meeting(argv)
+
+
+def test_limit_stops_at_a_failure_because_a_failure_counts(tmp_path):
+    fake = NewestFailsFake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, OLDER_MEETING, PZ_MEETING],
+        LAST,
+        fake.steps(),
+        limit=1,
+    )
+
+    assert report.failed == 1
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == ["PZPZPZPZPZ1"]
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"]["youtube:PZPZPZPZPZ1"]["status"] == "failed"
+    assert "youtube:oWZpzjzjwnE" not in state["meetings"]
+    assert "youtube:OLDEROLDER1" not in state["meetings"]
 
 
 def test_without_limit_every_meeting_and_the_roundup_run_as_before(tmp_path):

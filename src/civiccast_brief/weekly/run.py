@@ -45,8 +45,8 @@ from typing import Any
 from civiccast_brief.audio.errors import ToolError
 from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.episode.build import meeting_slug, meeting_suffix
-from civiccast_brief.meeting.capture import LIVE_NOT_STARTED_REASON
-from civiccast_brief.meeting.cli import LIVE_NOT_STARTED_EXIT
+from civiccast_brief.meeting.capture import CAPTIONS_NOT_YET_REASON, LIVE_NOT_STARTED_REASON
+from civiccast_brief.meeting.cli import CAPTIONS_NOT_YET_EXIT, LIVE_NOT_STARTED_EXIT
 from civiccast_brief.review import voices
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.writer import (
@@ -150,6 +150,35 @@ def folder_for(meeting: Found) -> str:
     return f"{meeting.day.isoformat()}-{slug(meeting.body)}-{slug(meeting.video)}"
 
 
+#: A meeting names its body by type ("City Council Special Meeting"); the roster names the body.
+_MEETING_TYPES = (
+    "regular meeting",
+    "special meeting",
+    "study session",
+    "work session",
+    "regular session",
+    "special session",
+    "meeting",
+)
+
+
+def _base_name(body: str, city_name: str) -> str:
+    """The body without a leading city name and one trailing meeting-type phrase."""
+    text = " ".join(body.lower().split())
+    name = " ".join(city_name.lower().split())
+    if name:
+        for prefix in (f"city of {name} ", f"town of {name} ", f"{name} "):
+            if text.startswith(prefix):
+                text = text[len(prefix) :]
+                break
+    for phrase in sorted(_MEETING_TYPES, key=len, reverse=True):
+        suffix = f" {phrase}"
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    return " ".join(text.split())
+
+
 def roster_for(city: Path, body: str) -> Path | None:
     """``rosters/<body>.json``, else ``roster.json`` when it is that body's roster."""
     own = city / "rosters" / f"{slug(body)}.json"
@@ -159,6 +188,21 @@ def roster_for(city: Path, body: str) -> Path | None:
     if default.is_file():
         data = json.loads(default.read_text(encoding="utf-8"))
         if " ".join(str(data.get("body", "")).lower().split()) == " ".join(body.lower().split()):
+            return default
+    # A meeting type of the same council finds that council's roster: the base names match.
+    city_name = ""
+    city_file = city / CITY_FILE
+    if city_file.is_file():
+        city_name = str(json.loads(city_file.read_text(encoding="utf-8")).get("name", ""))
+    base = _base_name(body, city_name)
+    if not base:
+        return None
+    own_base = city / "rosters" / f"{slug(base)}.json"
+    if own_base.is_file():
+        return own_base
+    if default.is_file():
+        data = json.loads(default.read_text(encoding="utf-8"))
+        if _base_name(str(data.get("body", "")), city_name) == base:
             return default
     return None
 
@@ -410,6 +454,10 @@ def run_meeting(steps: Steps, settings: Settings, meeting: Found, entry: dict[st
             # A scheduled stream or premiere that has not aired: nothing to report yet, so the
             # meeting is "not run" and a later week tries the video again.
             raise NotStarted(LIVE_NOT_STARTED_REASON)
+        if code == CAPTIONS_NOT_YET_EXIT:
+            # A new video whose captions YouTube has not made yet: the meeting is "waiting"
+            # and the next run tries the video again.
+            raise Waiting(CAPTIONS_NOT_YET_REASON)
         if code != 0:
             raise StepFailed("meeting run failed")
         done.append("recap")
@@ -1081,8 +1129,10 @@ def run_week(
     recorded and the run goes on with the next.
 
     With ``limit`` only that many of the newest meetings that would be run (no ``reason`` and
-    not ``done``) are run, newest day first; the rest are left out and not recorded in the
-    state. The roundup is skipped, since it would cover meetings that were not run."""
+    not ``done``) are tried, newest day first. A meeting that ends ``waiting`` or ``not run``
+    does not count: the run goes on to the next-newest runnable meeting until ``limit``
+    meetings ended done or failed, or none are left. Meetings never tried are left out and not
+    recorded in the state. The roundup is skipped, since it would cover meetings not run."""
     steps = steps or Steps()
     state = State(settings.work / STATE_NAME)
     report = Report()
@@ -1095,8 +1145,11 @@ def run_week(
             and state.data["meetings"].get(meeting.key, {}).get("status") != "done"
         ]
         runnable.sort(key=lambda meeting: meeting.day, reverse=True)
-        selected = runnable[:limit]
+        selected = runnable
+    counted = 0
     for meeting in selected:
+        if limit is not None and counted >= limit:
+            break
         entry = state.meeting(meeting.key)
         entry.update(title=meeting.title, week=last.isoformat())
         # A meeting run before keeps its run, even when it would not be run now: its episode
@@ -1122,11 +1175,13 @@ def run_week(
             report.add(f"{meeting.day} {meeting.title}: not run: {exc}")
             continue
         except StepFailed as exc:
+            counted += 1
             _record(state, entry, str(exc))
             report.add(f"{meeting.day} {meeting.title}: failed: {exc}", failed=True)
             for line in entry.get("roster", []):
                 report.add(f"{meeting.day} {meeting.title}: {line}")
             continue
+        counted += 1
         _record(state, entry, "")
         report.add(f"{meeting.day} {meeting.title}: done")
         for line in [*entry.get("documents", []), *entry.get("roster", [])]:

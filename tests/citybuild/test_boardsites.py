@@ -184,6 +184,23 @@ def test_a_title_joined_to_a_name_with_a_hyphen_is_not_a_member():
     # "Chrystal DeCoster-Town Art Show Curator" is last, in a list of its own.
 
 
+def test_a_title_printed_before_the_name_is_the_members_role():
+    assert _members("berthoud-port.html") == [
+        ("Lauren Roth", "Chair"),
+        ("Carolyn Hobson", "Vice Chair"),
+        ("Eleanor Hasenbeck", "Secretary"),  # the term is on the same line, without parentheses
+        ("Michael Brennan", "Member"),
+        ("Callie West", "Member"),
+        ("Anna Murphy", "Member"),
+        ("Kari Wiesen", "Member"),
+    ]  # "Keith Knoll - Staff Liaison" is staff
+
+
+def test_the_title_before_a_name_and_the_title_after_it_read_the_same():
+    assert boardsites._line_member("Chair - Lauren Roth") == ("Lauren Roth", "Chair")
+    assert boardsites._line_member("Lauren Roth - Chair") == ("Lauren Roth", "Chair")
+
+
 def test_a_page_with_fewer_than_three_names_has_no_roster():
     page = "<h2>Members</h2><ul><li>Ann Lee, Chair</li><li>Bo Ray</li></ul>"
     assert boardsites.read_board_members(page) == []

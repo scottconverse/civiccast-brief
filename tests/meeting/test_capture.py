@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -107,6 +108,88 @@ def test_a_real_caption_failure_is_still_a_capture_error(tmp_path):
     assert not isinstance(raised.value, C.LiveNotStarted)
 
 
+# ----- A video posted too recently for YouTube's captions to exist ----------------------------
+
+
+class NoCaptionsRunner:
+    """yt-dlp succeeds but writes no caption file; only the info file lands, as in a fresh post."""
+
+    def __init__(self, work, info):
+        self.work, self.info = work, info
+
+    def __call__(self, argv, *, timeout_s, env, cwd=None):
+        (self.work / "abc123XYZ_-.info.json").write_text(json.dumps(self.info), encoding="utf-8")
+        return proc.ProcessResult(argv=tuple(argv), returncode=0, stdout=b"", stderr="")
+
+
+class NoPanel:
+    def transcript_panel(self, url):
+        raise C.panel.PanelError("the page has no Show transcript button")
+
+
+def test_a_two_day_old_video_with_no_captions_is_not_yet(tmp_path):
+    runner = NoCaptionsRunner(tmp_path, {"id": "abc123XYZ_-", "upload_date": "20261123"})
+    with pytest.raises(C.CaptionsNotYet, match="not posted this video's captions yet") as raised:
+        C.capture_captions(
+            "abc123XYZ_-",
+            tmp_path,
+            python="py",
+            runner=runner,
+            browser=NoPanel(),
+            now=datetime(2026, 11, 25, 12, tzinfo=UTC),
+        )
+    assert "posted 2026-11-23" in str(raised.value)
+
+
+def test_a_ten_day_old_video_with_no_captions_is_a_plain_error(tmp_path):
+    runner = NoCaptionsRunner(tmp_path, {"id": "abc123XYZ_-", "upload_date": "20261115"})
+    with pytest.raises(C.CaptureError) as raised:
+        C.capture_captions(
+            "abc123XYZ_-",
+            tmp_path,
+            python="py",
+            runner=runner,
+            browser=NoPanel(),
+            now=datetime(2026, 11, 25, 12, tzinfo=UTC),
+        )
+    assert not isinstance(raised.value, C.CaptionsNotYet)
+    assert "no Show transcript button" in str(raised.value)
+
+
+def test_the_release_time_wins_over_the_upload_date(tmp_path):
+    """A stream released two days ago but uploaded ten days ago is still "not yet"."""
+    runner = NoCaptionsRunner(
+        tmp_path,
+        {
+            "id": "abc123XYZ_-",
+            "upload_date": "20261115",
+            "release_timestamp": int(datetime(2026, 11, 23, 8, tzinfo=UTC).timestamp()),
+        },
+    )
+    with pytest.raises(C.CaptionsNotYet, match="posted 2026-11-23"):
+        C.capture_captions(
+            "abc123XYZ_-",
+            tmp_path,
+            python="py",
+            runner=runner,
+            browser=NoPanel(),
+            now=datetime(2026, 11, 25, 12, tzinfo=UTC),
+        )
+
+
+def test_no_info_file_means_the_missing_captions_stay_a_plain_error(tmp_path):
+    with pytest.raises(C.CaptureError) as raised:
+        C.capture_captions(
+            "abc123XYZ_-",
+            tmp_path,
+            python="py",
+            runner=FakeRunner(tmp_path, write=False),
+            browser=NoPanel(),
+            now=datetime(2026, 11, 25, 12, tzinfo=UTC),
+        )
+    assert not isinstance(raised.value, C.CaptionsNotYet)
+
+
 # ----- The meeting command's exit code -------------------------------------------------------
 
 
@@ -119,6 +202,20 @@ def test_the_meeting_command_exits_3_for_a_stream_that_has_not_started(tmp_path,
     monkeypatch.setattr(cli, "run", not_started)
     code = cli.main(["run", "abc123XYZ_-", "--out", str(tmp_path)])
     assert code == cli.LIVE_NOT_STARTED_EXIT == 3
+
+
+def test_the_meeting_command_exits_4_when_the_captions_are_not_posted_yet(
+    tmp_path, monkeypatch, capsys
+):
+    from civiccast_brief.meeting import cli
+
+    def not_yet(*a, **k):
+        raise C.CaptionsNotYet(f"{C.CAPTIONS_NOT_YET_REASON} (posted 2026-11-23)")
+
+    monkeypatch.setattr(cli, "run", not_yet)
+    code = cli.main(["run", "abc123XYZ_-", "--out", str(tmp_path)])
+    assert code == cli.CAPTIONS_NOT_YET_EXIT == 4
+    assert "not run: YouTube has not posted this video's captions yet" in capsys.readouterr().err
 
 
 def test_the_meeting_command_still_exits_1_for_a_caption_failure(tmp_path, monkeypatch):

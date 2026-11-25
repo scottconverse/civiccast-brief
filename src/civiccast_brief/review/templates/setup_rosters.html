@@ -1,24 +1,66 @@
 {% extends "base.html" %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block content %}
 {% include "_setup_steps.html" %}
 <h2>Rosters</h2>
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 <p class="muted">Each body's members, read from its roster files. Names also fill in from each
-week's records.</p>
-{% for city in roster_cities %}
-<h3>{{ city.name }}</h3>
-{% if city.rosters %}
+week's records. <strong>Find board rosters</strong> reads each board's member list from its
+PrimeGov page or its own website.</p>
+<form method="post" action="/setup/rosters" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="rosters">
+  <button type="submit" class="primary" data-busy="Finding board rosters…">Find board rosters</button>
+  {% if running %}<span class="muted">A roster search is running. Pressing again does nothing.</span>{% endif %}
+</form>
+{% if running %}
 <table>
-  <thead><tr><th>Body</th><th>File</th><th>Members</th></tr></thead>
+  <thead><tr><th>City</th><th>Status</th><th></th></tr></thead>
   <tbody>
-  {% for r in city.rosters %}
-  <tr><td>{{ r.body }}</td><td>{{ r.file }}</td><td>{{ r.members | length }}</td></tr>
+  {% for row in job_rows %}
+  <tr>
+    <td>{{ row.name }}</td>
+    <td>
+      {% if row.state == "waiting" %}<span class="muted">Waiting</span>
+      {% elif row.state == "finding" %}<span class="status">Finding rosters…</span>
+      {% elif row.state == "found" %}<span class="status ok">Found rosters for {{ row.count }} {{ "body" if row.count == 1 else "bodies" }}</span>
+      {% elif row.state == "failed" %}<span class="status failed">Failed: {{ row.message }}</span>
+      {% else %}{{ row.state }}{% endif %}
+    </td>
+    <td><a href="/c/{{ row.slug }}/roster">Roster</a></td>
+  </tr>
   {% endfor %}
   </tbody>
 </table>
-{% else %}
+{% endif %}
+{% for city in roster_cities %}
+<h3>{{ city.name }}</h3>
+{% if not city.rosters %}
 <p class="notice error" role="alert">This city has no roster file yet. Names also fill in from
 each week's records, but the setup needs one to start.
 <a href="/c/{{ city.slug }}/roster">Open this city's Roster page</a>.</p>
+{% endif %}
+{% if city.rows %}
+<table>
+  <thead><tr><th>Body</th><th>File</th><th>Members</th><th>What to do</th></tr></thead>
+  <tbody>
+  {% for r in city.rows %}
+  <tr>
+    <td>{{ r.body }}</td>
+    {% if r.file %}
+    <td>{{ r.file }}</td><td>{{ r.members }}</td><td></td>
+    {% else %}
+    <td><span class="status failed">No roster</span></td><td></td>
+    <td>
+      {% if r.note %}<span class="muted">{{ r.note }}</span><br>{% endif %}
+      Its meetings cannot be written until it has members. Add them on the
+      <a href="/c/{{ city.slug }}/roster">Roster page</a>.
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 {% endfor %}
 <div class="next">

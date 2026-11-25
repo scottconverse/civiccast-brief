@@ -763,27 +763,52 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         hub.setup_jobs.start_check(city_specs())
         return _redirect("/setup/check")
 
-    def rosters_step() -> HTMLResponse:
+    def rosters_step(error: str = "", status: int = 200) -> HTMLResponse:
         specs = city_specs()
         cities = [
             {
                 "slug": spec.slug,
                 "name": display_name(spec),
                 "rosters": setup_wizard.rosters(spec.city_dir),
+                "rows": setup_wizard.roster_body_rows(spec.city_dir),
             }
             for spec in specs
+        ]
+        jobs = hub.setup_jobs
+        names = {spec.slug: display_name(spec) for spec in specs}
+        job_rows = [
+            {
+                "slug": row.slug,
+                "name": names.get(row.slug, row.slug),
+                "state": row.state,
+                "message": row.message,
+                "count": row.count,
+            }
+            for row in jobs.status()
         ]
         return setup_page(
             "setup_rosters.html",
             "rosters",
+            status=status,
             title="Rosters",
             roster_cities=cities,
+            job_rows=job_rows,
+            running=jobs.running() and jobs.kind == "rosters",
+            error=error,
             setup_next_ready=bool(cities) and all(city["rosters"] for city in cities),
         )
 
     @app.get("/setup/rosters", response_class=HTMLResponse)
     def setup_rosters_get() -> HTMLResponse:
         return rosters_step()
+
+    @app.post("/setup/rosters")
+    async def setup_rosters_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        hub.setup_jobs.start_rosters(city_specs())
+        return _redirect("/setup/rosters")
 
     def models_step(notice: str = "") -> HTMLResponse:
         specs = city_specs()

@@ -8,6 +8,7 @@ The hub's ``/setup`` pages keep the wizard's state in the city folder's files, n
 * ``DIR/<slug>/city/sources.json``: the Find step.
 * ``DIR/<slug>/city/city-check.json``: the Check step (``citybuild.cli.save_proofs``).
 * ``DIR/<slug>/city/roster.json`` or ``rosters/*.json``: the Rosters step.
+* ``DIR/<slug>/city/roster-find.json``: the lines the Rosters step's finder last printed.
 * ``models.json`` and ``voices.json``: shown on the last step, and copied to other cities on
   request.
 
@@ -23,6 +24,7 @@ import time
 from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlparse
@@ -38,6 +40,8 @@ from civiccast_brief.weekly import rosterfill
 SETUP_NAME: Final = "setup.json"
 #: The saved check file (``citybuild.cli.PROOF_FILE``).
 PROOF_NAME: Final = "city-check.json"
+#: The lines the Rosters step's Find board rosters run saved, per city.
+ROSTER_FIND_NAME: Final = "roster-find.json"
 
 #: The wizard's steps, in order: (key, label). The key is also the page's path under /setup.
 STEPS: Final = (
@@ -260,6 +264,89 @@ def rosters(city_dir: str | Path) -> list[dict[str, Any]]:
         return []
 
 
+def _same_body(left: str, right: str) -> bool:
+    """Two body names match when their letters match, ignoring case and spacing."""
+    return "".join(left.casefold().split()) == "".join(right.casefold().split())
+
+
+def read_roster_find(city_dir: str | Path) -> list[str]:
+    """The lines the last Find board rosters run saved, or [] when it has not run."""
+    try:
+        data = json.loads((Path(city_dir) / ROSTER_FIND_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
+        return []
+    return [str(line) for line in data["lines"] if str(line).strip()]
+
+
+def write_roster_find(city_dir: str | Path, lines: list[str]) -> Path:
+    """Save the finder's lines so the Rosters page can show them later."""
+    out = Path(city_dir) / ROSTER_FIND_NAME
+    data = {"day": date.today().isoformat(), "lines": lines}
+    out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return out
+
+
+def _source_bodies(city_dir: Path) -> list[str]:
+    """Every body the city's sources cover, one per name, ignoring case and spacing."""
+    try:
+        sources = city_sources.load_sources(city_dir)
+    except city_sources.SourceError:
+        return []
+    bodies: list[str] = []
+    for source in sources:
+        for body in source.bodies:
+            if any(_same_body(body, known) for known in bodies):
+                continue
+            bodies.append(body)
+    return bodies
+
+
+def _find_line(lines: list[str], body: str) -> str:
+    """The finder's line for this body, matched on the name before its colon."""
+    for line in lines:
+        name, colon, _ = line.partition(":")
+        if colon and _same_body(name, body):
+            return line
+    return ""
+
+
+def roster_body_rows(city_dir: str | Path) -> list[dict[str, Any]]:
+    """One row per body the sources cover, plus roster files no source covers.
+
+    A body with a roster shows its file and member count (``roster_for`` finds it). A body
+    without one shows the line from the last finder run, if it left one, so the page can say
+    what happened and what to do.
+    """
+    from civiccast_brief.weekly.run import roster_for
+
+    city_dir = Path(city_dir)
+    files = {row["file"]: row for row in rosters(city_dir)}
+    lines = read_roster_find(city_dir)
+    bodies = _source_bodies(city_dir)
+    rows: list[dict[str, Any]] = []
+    for body in bodies:
+        try:
+            path = roster_for(city_dir, body)
+        except (OSError, ValueError):  # a roster file that cannot be read is no roster
+            path = None
+        row: dict[str, Any] = {"body": body, "file": "", "members": 0, "note": ""}
+        if path is not None:
+            row["file"] = path.name
+            row["members"] = len((files.get(path.name) or {}).get("members") or [])
+        else:
+            row["note"] = _find_line(lines, body)
+        rows.append(row)
+    for row in files.values():
+        if any(_same_body(row["body"], body) for body in bodies):
+            continue
+        rows.append(
+            {"body": row["body"], "file": row["file"], "members": len(row["members"]), "note": ""}
+        )
+    return rows
+
+
 def model_rows(city_dir: str | Path | None) -> list[dict[str, str]]:
     """Each task's default pick and any body overrides, from models.json or the defaults."""
     settings = model_settings.ModelSettings()
@@ -369,6 +456,20 @@ def _real_check(city: CitySpec, *, fetcher: Any) -> None:
     save_proofs(city.city_dir, proofs)
 
 
+def _real_rosters(city: CitySpec, *, fetcher: Any, open_page: Any, close_chrome: Any) -> list[str]:
+    """Find every board's roster, as the ``city rosters`` command does."""
+    from civiccast_brief.citybuild.cli import write_city_rosters
+
+    return write_city_rosters(
+        city.city_dir, fetcher=fetcher, open_page=open_page, close_chrome=close_chrome
+    )
+
+
+def _wrote_count(lines: list[str]) -> int:
+    """How many lines name a body that a roster was written for."""
+    return sum(1 for line in lines if ": wrote " in line and line.partition(":")[0].strip())
+
+
 def _default_fetcher() -> Any:
     from civiccast_brief.citybuild.fetch import Fetcher
 
@@ -398,11 +499,12 @@ class CityStatus:
 
 
 class SetupJobs:
-    """One background thread for Find or Check, with a status row per city.
+    """One background thread for Find, Check or Rosters, with a status row per city.
 
     A second start while a job runs does nothing and returns False, so the page simply keeps
     showing progress: Chrome must not run two searches at once. Every outside call (the search,
-    the build, the check, the fetcher, opening and closing Chrome) can be injected.
+    the build, the check, the roster finder, the fetcher, opening and closing Chrome) can be
+    injected.
     """
 
     def __init__(
@@ -410,12 +512,14 @@ class SetupJobs:
         *,
         find_city: Callable[..., int] = _real_find,
         check_city: Callable[..., None] = _real_check,
+        find_rosters: Callable[..., list[str]] = _real_rosters,
         fetcher_factory: Callable[[], Any] = _default_fetcher,
         open_page: Callable[[str], Any] = _default_open_page,
         close_chrome: Callable[[], None] = _default_close,
     ) -> None:
         self._find_city = find_city
         self._check_city = check_city
+        self._find_rosters = find_rosters
         self._fetcher = fetcher_factory
         self._open_page = open_page
         self._close = close_chrome
@@ -439,6 +543,9 @@ class SetupJobs:
     def start_check(self, cities: list[CitySpec]) -> bool:
         return self._start("check", cities)
 
+    def start_rosters(self, cities: list[CitySpec]) -> bool:
+        return self._start("rosters", cities)
+
     def _start(self, kind: str, cities: list[CitySpec]) -> bool:
         with self._lock:
             if self.running():
@@ -459,13 +566,25 @@ class SetupJobs:
                 self._rows[slug] = CityStatus(slug, state, message, count)
 
     def _run(self, kind: str, cities: list[CitySpec]) -> None:
+        started = {"find": "searching", "check": "checking", "rosters": "finding"}.get(
+            kind, "checking"
+        )
         for city in cities:
-            self._set(city.slug, "searching" if kind == "find" else "checking")
+            self._set(city.slug, started)
             try:
                 fetcher = self._fetcher()
                 if kind == "find":
                     count = self._find_city(city, fetcher=fetcher, open_page=self._open_page)
                     self._set(city.slug, "saved" if count else "nothing", count=count)
+                elif kind == "rosters":
+                    lines = self._find_rosters(
+                        city,
+                        fetcher=fetcher,
+                        open_page=self._open_page,
+                        close_chrome=self._close,
+                    )
+                    write_roster_find(city.city_dir, lines)
+                    self._set(city.slug, "found", count=_wrote_count(lines))
                 else:
                     self._check_city(city, fetcher=fetcher)
                     self._set(city.slug, "checked")
