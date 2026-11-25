@@ -2,18 +2,43 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
-## Unreleased
+## 0.5.0 — 2026-11-24
+
+### The podcast
 
 - Episodes are mastered at -18 LUFS (was -16) so the limiter no longer turns speech down by more
   than 3 dB; one constant gain is applied to the whole episode.
+
+### Names and transcripts
+
 - The script check treats a sentence-opening "Tonight" as an opener, not a name.
 - The script check also accepts "Take", "We'll", "We've", "You'll", "You've", "They'll",
   "They've", "I'll" and "I've" as sentence openers, not names.
+
+### The site
+
+- A second meeting of the same body on the same day now gets its own episode id instead of being
+  left off the site.
+
+### Running it
+
 - A meeting whose video is a scheduled live stream or premiere that has not started yet is
   reported as "not run: the video is a live event that has not started yet" (no longer a failure
   or exit 1) and is picked up again on a later week once it has aired.
-- A second meeting of the same body on the same day now gets its own episode id instead of being
-  left off the site.
+- CivicClerk video and document requests try three times, waiting 5 s and then 15 s, before the
+  weekly run gives up, so one brief server error no longer makes it miss a city's meetings.
+
+### Staging
+
+- A change can run on a copy of a city before the live sites. `ops\stage.ps1` runs a Dev stage (a
+  copy on this PC, served on `127.0.0.1` only, with test-tone audio unless `-RealVoice`) and a
+  Test stage (real voices, media under `test/<city>/` in R2, deployed to the private
+  `civiccast-brief-test` Pages project). Neither tier can write the live folder. See
+  [docs/staging.md](docs/staging.md).
+- The Test stage finds the Cloudflare account id from the `CIVICCAST_CF_ACCOUNT_ID` environment
+  variable, a `CLOUDFLARE_ACCOUNT_ID` already in the environment, or a `weekly-*.ps1` in the city
+  folder, and stops before uploading anything if it finds none (the variable is empty on this PC).
+- A wrangler warning on stderr no longer stops the Test stage after a good deploy.
 
 ## 0.4.0 — 2026-11-21
 

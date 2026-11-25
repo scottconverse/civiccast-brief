@@ -25,6 +25,9 @@ The desk, runs and live folders are data, not code, and are not in this reposito
   `--audio-engine gemini --audio-fallback-engine lfm3`; add no `--diarize` because it runs no
   meeting.
 
+`stage.ps1 -Tier Dev|Test -City <city>` runs a change on a copy of a city before the live sites;
+see [../docs/staging.md](../docs/staging.md).
+
 Both read the Cloudflare deploy token from Windows Credential Manager
 (`CivicCastBrief/cloudflare-deploy`) and the account ID from the user environment variable
 `CIVICCAST_CF_ACCOUNT_ID`. Neither is stored here.

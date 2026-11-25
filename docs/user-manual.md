@@ -1,6 +1,6 @@
 # CivicCast Brief user manual
 
-This manual covers **CivicCast Brief 0.4.0**. It has four parts:
+This manual covers **CivicCast Brief 0.5.0**. It has four parts:
 
 1. [New users](#1-new-users): what the program is and your first hour with it.
 2. [Editors (no technical background needed)](#2-editors): the desk, the buttons, and what readers see.
@@ -339,6 +339,12 @@ story built from the week's stories). Then it exports what is published, makes a
 episodes, writes each published story as a stand-alone story file, assembles episodes, and builds
 the site. `weekly-state.json` records each step, so running the same command again retries only
 what failed. Exit 0 means everything finished.
+
+Before a change reaches the live sites, run it through Dev and then Test with
+`ops\stage.ps1`: Dev builds a copy of a city on this PC and serves it on `127.0.0.1` only (test-tone
+audio unless `-RealVoice`), and Test adds real voices, uploads media under `test/<city>/` in R2 and
+deploys to the private `civiccast-brief-test` Pages project. Neither tier writes the live folder.
+See [staging.md](staging.md).
 
 The five site settings (`--episodes`, `--media`, `--site-out`, `--base-url`, `--media-base-url`)
 must be given together, or all left out to stop after the desk. The site build reads `city.json`
