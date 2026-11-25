@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set nav = "computer" %}
+{% block content %}
+<h2>This computer</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+<p class="muted">What this PC has for CivicCast Brief, and what to do about anything missing.
+Required rows must all be OK before a weekly run will work.</p>
+<form method="post" action="{{ root }}/setup/computer" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit" class="primary" data-busy="Checking…">Check again</button>
+</form>
+<form method="post" action="{{ root }}/setup/computer" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="claude" value="1">
+  <button type="submit" data-busy="Asking Claude…">Check Claude sign-in</button>
+</form>
+{% set voice_note = namespace(shown=false) %}
+<table>
+  <thead>
+    <tr><th>Check</th><th>Status</th><th>Found</th><th>What to do</th></tr>
+  </thead>
+  <tbody>
+  {% for check in checks %}
+    {% if check.need == "voice" and not voice_note.shown %}
+    <tr><td colspan="4"><strong>At least one voice engine is needed.</strong></td></tr>
+    {% set voice_note.shown = true %}
+    {% endif %}
+    <tr>
+      <td>{{ check.label }}{% if check.need == "voice" %} <span class="muted">(voice)</span>{% endif %}</td>
+      <td class="status {% if check.ok %}ok{% elif check.ok is none %}muted{% else %}failed{% endif %}">
+        {% if check.ok %}OK{% elif check.ok is none %}Not checked yet{% else %}Missing{% endif %}
+      </td>
+      <td>{{ check.detail }}</td>
+      <td>{% if check.fix %}{{ check.fix }}{% else %}<span class="muted">Nothing.</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

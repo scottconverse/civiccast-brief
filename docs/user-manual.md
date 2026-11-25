@@ -53,13 +53,18 @@ topic and monthly archive pages, search, a sitemap and a podcast feed. An exampl
 
 The PC's own CPU is enough for LFM3. No NVIDIA GPU is needed for the weekly voice chain.
 
+The desk's **This computer** page checks all of this on your PC: ffmpeg, yt-dlp, Chrome, Ollama
+with the writer model, Claude Code and its sign-in, and a voice engine. Each row says what it
+found and what to do about anything missing.
+
 ### Your first hour
 
 1. **Install.** Double-click `install.cmd` in a copy of the code, or run the one-line command in
    [Install](#install). It installs everything for your user, with no administrator rights, and
    says what is still missing.
 2. **Open the desk.** Double-click `desk.cmd`. Your browser opens the editor desk at
-   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk.
+   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. Open
+   **This computer** to see what the PC still needs.
 3. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
    city's name and state (and its website if you know it), press **Search**, tick what it found,
    and press **Add**.
