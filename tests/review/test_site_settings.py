@@ -100,6 +100,11 @@ def test_a_folder_needs_http_addresses_and_full_paths():
     assert "full path" in errors["out"]
 
 
+def test_a_windows_path_counts_as_full_on_every_os():
+    assert site_settings._is_full_path("C:\\web\\longmont") is True
+    assert site_settings._is_full_path("web") is False
+
+
 def test_cloudflare_checks_the_project_bucket_and_prefix():
     assert site_settings.validate(cloudflare_settings()) == []
     errors = dict(

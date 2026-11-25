@@ -46,7 +46,7 @@ import shutil
 import sys
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Final
 from urllib.parse import urlparse
 
@@ -125,6 +125,11 @@ def save(path: str | Path, settings: SiteSettings) -> Path:
     return path
 
 
+def _is_full_path(text: str) -> bool:
+    """True for a full path on this OS or a full Windows path, so C:\\ paths pass on Linux too."""
+    return Path(text).is_absolute() or PureWindowsPath(text).is_absolute()
+
+
 def _http_url(text: str) -> bool:
     parsed = urlparse(text)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
@@ -144,11 +149,11 @@ def validate(settings: SiteSettings) -> list[tuple[str, str]]:
     if settings.target == "folder":
         if not settings.out.strip():
             errors.append(("out", "Write the web root folder, like C:\\web\\longmont."))
-        elif not Path(settings.out).is_absolute():
+        elif not _is_full_path(settings.out):
             errors.append(("out", "The web root must be a full path, like C:\\web\\longmont."))
         if not settings.media_out.strip():
             errors.append(("media_out", "Write the media folder, like C:\\web\\longmont\\media."))
-        elif not Path(settings.media_out).is_absolute():
+        elif not _is_full_path(settings.media_out):
             errors.append(
                 (
                     "media_out",
