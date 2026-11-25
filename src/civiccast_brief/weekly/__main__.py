@@ -126,6 +126,7 @@ def _site(args: argparse.Namespace, slug: str) -> Site | None:
         slug=slug,
         audio_engine=args.audio_engine or "",
         audio_fallback_engine=args.audio_fallback_engine or "",
+        voices=args.voices,
     )
 
 
@@ -255,6 +256,14 @@ def _site_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--audio-fallback-engine",
         help="voice engine to retry with if the audio engine fails (default: none)",
+    )
+    parser.add_argument(
+        "--voices",
+        type=Path,
+        help=(
+            "voices.json: the engine, fallback engine and voices for the audio step "
+            "(the --audio-engine and --audio-fallback-engine flags win)"
+        ),
     )
     parser.add_argument(
         "--worker",

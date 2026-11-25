@@ -109,6 +109,15 @@ def test_the_job_is_one_weekly_run_command_with_diarize_when_asked(tmp_path):
     assert voiced[0][-1] == "--diarize"
     assert voiced[0][-3:-1] == ["--days", "7"]
     assert not any(part in voiced[0] for part in ("--episodes", "--site-out", "--base-url"))
+    assert "--voices" not in voiced[0]  # the city has no voices.json
+
+
+def test_the_job_passes_the_city_s_voices_file_when_it_has_one(tmp_path):
+    city = tmp_path / "city"
+    city.mkdir()
+    (city / "voices.json").write_text("{}", encoding="utf-8")
+    steps = weekly_job.job_steps(weekly_job.DEFAULT, city, "desk.db", "work")
+    assert steps[0][-2:] == ["--voices", str(city / "voices.json")]
 
 
 def test_the_schedule_off_means_no_scheduled_run_but_run_now_still_works(tmp_path):
@@ -308,6 +317,8 @@ def test_the_weekly_job_page_shows_the_test_section_above_the_schedule(plain):
     assert "Test one meeting" in page
     assert 'data-busy="Starting…"' in page
     assert page.index("Test one meeting") < page.index('action="/runs/schedule"')
+    assert "the last 14 days" in page  # the weeks-long window, not a literal N
+    assert "last N days" not in page
 
 
 def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):

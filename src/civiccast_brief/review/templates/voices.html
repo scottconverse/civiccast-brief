@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set nav = "voices" %}
+{% block content %}
+<h2>Voices</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_dir is none %}
+<p>This desk was started without a city folder. Start it with
+<code>python -m civiccast_brief.review serve --db PATH --city CITY_FOLDER</code> to choose the voices.</p>
+{% else %}
+<p class="muted">Saved to <code>{{ path }}</code>. The weekly run uses it when it makes the audio.
+With no <code>voices.json</code>, the page starts on Gemini, falling back to LFM3, as the live
+cities do.</p>
+<form method="post" action="{{ root }}/voices" novalidate>
+  <input type="hidden" name="token" value="{{ token }}">
+  <fieldset>
+    <legend>The voice</legend>
+    <p><label for="engine">Voice engine</label><br>
+      <select id="engine" name="engine" {% if error_field == "engine" %}aria-invalid="true"{% endif %}>
+        {% for e in engines %}<option value="{{ e.name }}" {% if engine == e.name %}selected{% endif %}>{{ e.label }}: {{ e.summary }}</option>{% endfor %}
+      </select></p>
+    {% if error_field == "engine" %}<p class="field-error">Choose a voice engine.</p>{% endif %}
+    <p><label for="fallback_engine">If it fails, use</label><br>
+      <select id="fallback_engine" name="fallback_engine" {% if error_field == "fallback_engine" %}aria-invalid="true"{% endif %}>
+        <option value="" {% if not fallback_engine %}selected{% endif %}>None</option>
+        {% for e in engines %}<option value="{{ e.name }}" {% if fallback_engine == e.name %}selected{% endif %}>{{ e.label }}: {{ e.summary }}</option>{% endfor %}
+      </select></p>
+    {% if error_field == "fallback_engine" %}<p class="field-error">If it fails, use must be a different engine, or None.</p>{% endif %}
+    {% for block in blocks %}
+    <div data-voice-engine="{{ block.engine }}">
+      <p class="muted">{{ block.label }} voices</p>
+      {% for field in block.inputs %}
+      <p><label for="{{ field.id }}">{{ field.label }}</label><br>
+        <input id="{{ field.id }}" type="text" name="{{ field.id }}" value="{{ field.value }}"
+               {% if error_field == field.id %}aria-invalid="true"{% endif %}>
+        <span class="muted">Code default: {{ field.default }}</span></p>
+      {% if error_field == field.id %}<p class="field-error">Enter a voice name of at most 80 characters.</p>{% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <button type="submit" class="primary" data-busy="Saving…">Save the voices</button>
+  </fieldset>
+</form>
+{% endif %}
+{% endblock %}

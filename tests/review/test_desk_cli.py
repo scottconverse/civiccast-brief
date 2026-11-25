@@ -94,6 +94,7 @@ def test_a_broken_weekly_json_does_not_stop_the_desk(tmp_path, monkeypatch, caps
     assert main(args) == 0
     err = capsys.readouterr().err
     assert "weekly.json" in err and "starting with the schedule off" in err
+    assert err.count("weekly.json") == 1  # the exception text already names the file
     client = signed_in(seen["app"])
     page = client.get("/runs")
     assert page.status_code == 200

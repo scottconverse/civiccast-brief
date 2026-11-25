@@ -50,7 +50,7 @@ from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk, weekly_job
+from civiccast_brief.review import desk, voices, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.station.runner import WEEKDAYS
@@ -407,6 +407,65 @@ class DeskApp:
         path = model_settings.save_settings(self.city_dir, current)
         return f"Saved the model picks to {path}."
 
+    # ----- voices ---------------------------------------------------------------------------
+
+    def voices_page(
+        self,
+        *,
+        form: Mapping[str, str] | None = None,
+        notice: str = "",
+        error: str = "",
+        error_field: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        current = voices.Voices()
+        load_error = ""
+        if self.city_dir is not None:
+            try:
+                current = voices.load(self.city_dir)
+            except voices.VoicesError as exc:
+                load_error = f"{self.city_dir / voices.SETTINGS_NAME} cannot be read: {exc}"
+        engine = str(form.get("engine") or "") if form is not None else current.engine
+        if not engine and form is None:
+            engine = voices.DEFAULT_ENGINE
+        fallback = (
+            str(form.get("fallback_engine") or "")
+            if form is not None
+            else current.fallback_engine or voices.DEFAULT_FALLBACK
+        )
+        blocks = []
+        for name in voices.OFFERED:
+            inputs = []
+            for key in voices.VOICE_FIELDS[name]:
+                typed = form.get(voices.field_id(name, key)) if form is not None else None
+                inputs.append(
+                    {
+                        "id": voices.field_id(name, key),
+                        "label": "Host 1 voice" if key.endswith("1") else "Host 2 voice",
+                        "value": typed
+                        if typed is not None
+                        else voices.voice_value(current, name, key),
+                        "default": voices.default_voice(name, key),
+                    }
+                )
+            blocks.append({"engine": name, "label": voices.LABELS[name], "inputs": inputs})
+        return self.page(
+            "voices.html",
+            status=status,
+            title="Voices",
+            engines=[
+                {"name": name, "label": voices.LABELS[name], "summary": voices.SUMMARIES[name]}
+                for name in voices.OFFERED
+            ],
+            engine=engine,
+            fallback_engine=fallback,
+            blocks=blocks,
+            notice=notice,
+            error=error or load_error,
+            error_field=error_field,
+            path=(self.city_dir / voices.SETTINGS_NAME) if self.city_dir else None,
+        )
+
     # ----- sources --------------------------------------------------------------------------
 
     def sources_page(
@@ -606,6 +665,7 @@ def _add_run_routes(
             schedule_form=weekly_form(form),
             work=str(state.weekly_work or ""),
             command=command,
+            days=settings.days,
             weekdays=WEEKDAYS,
             error=error or load_error,
             error_field=error_field,
@@ -1018,6 +1078,36 @@ def make_desk_app(
         except (city_file.CityError, OSError) as exc:
             return city_page(form, error=f"Not saved: {exc}", status=400)
         return _redirect("/city?saved=1")
+
+    @app.get("/voices", response_class=HTMLResponse)
+    def voices_page(saved: str = "") -> HTMLResponse:
+        notice = ""
+        if saved and state.city_dir is not None:
+            try:
+                notice = voices.saved_notice(voices.load(state.city_dir))
+            except voices.VoicesError:
+                notice = "Saved."
+        return state.voices_page(notice=notice)
+
+    @app.post("/voices")
+    async def save_voices(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.voices_page(
+                form=form, error="Start the desk with --city to save the voices.", status=400
+            )
+        try:
+            current = voices.load(state.city_dir)
+            voices.save(state.city_dir, voices.from_form(form, current))
+        except voices.VoicesError as exc:
+            return state.voices_page(
+                form=form, error=f"Not saved: {exc}", error_field=exc.field, status=400
+            )
+        except OSError as exc:
+            return state.voices_page(form=form, error=f"Not saved: {exc}", status=400)
+        return _redirect("/voices?saved=1")
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:

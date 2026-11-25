@@ -1560,3 +1560,112 @@ def test_without_limit_every_meeting_and_the_roundup_run_as_before(tmp_path):
     ]
     assert "roundup: skipped (--limit)" not in report.lines
     assert any(line.startswith("roundup:") and "skipped" not in line for line in report.lines)
+
+
+def _published_episode(tmp_path, **site_kw):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+        **site_kw,
+    )
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {
+            "kind": "episode",
+            "status": "published",
+            "meeting_id": "oWZpzjzjwnE",
+            "content_hash": "a" * 64,
+            "script": "[S1] hi\n",
+        }
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00")
+    audio = next(argv for step, argv in fake.calls if step == "audio")
+    return settings, audio
+
+
+def test_the_voices_file_fills_in_the_engine_and_writes_the_audio_config(tmp_path):
+    spoken = tmp_path / "voices.json"
+    spoken.write_text(
+        json.dumps(
+            {
+                "engine": "gemini",
+                "fallback_engine": "lfm3",
+                "audio": {"gemini": {"voice_s2": "Puck"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings, audio = _published_episode(tmp_path, voices=spoken)
+
+    assert _opt(audio, "--engine") == "gemini"
+    assert _opt(audio, "--fallback-engine") == "lfm3"
+    config = Path(_opt(audio, "--config"))
+    assert config == settings.work / "audio-config.json"
+    assert json.loads(config.read_text(encoding="utf-8")) == {"gemini": {"voice_s2": "Puck"}}
+
+
+def test_the_audio_engine_flags_win_over_the_voices_file(tmp_path):
+    spoken = tmp_path / "voices.json"
+    spoken.write_text(
+        json.dumps({"engine": "gemini", "fallback_engine": "lfm3", "audio": {}}),
+        encoding="utf-8",
+    )
+    _, audio = _published_episode(
+        tmp_path,
+        voices=spoken,
+        audio_engine="dia2",
+        audio_fallback_engine="chatterbox",
+    )
+
+    assert _opt(audio, "--engine") == "dia2"
+    assert _opt(audio, "--fallback-engine") == "chatterbox"
+    assert "--config" in audio  # the voices file's audio part still applies
+
+
+def test_no_voices_file_means_the_audio_argv_is_unchanged(tmp_path):
+    _, audio = _published_episode(tmp_path, audio_engine="gemini")
+    assert audio == [
+        audio[0],
+        "--out",
+        _opt(audio, "--out"),
+        "--engine",
+        "gemini",
+    ]
+    assert "--config" not in audio and "--fallback-engine" not in audio
+    assert not (tmp_path / "work" / "audio-config.json").exists()
+
+
+def test_a_broken_voices_file_fails_the_site_steps_instead_of_using_defaults(tmp_path):
+    spoken = tmp_path / "voices.json"
+    spoken.write_text(json.dumps({"engine": "fake"}), encoding="utf-8")
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url="https://media.example.org",
+        slug="longmont",
+        voices=spoken,
+    )
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {
+            "kind": "episode",
+            "status": "published",
+            "meeting_id": "oWZpzjzjwnE",
+            "content_hash": "a" * 64,
+            "script": "[S1] hi\n",
+        }
+    }
+    report = run_week(
+        settings, [COUNCIL_MEETING], LAST, fake.steps(), published="2026-11-10T09:00:00-07:00"
+    )
+    assert report.failed
+    assert any("voices:" in line for line in report.lines)
+    assert "audio" not in [step for step, _ in fake.calls]

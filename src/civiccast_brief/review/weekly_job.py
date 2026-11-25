@@ -194,4 +194,9 @@ def job_steps(
     ]
     if job.diarize:
         argv.append("--diarize")
+    # The city's voices, when it has them. The job has no site steps today, so this only
+    # matters when the job grows them.
+    voice_file = Path(city_dir) / "voices.json"
+    if voice_file.is_file():
+        argv += ["--voices", str(voice_file)]
     return [argv]

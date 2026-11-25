@@ -12,6 +12,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - The Weekly job page has **Test one meeting**: it runs the newest meeting the same way the weekly
   job does (captions, recap, story and script) and stages it for review, publishing nothing
   (`weekly run --limit 1`). A broken `weekly.json` no longer stops the desk from starting.
+- The plain desk has a **Voices** page: choose the voice engine, the engine to retry with and each
+  host's voice, saved in the city folder's `voices.json`. `weekly run` and `publish` take
+  `--voices PATH` and use it for the audio step (the `--audio-engine` flags still win).
 
 ## 0.5.0 — 2026-11-24
 

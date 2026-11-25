@@ -465,6 +465,31 @@ Chatterbox need the GPU PC.
 
 This writes `episode.mp3` (at -18 LUFS, under -1.5 dBTP), `chapters.json` and `transcript.vtt`.
 
+### Choose the voices on the desk
+
+The desk's **Voices** page picks the engine, the engine to retry with (or **None**) and each
+host's voice. It saves `voices.json` in the city folder:
+
+```json
+{
+  "engine": "gemini",
+  "fallback_engine": "lfm3",
+  "audio": {"gemini": {"voice_s1": "Bodi", "voice_s2": "Sola"}}
+}
+```
+
+The `audio` part uses the keys the audio command's `--config` file takes; the page writes only the
+voices changed from the code default. The weekly run uses the file only when it is given it:
+
+```
+python -m civiccast_brief.weekly run --city cities/yourcity ... --voices cities/yourcity/voices.json
+```
+
+Its `engine` and `fallback_engine` fill in for `--audio-engine` and `--audio-fallback-engine` when
+those flags are not given (the flags win), and its `audio` part is written to the work folder's
+`audio-config.json` and passed to the audio command as `--config`. Without `--voices`, the audio
+step is exactly as before.
+
 ## 7. Build the site
 
 Turn each exported item into a site episode, saved in the city folder:

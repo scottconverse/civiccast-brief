@@ -94,8 +94,7 @@ def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> 
                 # A broken weekly.json must not keep the desk from starting: use the defaults
                 # with the schedule off, and let the Weekly job page show what is wrong.
                 print(
-                    f"warning: {city / weekly_job.SETTINGS_NAME}: {exc};"
-                    " starting with the schedule off",
+                    f"warning: {exc}; starting with the schedule off",
                     file=sys.stderr,
                 )
             weekly_work = work if work is not None else db.parent / "runs" / "weekly"

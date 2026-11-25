@@ -124,6 +124,8 @@ lists every action.
 - **Roster**: each body's members and the record each one was read from. You do not type
   members in; the weekly run reads them from the meetings' own records.
 - **Models**: which writing model each task uses, per body.
+- **Voices**: the voice engine, the engine to retry with if it fails, and each host's voice. It
+  saves `voices.json` in the city folder, which the weekly run uses when it makes the audio.
 - **Weekly job**: (on a station) the last run, the next run, a queued publish and **Run now**.
 
 ### Signing in
@@ -237,6 +239,7 @@ The flag groups, all read from `--help`:
 | `sources.json` | where meetings come from, and which bodies each covers | `city find`, the desk's Sources page |
 | `roster.json`, `rosters/<body>.json` | members, each with the record that printed them | the weekly run (`city rosters` writes them too) |
 | `models.json` | the writing model per task and body | the desk's Models page |
+| `voices.json` | the voice engine, its fallback and the two hosts' voices | the desk's Voices page |
 | `city-check.json` | the last source check | `city check`, **Check all sources** |
 
 A meeting's run folder also holds `documents.json` (the packet and minutes pages), `transcript.json`,
@@ -323,6 +326,25 @@ Gemini Flash TTS to Flash-Lite TTS on a quota error before the engine itself fai
 
 The hosts are Pat (speaker S1) and Alex (speaker S2). The bake-off that compared the engines is in
 [voice-bakeoff.md](voice-bakeoff.md).
+
+The desk's **Voices** page picks the engine, the engine to retry with (or **None**) and each
+host's voice, for the chosen engine. It saves `voices.json` in the city folder:
+
+```json
+{
+  "engine": "gemini",
+  "fallback_engine": "lfm3",
+  "audio": {"gemini": {"voice_s1": "Bodi", "voice_s2": "Sola"}}
+}
+```
+
+The `audio` part holds the same keys as the audio command's own `--config` file. The page writes
+only the voices you changed from the code default, so a later change to a default still applies
+everywhere else. The weekly run uses the file only when it is given it:
+`weekly run ... --voices cities/yourcity/voices.json`. Its engine and fallback fill in for
+`--audio-engine` and `--audio-fallback-engine` when those flags are not given (the flags win), and
+its `audio` part is passed to the audio command as `--config`. Without `--voices`, nothing about
+the audio step changes.
 
 ### The weekly run
 

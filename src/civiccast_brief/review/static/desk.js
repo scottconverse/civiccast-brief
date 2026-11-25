@@ -28,6 +28,19 @@ document.addEventListener("change", function (event) {
   if (event.target && event.target.id === "kind") showKindFields();
 });
 
+// Voices: show only the voice fields for the chosen engine. Without the script every engine's
+// fields are shown, and the form still saves what was changed.
+function showVoiceFields() {
+  var select = document.getElementById("engine");
+  if (!select) return;
+  document.querySelectorAll("[data-voice-engine]").forEach(function (block) {
+    block.hidden = block.dataset.voiceEngine !== select.value;
+  });
+}
+document.addEventListener("change", function (event) {
+  if (event.target && event.target.id === "engine") showVoiceFields();
+});
+
 // A page restored from the back/forward cache gets its buttons back.
 window.addEventListener("pageshow", function () {
   document.querySelectorAll("form[data-sent]").forEach(function (form) {
@@ -42,4 +55,5 @@ window.addEventListener("pageshow", function () {
   var status = document.getElementById("busy-status");
   if (status) status.textContent = "";
   showKindFields();
+  showVoiceFields();
 });

@@ -7,7 +7,7 @@
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 {% if editable %}
 <h3>Test one meeting</h3>
-<p>Runs the newest meeting from the last N days, the same way the weekly job does: captions,
+<p>Runs the newest meeting from the last {{ days }} days, the same way the weekly job does: captions,
 recap, story and script. It lands in Items for review. Nothing is published.</p>
 <form method="post" action="{{ root }}/runs/test" class="actions">
   <input type="hidden" name="token" value="{{ token }}">
