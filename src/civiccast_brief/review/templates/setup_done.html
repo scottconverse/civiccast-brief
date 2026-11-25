@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Everything works</h2>
+<p class="{% if needs %}notice error{% else %}notice{% endif %}" role="status">{{ headline }}</p>
+<p class="muted">Each line below is read from this computer and the cities' files when the page
+loads; nothing is saved. A line that needs work names what is wrong and links to the page that
+fixes it.</p>
+
+<h3>This computer</h3>
+<table>
+  <thead><tr><th>What</th><th>State</th><th>What it says</th><th>Fix</th></tr></thead>
+  <tbody>
+  {% for row in global_rows %}
+  <tr>
+    <td>{{ row.label }}</td>
+    <td>{% if row.ok %}<span class="status ok">OK</span>{% else %}<span class="status failed">Needs work</span>{% endif %}</td>
+    <td>{{ row.sentence }}</td>
+    <td><a href="{{ row.link }}">{{ row.link_text }}</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% for block in blocks %}
+<h3>{{ block.name }} <span class="muted">({{ block.slug }})</span></h3>
+<table>
+  <thead><tr><th>What</th><th>State</th><th>What it says</th><th>Fix</th></tr></thead>
+  <tbody>
+  {% for row in block.rows %}
+  <tr>
+    <td>{{ row.label }}</td>
+    <td>{% if row.ok %}<span class="status ok">OK</span>{% else %}<span class="status failed">Needs work</span>{% endif %}</td>
+    <td>{{ row.sentence }}</td>
+    <td><a href="{{ row.link }}">{{ row.link_text }}</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+<div class="next">
+  <a href="/setup/weekly">&larr; Back</a>
+  <a href="/">All cities &rarr;</a>
+</div>
+{% endblock %}

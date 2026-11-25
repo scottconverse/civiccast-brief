@@ -63,15 +63,25 @@ found and what to do about anything missing.
    [Install](#install). It installs everything for your user, with no administrator rights, and
    says what is still missing.
 2. **Open the desk.** Double-click `desk.cmd`. Your browser opens the editor desk at
-   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. The desk
-   opens on **Cities**; press **Set up** to walk through this computer, the cities, finding and
-   checking their sources, rosters, and models and voices, for one city or several at once.
-3. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
+   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. A new
+   install opens on the **setup wizard**: this computer, the cities, finding and checking their
+   sources, rosters, models and voices, the website, a test meeting, and the weekly job, for one
+   city or several at once. Once a city exists the home page is the city list, with its **Set up**
+   link back to the wizard.
+3. **Finish on Everything works.** The wizard's last page reads this computer and every city's
+   files and shows one line for each thing: **This computer**, the **Windows task**, then per
+   city **Sources** (how many, each READ), **Rosters** (files and members), **Test brief** (the
+   test meeting waiting in Items), **Every week** (the schedule and its next run), and
+   **Website** (none, or built and when). Each line is OK or Needs work with one sentence and a
+   link to the page that fixes it. A website chosen before any brief is published shows
+   "The website is built after you publish a brief on the desk." — that is not a problem; the
+   site appears after the first brief is published.
+4. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
    city's name and state (and its website if you know it), press **Search**, tick what it found,
    and press **Add**.
-4. **Check them.** Press **Check all sources**. Each body (council, board, commission) shows
+5. **Check them.** Press **Check all sources**. Each body (council, board, commission) shows
    READ with its newest meeting, or NOT READ with the reason.
-5. **Run the week.** Run the weekly command (see [The weekly run](#the-weekly-run)), or ask your
+6. **Run the week.** Run the weekly command (see [The weekly run](#the-weekly-run)), or ask your
    technical person to schedule it. New meetings appear on the desk.
 
 ---

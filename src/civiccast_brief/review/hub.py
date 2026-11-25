@@ -482,7 +482,11 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         )
 
     @app.get("/", response_class=HTMLResponse)
-    def home() -> HTMLResponse:
+    def home() -> Response:
+        # A new install has no city yet, so the desk opens on the setup wizard. With at least
+        # one city the home page stays the city list, which has its own Set up link.
+        if not hub.slugs():
+            return _redirect("/setup")
         return cities_page()
 
     @app.post("/cities/add")
@@ -1107,6 +1111,211 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
                     scheduled=True,
                 )
         return _redirect("/setup/weekly?notice=saved")
+
+    # ----- the Everything works step --------------------------------------------------------
+    #
+    # Every row is read from the files and the dbs at page load, with the same functions the
+    # earlier steps use; nothing is stored. A row is OK, or Needs work with one plain sentence
+    # and one link to the page that fixes it.
+
+    def done_row(label: str, ok: bool, sentence: str, link: str, link_text: str) -> dict[str, Any]:
+        return {
+            "label": label,
+            "ok": ok,
+            "sentence": sentence,
+            "link": link,
+            "link_text": link_text,
+        }
+
+    def sources_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
+        sources_link = f"/c/{spec.slug}/sources"
+        count = setup_wizard.source_count(spec.city_dir)
+        if count == 0:
+            return done_row("Sources", False, "No sources are saved yet.", sources_link, "Sources")
+        proofs = setup_wizard.read_proofs(spec.city_dir)
+        files = f"{count} source" + ("" if count == 1 else "s")
+        if setup_wizard.check_all_read(proofs):
+            return done_row("Sources", True, f"{files}, all read.", sources_link, "Sources")
+        if proofs is None:
+            why = f"{files}, but they are not checked yet."
+        else:
+            not_read = [
+                str(row.get("body") or "a body") for row in proofs if row.get("ok") is not True
+            ]
+            why = "NOT READ: " + ", ".join(not_read) + "."
+        return done_row("Sources", False, why, sources_link, "Sources")
+
+    def rosters_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
+        rosters = setup_wizard.rosters(spec.city_dir)
+        if not rosters:
+            return done_row("Rosters", False, "No roster file yet.", "/setup/rosters", "Rosters")
+        members = sum(len(roster.get("members") or []) for roster in rosters)
+        files = f"{len(rosters)} roster file" + ("" if len(rosters) == 1 else "s")
+        people = f"{members} member" + ("" if members == 1 else "s")
+        return done_row("Rosters", True, f"{files}, {people}.", "/setup/rosters", "Rosters")
+
+    def test_brief_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
+        state, message, _ = hub.test_state(spec)
+        if state == "ok":
+            return done_row(
+                "Test brief", True, "A test brief is waiting in Items.", f"/c/{spec.slug}/", "Items"
+            )
+        if state == "waiting":
+            why = "No test run yet."
+        else:
+            why = message or "The test run did not pass."
+        return done_row("Test brief", False, why, "/setup/test", "Test")
+
+    def weekly_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
+        try:
+            job = weekly_job.load(spec.city_dir)
+        except weekly_job.WeeklyJobError as exc:
+            return done_row(
+                "Every week",
+                False,
+                f"weekly.json could not be read: {exc}",
+                "/setup/weekly",
+                "Every week",
+            )
+        if not job.enabled:
+            return done_row(
+                "Every week", False, "The weekly schedule is off.", "/setup/weekly", "Every week"
+            )
+        try:
+            next_at = job.schedule.next_after(datetime.now().astimezone())
+        except weekly_job.WeeklyJobError as exc:
+            return done_row("Every week", False, str(exc), "/setup/weekly", "Every week")
+        when = next_at.strftime("%a %Y-%m-%d %H:%M %Z")
+        return done_row(
+            "Every week",
+            True,
+            f"Every {job.day.strip().lower()} at {job.at} ({job.zone}); next {when}.",
+            "/setup/weekly",
+            "Every week",
+        )
+
+    def website_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
+        settings, warning = site_settings.load(spec.folder / site_settings.SETTINGS_NAME)
+        if warning:
+            return done_row("Website", False, warning, "/setup/website", "Website")
+        if settings.target == "none":
+            return done_row(
+                "Website", True, "No website (your choice).", "/setup/website", "Website"
+            )
+        desk = hub.load(spec.slug)
+        _, _, out = site_settings.build_folders(desk.store.path)
+        index = out / "index.html"
+        if not index.is_file():
+            if not desk.store.list_items("published"):
+                # publish() only builds the site once a brief is published (weekly/run.py:1047),
+                # so this is the desk doing its job, not a failed step.
+                return done_row(
+                    "Website",
+                    True,
+                    "The website is built after you publish a brief on the desk.",
+                    f"/c/{spec.slug}/",
+                    "Items",
+                )
+            return done_row(
+                "Website",
+                False,
+                "The website is chosen but has not been built yet.",
+                "/setup/website",
+                "Website",
+            )
+        built = (
+            datetime.fromtimestamp(index.stat().st_mtime).astimezone().strftime("%Y-%m-%d %H:%M")
+        )
+        if settings.target == "folder" and not (Path(settings.out) / "index.html").is_file():
+            return done_row(
+                "Website",
+                False,
+                f"The website was built {built}, but the web root {settings.out} has no index.html.",
+                "/setup/website",
+                "Website",
+            )
+        return done_row(
+            "Website", True, f"The website was built {built}.", "/setup/website", "Website"
+        )
+
+    @app.get("/setup/done", response_class=HTMLResponse)
+    async def setup_done_get() -> HTMLResponse:
+        checks = await run_in_threadpool(setup_check.run_checks)
+        task, task_error = task_status()
+        if setup_wizard.computer_ready(checks, require_signin=False):
+            computer = done_row(
+                "This computer", True, "This computer is ready.", "/setup/computer", "This computer"
+            )
+        else:
+            blockers = ", ".join(setup_wizard.blocking_rows(checks))
+            computer = done_row(
+                "This computer",
+                False,
+                f"Still to do: {blockers}.",
+                "/setup/computer",
+                "This computer",
+            )
+        if task_error:
+            task_row = done_row(
+                "Windows task",
+                False,
+                f"Could not read the Windows task: {task_error}",
+                "/setup/weekly",
+                "Every week",
+            )
+        elif task is not None and task.installed:
+            when = (
+                task.next_run.strftime("%a %Y-%m-%d %H:%M %Z") if task.next_run else "not scheduled"
+            )
+            task_row = done_row(
+                "Windows task",
+                True,
+                f"The Windows task is set up; next run {when}.",
+                "/setup/weekly",
+                "Every week",
+            )
+        else:
+            task_row = done_row(
+                "Windows task",
+                False,
+                "The Windows task is not set up.",
+                "/setup/weekly",
+                "Every week",
+            )
+        blocks = [
+            {
+                "slug": spec.slug,
+                "name": display_name(spec),
+                "rows": [
+                    sources_row(spec),
+                    rosters_row(spec),
+                    test_brief_row(spec),
+                    weekly_row(spec),
+                    website_row(spec),
+                ],
+            }
+            for spec in city_specs()
+        ]
+        rows = [computer, task_row, *(row for block in blocks for row in block["rows"])]
+        needs = sum(1 for row in rows if not row["ok"])
+        if needs == 0:
+            headline = "Everything works."
+        else:
+            headline = (
+                f"{needs} thing"
+                + ("" if needs == 1 else "s")
+                + (" needs" if needs == 1 else " need")
+                + " work."
+            )
+        return setup_page(
+            "setup_done.html",
+            "done",
+            title="Everything works",
+            headline=headline,
+            needs=needs,
+            global_rows=[computer, task_row],
+            blocks=blocks,
+        )
 
     app.mount("/c", CityDispatcher(hub))
     return app
