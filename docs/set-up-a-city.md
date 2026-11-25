@@ -319,11 +319,10 @@ The run writes `transcript.json`, `speakers.json`, `recap.json`, `verify-report.
 its time.
 
 The desk's **Weekly job** page also has **Test one meeting**, which runs
-`python -m civiccast_brief.weekly run ... --limit 1` for the newest meeting, so one real meeting
-goes through captions, recap, story and script before you turn on the weekly schedule. Items that
-pass their checks are published on the desk and go to the website with the next publish; items
-that fail a check wait in Items for review. The test run itself does not build or deploy the
-website.
+`python -m civiccast_brief.weekly run ... --limit 1 --review-only` for the newest meeting, so one
+real meeting goes through captions, recap, story and script before you turn on the weekly
+schedule. Everything it makes waits in Items for review, even if it passes its checks; nothing is
+published, and the website is not built or deployed.
 
 ## 4. Write and check the script
 

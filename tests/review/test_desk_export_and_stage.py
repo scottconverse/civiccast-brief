@@ -92,6 +92,15 @@ def test_every_item_that_passed_its_checks_is_published_for_every_body(tmp_path)
     assert held.status == "review" and held.published_hash is None
 
 
+def test_auto_publish_false_keeps_a_passing_item_in_review_and_the_default_publishes(tmp_path):
+    """The desk's Test one meeting passes auto_publish=False; the default is unchanged."""
+    db = tmp_path / "d.db"
+    assert stage(db, "default", checks=True).status == "published"
+    held = stage(db, "manual", checks=True, auto_publish=False)
+    assert held.status == "review" and held.published_hash is None
+    assert held.checks_passed is True
+
+
 def test_redraft_sends_the_note_to_the_writer_and_returns_to_review(tmp_path, article):
     db = tmp_path / "d.db"
     item = stage(db)

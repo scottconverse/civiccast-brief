@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from civiccast_brief.episode import build as B
+from civiccast_brief.episode.cli import main as episode_main
 from civiccast_brief.review.export import export_published
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.site.build import build_site
@@ -391,6 +392,40 @@ def test_stage_checks_the_script_and_publishes_it_at_once(tmp_path, meeting):
     assert item.checks_passed is True
     assert item.status == "published"
     assert item.body == "City Council"
+
+
+def test_stage_review_only_keeps_a_passing_script_in_review(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    script = _passing_script(meeting_dir)
+    db = tmp_path / "review.db"
+    item_id = B.stage(db, meeting_dir, script, auto_publish=False)
+    with ReviewStore(db) as store:
+        item = store.get_item(item_id)
+    assert item.checks_passed is True
+    assert item.status == "review"
+
+
+def test_the_stage_command_with_review_only_holds_a_passing_script(tmp_path, meeting):
+    meeting_dir, _ = meeting
+    script = _passing_script(meeting_dir)
+    db = tmp_path / "review.db"
+    code = episode_main(
+        [
+            "stage",
+            "--db",
+            str(db),
+            "--meeting",
+            str(meeting_dir),
+            "--script",
+            str(script),
+            "--review-only",
+        ]
+    )
+    assert code == 0
+    with ReviewStore(db) as store:
+        [item] = store.list_items()
+    assert item.checks_passed is True
+    assert item.status == "review"
 
 
 def test_a_saved_script_with_the_old_disclaimer_line_still_passes(tmp_path, meeting):

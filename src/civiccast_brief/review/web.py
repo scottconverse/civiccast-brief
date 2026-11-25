@@ -740,7 +740,7 @@ def _add_run_routes(
             )
         settings, _ = weekly_settings()
         steps = weekly_job.job_steps(settings, state.city_dir, state.store.path, state.weekly_work)
-        steps[0] = [*steps[0], "--limit", "1"]
+        steps[0] = [*steps[0], "--limit", "1", "--review-only"]
         started = await run_in_threadpool(station.run_now_with, steps, "test")
         if started is None:
             return _redirect("/runs?notice=busy")

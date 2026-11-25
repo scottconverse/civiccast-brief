@@ -92,11 +92,12 @@ def _meeting_id(recap: Recap, data: dict[str, Any]) -> str:
     return str(data["video_id"])
 
 
-def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
+def stage(db: Path, meeting_dir: Path, script_json: Path, *, auto_publish: bool = True) -> int:
     """Add the meeting to the desk. Returns the new item id.
 
     The script is checked against the recap again. A script that passes is published at once;
-    one that fails is held in review.
+    one that fails is held in review. With ``auto_publish=False`` a passing script waits in
+    review too.
     """
     recap, data = _meeting(meeting_dir)
     script = load_script(script_json)
@@ -123,6 +124,7 @@ def stage(db: Path, meeting_dir: Path, script_json: Path) -> int:
         speakers=voice_map(meeting_dir),
         recap=recap_text(recap),
         script=render_txt(script),
+        auto_publish=auto_publish,
     )
     return item.id
 
