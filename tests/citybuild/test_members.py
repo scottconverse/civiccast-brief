@@ -154,6 +154,13 @@ def test_menu_links_are_not_members():
     assert untitled == []
 
 
+def test_a_possessive_menu_link_is_not_a_name():
+    """Loveland prints the link ``Mayor's Welcome`` right after the mayor's line; it is a page
+    in the menu, not a person. A name with an apostrophe ("O'Brien") is still a name."""
+    assert members.as_name("Mayor's Welcome") is None
+    assert members.as_name("Conan O'Brien") == "Conan O'Brien"
+
+
 def test_the_governing_body_is_picked_over_a_board_listed_first():
     """Superior's search listed the Planning Commission first; the County's has no City Council."""
     assert governing_body(["Planning Commission", "Town Council", "Board of Education"]) == (

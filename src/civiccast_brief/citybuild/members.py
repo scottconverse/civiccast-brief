@@ -147,6 +147,7 @@ _NOT_NAME: Final = frozenset(
         "policy",
         "faq",
         "faqs",
+        "welcome",
     ]
 )
 _UP: Final = r"[A-ZÀ-ÖØ-Þ]"
@@ -268,7 +269,11 @@ def _word_ok(word: str) -> bool:
         rf"{_UP}{_ANY}*{_LOW}{_ANY}*|{_UP}{_LOW}*['’]{_UP}{_LOW}+", word
     ):
         return False
-    return word.casefold().strip(".") not in _NOT_NAME
+    # A menu link's possessive ("Mayor's Welcome", Loveland CO, 2026-11-25) is turned away by the
+    # word without its 's, as well as by the word itself.
+    folded = word.casefold().strip(".")
+    without_possessive = re.sub(r"['’]s$", "", folded)
+    return folded not in _NOT_NAME and without_possessive not in _NOT_NAME
 
 
 def _mixed_case_copy(name: str, lines: list[str]) -> str | None:
