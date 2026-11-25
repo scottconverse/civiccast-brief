@@ -79,6 +79,46 @@ def test_capture_is_saved_and_reused_without_the_network(tmp_path, monkeypatch):
     assert second.video_url == "https://oakland.granicus.com/MediaPlayer.php?view_id=2&clip_id=7806"
 
 
+def test_an_empty_saved_caption_file_is_fetched_again(tmp_path, monkeypatch):
+    clip = G.Clip(
+        host="goldenco.granicus.com",
+        view_id=2,
+        clip_id=6736,
+        name="Council",
+        date="November 4, 2026",
+    )
+    vtt = (FIX / "oakland-7806.vtt").read_text(encoding="utf-8")
+    monkeypatch.setattr(G, "find_clip", lambda *a: clip)
+    asked: list[str] = []
+
+    def fetch(url):
+        asked.append(url)
+        return vtt
+
+    monkeypatch.setattr(G, "_fetch", fetch)
+    # A meeting whose captions were not posted yet saved an empty file: it must be read again.
+    (tmp_path / "clip.json").write_text(
+        json.dumps(
+            {
+                "host": clip.host,
+                "view_id": 2,
+                "clip_id": 6736,
+                "name": "Council",
+                "date": "November 4, 2026",
+                "mp3_url": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "6736.captions.vtt").write_text("WEBVTT\n", encoding="utf-8")
+
+    cap = G.capture("goldenco.granicus.com", 2, 6736, tmp_path)
+
+    assert not cap.caption_reused
+    assert asked == ["https://goldenco.granicus.com/videos/6736/captions.vtt"]
+    assert cap.items
+
+
 def test_pipeline_runs_a_granicus_clip(tmp_path, monkeypatch):
     clip = G.Clip(
         host="oakland.granicus.com",

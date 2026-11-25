@@ -34,6 +34,7 @@ from typing import Any
 
 from civiccast_brief.models import ModelCallError, child_env
 from civiccast_brief.script.recap import Recap, seconds_of
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 #: The files a usable skill folder must hold.
 REQUIRED_FILES = ("SKILL.md", "scripts/audit.py")
@@ -279,6 +280,7 @@ def claude_agent(prompt: str, work_dir: Path, model: str, timeout_s: int) -> tup
         cwd=str(work_dir),
         timeout=timeout_s,
         check=False,
+        **hidden_process_kwargs(),
     )
     return done.returncode, done.stdout, done.stderr
 

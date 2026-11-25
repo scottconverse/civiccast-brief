@@ -64,6 +64,7 @@ from civiccast_brief.audio.errors import ConfigError, EngineError
 from civiccast_brief.audio.ffmpeg import probe_duration, run_ffmpeg
 from civiccast_brief.audio.lines import Line
 from civiccast_brief.record.credentials import read_windows_credential
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 Timing = Literal["exact", "measured", "approximate"]
 
@@ -363,6 +364,7 @@ class Box:
                 encoding="utf-8",
                 errors="replace",
                 timeout=self.cfg.timeout_s,
+                **hidden_process_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise EngineError(f"{what} ran past {self.cfg.timeout_s:.0f} s") from exc
@@ -672,6 +674,7 @@ class LfmLocal:
                 encoding="utf-8",
                 errors="replace",
                 timeout=self.cfg.timeout_s,
+                **hidden_process_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise EngineError(

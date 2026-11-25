@@ -552,6 +552,11 @@ def test_granicus_reads_the_newest_past_clip_of_the_body(web, monkeypatch):
         granicus.Clip(host, 13, 940, "Town Board", "October 20, 2026"),
     ]
     monkeypatch.setattr(granicus, "list_clips", lambda h, v: clips)
+    monkeypatch.setattr(
+        granicus,
+        "_fetch",
+        lambda url: "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nGood evening.\n",
+    )
     source = make_source(
         "granicus", {"host": host, "view_id": 13, "bodies": ["Planning Commission"]}
     )

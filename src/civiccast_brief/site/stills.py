@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
+
 STILLS_ASSET_DIR = "/assets/stills"
 CACHE_DIR = "stills"
 MAX_BYTES = 2_000_000
@@ -117,7 +119,13 @@ def _run(argv: list[str], runner: Runner) -> subprocess.CompletedProcess[bytes] 
 
 def _default_runner(argv: list[str]) -> subprocess.CompletedProcess[bytes] | None:
     try:
-        return subprocess.run(argv, capture_output=True, timeout=FFMPEG_TIMEOUT_S, check=False)
+        return subprocess.run(
+            argv,
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_S,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
 

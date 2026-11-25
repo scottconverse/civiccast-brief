@@ -24,6 +24,7 @@ from typing import Any
 
 from civiccast_brief.meeting.capture import CaptureError, ytdlp
 from civiccast_brief.meeting.transcript import Segment
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 #: The speech program, run by the same Python that runs CivicCast Brief.
 SPEECH = [sys.executable, "-m", "civiccast_brief.speech"]
@@ -71,7 +72,13 @@ def fetch_audio(video_id: str, work_dir: Path, *, python: str | None = None) -> 
         f"https://www.youtube.com/watch?v={video_id}",
     ]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=AUDIO_TIMEOUT_S, check=False)
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            timeout=AUDIO_TIMEOUT_S,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise DiarizeError(f"could not run yt-dlp for the audio: {exc}") from exc
     if done.returncode != 0 or not wav.exists():
@@ -85,7 +92,13 @@ def run_diarization(audio: Path, out_json: Path) -> dict[str, Any]:
     if not out_json.exists():
         argv = [*SPEECH, "diarize", str(audio), str(out_json)]
         try:
-            done = subprocess.run(argv, capture_output=True, timeout=DIARIZE_TIMEOUT_S, check=False)
+            done = subprocess.run(
+                argv,
+                capture_output=True,
+                timeout=DIARIZE_TIMEOUT_S,
+                check=False,
+                **hidden_process_kwargs(),
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise DiarizeError(f"could not run the diarizer: {exc}") from exc
         lines = done.stdout.decode("utf-8", errors="replace").strip().splitlines()

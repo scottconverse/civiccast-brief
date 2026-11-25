@@ -445,11 +445,27 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
         proof.problem = f"no clip in view {source.view_id} names {proof.body!r}"
         return
     when, clip = max(dated, key=lambda pair: pair[0])
-    proof.ok = True
     proof.meeting_date = when
     proof.title = clip.name
-    proof.what = "video clip (captions read by the meeting command)"
     proof.document = granicus.video_url(source.host, int(source.view_id), clip.clip_id)
+    try:
+        text = granicus._fetch(f"https://{source.host}/videos/{clip.clip_id}/captions.vtt")
+    except granicus.GranicusError as exc:
+        proof.problem = f"could not read the captions: {exc}"
+        return
+    items = granicus.parse_vtt(text)
+    if not items:
+        proof.problem = (
+            f"the newest clip ({when:%B} {when.day}, {when.year}) has no captions on Granicus, "
+            "and CivicCast Brief needs a meeting's captions. Ask the city to turn on captions "
+            "for its Granicus videos, or pick another video source for this body."
+        )
+        return
+    proof.ok = True
+    proof.what = "video clip with captions"
+    proof.lines = [f"{len(items)} caption lines"] + [
+        squash(str(item["text"]))[:160] for item in items[:2]
+    ]
 
 
 # ----- Cablecast --------------------------------------------------------------------------------
@@ -486,11 +502,26 @@ def _cablecast(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> N
         proof.problem = f"no show on {source.host} names {proof.body!r} in its title"
         return
     when, show = max(dated, key=lambda pair: pair[0])
-    proof.ok = True
     proof.meeting_date = when
     proof.title = show.name
-    proof.what = "video show (captions read by the meeting command)"
     proof.document = cablecast.video_url(source.host, show.show_id)
+    try:
+        items = cablecast.fetch_captions(cablecast.find_show(source.host, show.show_id))
+    except cablecast.CablecastError as exc:
+        if "has no caption lines" in str(exc):
+            proof.problem = (
+                f"the newest show ({when:%B} {when.day}, {when.year}) has no captions on "
+                "Cablecast, and CivicCast Brief needs a meeting's captions. Ask the city to turn "
+                "on captions for its Cablecast videos, or pick another video source for this body."
+            )
+        else:
+            proof.problem = f"could not read the captions: {exc}"
+        return
+    proof.ok = True
+    proof.what = "video show with captions"
+    proof.lines = [f"{len(items)} caption lines"] + [
+        squash(str(item["text"]))[:160] for item in items[:2]
+    ]
 
 
 # ----- Web page ---------------------------------------------------------------------------------
