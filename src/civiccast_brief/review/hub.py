@@ -37,7 +37,7 @@ from starlette.types import Receive, Scope, Send
 
 from civiccast_brief import city as city_file
 from civiccast_brief import setup_check
-from civiccast_brief.review import setup_wizard
+from civiccast_brief.review import setup_wizard, site_settings
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import (
@@ -738,6 +738,125 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         lines = setup_wizard.copy_settings(specs[0].city_dir, [spec.city_dir for spec in specs[1:]])
         notice = " ".join(lines) or "Every other city already has the same files."
         return models_step(notice)
+
+    # ----- the Website step -----------------------------------------------------------------
+
+    def website_defaults() -> dict[str, str]:
+        """The form's starting values: the first city's saved site.json, else the patterns."""
+        specs = city_specs()
+        if specs:
+            first = specs[0]
+            settings, _ = site_settings.load(first.folder / site_settings.SETTINGS_NAME)
+            if settings.target != "none":
+
+                def back(text: str) -> str:
+                    return text.replace(first.slug, "{slug}") if first.slug else text
+
+                return {
+                    "target": settings.target,
+                    "base_url": back(settings.base_url),
+                    "media_base_url": back(settings.media_base_url),
+                    "out": back(settings.out),
+                    "media_out": back(settings.media_out),
+                    "project": back(settings.project),
+                    "bucket": back(settings.bucket),
+                    "prefix": back(settings.prefix),
+                    "account": settings.account,
+                }
+        return {
+            "target": "none",
+            "base_url": "",
+            "media_base_url": "",
+            "out": "",
+            "media_out": "",
+            "project": "civiccast-brief-{slug}",
+            "bucket": "",
+            "prefix": "{slug}/",
+            "account": "",
+        }
+
+    def website_rows(values: dict[str, str]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for spec in city_specs():
+            settings = site_settings.resolve(values, spec.slug)
+            if settings.target == "folder":
+                fields = [
+                    ("Web root", settings.out),
+                    ("Media folder", settings.media_out),
+                    ("Site address", settings.base_url),
+                    ("Media address", settings.media_base_url),
+                ]
+            elif settings.target == "cloudflare":
+                fields = [
+                    ("Site address", settings.base_url),
+                    ("Pages project", settings.project),
+                    ("Bucket", settings.bucket),
+                    ("Prefix", settings.prefix),
+                    ("Media address", settings.media_base_url),
+                    ("Account id", settings.account or "—"),
+                ]
+            else:
+                fields = []
+            rows.append(
+                {
+                    "slug": spec.slug,
+                    "name": display_name(spec),
+                    "target": settings.target,
+                    "fields": fields,
+                    "errors": site_settings.validate(settings),
+                }
+            )
+        return rows
+
+    def website_step(
+        values: dict[str, str],
+        *,
+        notice: str = "",
+        cloudflare: tuple[bool, bool] | None = None,
+        status: int = 200,
+    ) -> HTMLResponse:
+        return setup_page(
+            "setup_website.html",
+            "website",
+            status=status,
+            title="Website",
+            form=values,
+            rows=website_rows(values),
+            notice=notice,
+            cloudflare=cloudflare,
+            setup_next_ready=bool(city_specs()),
+        )
+
+    @app.get("/setup/website", response_class=HTMLResponse)
+    def setup_website_get(notice: str = "") -> HTMLResponse:
+        text = "Saved the website settings." if notice == "saved" else ""
+        return website_step(website_defaults(), notice=text)
+
+    @app.post("/setup/website")
+    async def setup_website_post(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        values = {key: str(form.get(key, "")) for key in website_defaults()}
+        if form.get("action") == "check":
+            present = await run_in_threadpool(site_settings.credential_exists)
+            npx = await run_in_threadpool(site_settings.npx_present)
+            return website_step(values, cloudflare=(present, npx))
+        specs = city_specs()
+        resolved = [(spec, site_settings.resolve(values, spec.slug)) for spec in specs]
+        if any(site_settings.validate(settings) for _, settings in resolved):
+            return website_step(values, status=400)
+        for spec, settings in resolved:
+            site_settings.save(spec.folder / site_settings.SETTINGS_NAME, settings)
+            desk = hub.desks.get(spec.slug)
+            if desk is not None:
+                weekly_work = desk.folder / "runs" / "weekly"
+                desk.station.set_publish(
+                    site_settings.publish_steps(
+                        settings, spec.city_dir, desk.store.path, weekly_work
+                    )
+                )
+        return _redirect("/setup/website?notice=saved")
 
     app.mount("/c", CityDispatcher(hub))
     return app

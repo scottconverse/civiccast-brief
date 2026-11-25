@@ -176,6 +176,24 @@ else is written into the city folder until you add sources there. On a city's pa
 folder and work folder. A desk started without `--cities` is a single-city desk, exactly as
 before.
 
+### Your website
+
+The setup wizard's **Website** step (and each city's `site.json` in its work folder) chooses
+where the desk puts the city's site:
+
+- **None.** The desk builds and deploys nothing. This is the default.
+- **A folder on this PC.** The desk copies the built site into a web root, and the media into a
+  media folder, for a web server you run. Both must be full paths.
+- **Cloudflare (your own account).** Make the Pages project and the R2 bucket in your account
+  first, then save an API token in Windows Credential Manager:
+  `cmdkey /generic:CivicCastBrief/cloudflare-deploy /user:token /pass:YOUR-TOKEN`.
+  The desk uploads new media to the bucket and deploys the site to Pages. The token is never
+  printed.
+
+The build lives in the city's work folder: `site\episodes`, `site\media` and `site\out`, next to
+`desk.db`. The desk rebuilds the site after every weekly run and about half a minute after you
+publish, edit or kill a public item, then deploys it to the place you chose.
+
 ### What readers see
 
 - The front page leads with the newest story. Each story has its own page.

@@ -292,6 +292,11 @@ class Station:
                 self._set_since(self.clock())
         self._wake.set()
 
+    def set_publish(self, steps: Sequence[Sequence[str]]) -> None:
+        """Replace the publish steps (the desk calls this when the website settings change)."""
+        self.publish_steps = _commands(steps)
+        self._wake.set()
+
     def _set_since(self, when: datetime) -> None:
         with self._connect() as conn:
             conn.execute(

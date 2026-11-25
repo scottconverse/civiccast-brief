@@ -46,6 +46,7 @@ STEPS: Final = (
     ("check", "Check sources"),
     ("rosters", "Rosters"),
     ("models-voices", "Models and voices"),
+    ("website", "Website"),
 )
 
 

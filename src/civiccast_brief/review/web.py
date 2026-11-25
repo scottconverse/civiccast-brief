@@ -54,7 +54,7 @@ from civiccast_brief import models as model_settings
 from civiccast_brief import setup_check
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk, setup_steps, voices, weekly_job
+from civiccast_brief.review import desk, setup_steps, site_settings, voices, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.station.runner import WEEKDAYS, Station
@@ -1550,12 +1550,16 @@ def city_desk(
         settings = weekly_job.load(city_dir)
     except weekly_job.WeeklyJobError as exc:
         print(f"warning: {exc}; starting with the schedule off", file=sys.stderr)
+    site, site_warning = site_settings.load(Path(store.path).parent / site_settings.SETTINGS_NAME)
+    if site_warning:
+        print(f"warning: {site_warning}", file=sys.stderr)
     station = Station(
         store.path,
         weekly_job.job_steps(settings, city_dir, store.path, weekly_work),
         settings.schedule,
         cwd=Path(store.path).parent,
         scheduled=settings.enabled,
+        publish=site_settings.publish_steps(site, city_dir, store.path, weekly_work),
     )
     app = make_desk_app(
         store,
