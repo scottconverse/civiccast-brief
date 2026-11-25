@@ -168,6 +168,37 @@ def test_a_civicweb_member_whose_term_ended_is_dropped(tmp_path, web):
     assert "David Herrera" not in names
 
 
+#: A members page whose list holds city staff beside the board's own members (the Construction
+#: Advisory Board's and the Open Lands and Trails Advisory Commission's, as Loveland lists them).
+CIVICWEB_MEMBERS_WITH_STAFF = """<!doctype html><html><body>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl00_Name" class="member-name">Theresa Campbell</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl00_Title">Staff Liaison</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl00_Term">06 Jan 2026 - 31 Dec 2028</span>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl01_Name" class="member-name">Marilyn Hilgenberg</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl01_Title">Open Lands &amp; Trails Manager</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl01_Term">06 Jan 2026 - 31 Dec 2028</span>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl02_Name" class="member-name">Geoff Frahm</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl02_Title">City Council Member Ward I</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl02_Term">02 Dec 2025 - Ongoing</span>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl03_Name" class="member-name">Barry Long</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl03_Title"></span>
+<span id="ctl00_MainContent_MembersRepeater_ctl03_Term">02 Apr 2025 - 31 Dec 2027</span>
+</body></html>"""
+
+
+def test_a_civicweb_members_page_leaves_staff_out():
+    members = boards.members_from_civicweb(CIVICWEB_MEMBERS_WITH_STAFF, LOVELAND_TODAY)
+    assert members == [
+        {
+            "name": "Geoff Frahm",
+            "first": "Geoff",
+            "last": "Frahm",
+            "role": "City Council Member Ward I",
+        },
+        {"name": "Barry Long", "first": "Barry", "last": "Long", "role": "Member"},
+    ]
+
+
 def test_a_civicweb_body_with_a_roster_is_left_alone(tmp_path, web):
     _civicweb(web)
     folder = _civicweb_city(tmp_path, ["Planning Commission"])

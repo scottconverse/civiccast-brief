@@ -7,7 +7,7 @@ page: each seat's holder, the seat ("Board Member - 4"), the title ("Vice Chair"
 current holders are read by rule; no model is asked.
 
 A CivicWeb portal gives each meeting type a Members page, and that page prints each member's
-name, title and term as HTML. Those are read the same way.
+name, title and term as HTML. Those are read the same way, and staff are left out.
 
 Only names and titles are kept. The list also carries each member's email address and phone
 number, and those are never stored.
@@ -206,7 +206,9 @@ def _term(text: str) -> tuple[date | None, date | None]:
 
 
 def members_from_civicweb(markup: str, today: date) -> list[dict[str, str]]:
-    """The current members a CivicWeb members page prints, in the page's order."""
+    """The current members a CivicWeb members page prints, in the page's order, staff left out."""
+    from civiccast_brief.citybuild.boardsites import _STAFF
+
     found: list[dict[str, str]] = []
     seen: set[str] = set()
     for attrs, inner in _CIVICWEB_HEADING.findall(markup):
@@ -215,6 +217,9 @@ def members_from_civicweb(markup: str, today: date) -> list[dict[str, str]]:
         ctl = _CIVICWEB_CTL.search(attrs)
         name = _text(inner)
         if ctl is None or not name or name in seen:
+            continue
+        title = _span(markup, ctl[1], "Title")
+        if _STAFF.search(title):
             continue
         start, end = _term(_span(markup, ctl[1], "Term"))
         if (end is not None and end < today) or (start is not None and start > today):
@@ -226,7 +231,7 @@ def members_from_civicweb(markup: str, today: date) -> list[dict[str, str]]:
                 "name": name,
                 "first": words[0],
                 "last": " ".join(words[1:]),
-                "role": _span(markup, ctl[1], "Title") or "Member",
+                "role": title or "Member",
             }
         )
     return found
@@ -269,8 +274,8 @@ def write_civicweb_rosters(
             "retrieved": today.isoformat(),
             "sources": [url],
             "note": (
-                "Current members (term not ended) as the city's CivicWeb portal lists them, read "
-                f"by rule (no model) on {today.isoformat()}."
+                "Current members (term not ended, staff left out) as the city's CivicWeb portal "
+                f"lists them, read by rule (no model) on {today.isoformat()}."
             ),
             "members": members,
         }
