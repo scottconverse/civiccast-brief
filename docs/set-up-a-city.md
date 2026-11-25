@@ -4,6 +4,10 @@ This guide takes one city from nothing to a built site. Each step names the comm
 writes. Run the commands from the repository folder with the project's Python
 (`uv sync`, then `.venv\Scripts\python.exe`, shown below as `python`).
 
+The desk's Items page shows these steps as a checklist until they are done: each tick comes from
+the files and run records in the city folder, so it is done when the step really is. The panel
+disappears once every required step is done. The sections below are the same steps in order.
+
 ## Start here: the desk's Find page
 
 Most people set up a city in the editor desk, not with commands. Install the program (next

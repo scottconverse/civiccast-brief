@@ -6,6 +6,10 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 
 ### The desk
 
+- The Items page shows a **Set up your city** checklist until the desk is set up: city, sources,
+  check, roster, models, voices, a test meeting and the weekly schedule. Each tick is read from
+  the city folder's files and the run records; the panel goes away when every required step is
+  done.
 - The plain desk (`desk.cmd`) has a **Weekly job** page: set the weekly run's schedule (saved in
   `weekly.json` in the city folder), see the work folder and command, and press **Run now**. The
   desk's job finds the week's meetings and stages their briefs for review.

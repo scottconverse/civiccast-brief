@@ -50,7 +50,7 @@ from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk, voices, weekly_job
+from civiccast_brief.review import desk, setup_steps, voices, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.station.runner import WEEKDAYS
@@ -944,6 +944,7 @@ def make_desk_app(
         counts = {s: sum(1 for i in everything if i.status == s) for s in STATUSES}
         shown = [i for i in everything if not status or i.status == status]
         job = station.status() if station is not None else None
+        setup = setup_steps.checklist(state.city_dir, station)
         return state.page(
             "list.html",
             title="Items",
@@ -952,6 +953,7 @@ def make_desk_app(
             statuses=STATUSES,
             current=status,
             error="",
+            setup=setup if setup.show else None,
             job=job,
             problems=_problems(everything, job),
             went_out=[i for i in everything if i.status == "published"],

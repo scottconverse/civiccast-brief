@@ -86,6 +86,12 @@ The front page is the control room:
 
 Below that, every item is listed, with a tab for each state.
 
+Until the desk is set up, the front page also shows a **Set up your city** checklist above the
+list: the city, its sources, a check of those sources, the roster, the models and voices, a test
+run of one meeting, and the weekly schedule. Each step links to the page that does it and ticks
+when the step is really done, so there is nothing to dismiss; the panel goes away when every
+required step is done. Models and voices are marked optional.
+
 ### Items and their states
 
 An item is an **episode** (speakers, recap and podcast script) or an **article** (the news
