@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -164,6 +165,23 @@ COUNCIL_MEETING = Found(
     COUNCIL, date(2026, 11, 3), "City Council Regular Session", "p", "oWZpzjzjwnE", agenda=AGENDA
 )
 PZ_MEETING = Found(PZ, date(2026, 11, 5), "Planning and Zoning Commission", "p", "PZPZPZPZPZ1")
+
+
+def test_review_only_adds_the_flag_to_the_episode_and_article_stage_calls(tmp_path):
+    """The desk's Test one meeting runs each stage for review; the weekly job does not."""
+    fake = Fake()
+    settings = replace(_settings(tmp_path), review_only=True)
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    stages = [argv for step, argv in fake.calls if argv[0] == "stage"]
+    assert [step for step, argv in fake.calls if argv[0] == "stage"] == ["episode", "article"]
+    assert all("--review-only" in argv for argv in stages)
+
+
+def test_without_review_only_the_stage_calls_have_no_such_flag(tmp_path):
+    fake = Fake()
+    run_week(_settings(tmp_path), [COUNCIL_MEETING], LAST, fake.steps())
+    stages = [argv for step, argv in fake.calls if argv[0] == "stage"]
+    assert stages and all("--review-only" not in argv for argv in stages)
 
 
 def test_one_meeting_runs_every_step_in_order_with_its_roster_and_agenda(tmp_path):

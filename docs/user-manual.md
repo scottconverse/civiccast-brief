@@ -372,12 +372,17 @@ The desk started with `--city` has a **Weekly job** page (in the nav) that sets 
 schedule from a form, saved in `weekly.json` in the city folder; **Run now** runs it at once.
 That job finds the week's meetings, writes each brief, and publishes it on the desk when its checks
 pass; the rest wait in Items for review.
-**Test one meeting** runs the same command with `--limit 1`, so only the newest meeting that would
-be run goes through; the roundup is skipped.
+**Test one meeting** runs the same command with `--limit 1 --review-only`, so only the newest
+meeting that would be run goes through, and everything it makes waits in Items for review even if
+it passes its checks; nothing is published, and the website is not built or deployed. The roundup
+is skipped.
 
 `--limit N` runs only the N newest meetings that would be run (no reason given, not done yet),
 newest day first. The others are left alone and not recorded in `weekly-state.json`, and the
 weekly roundup is skipped.
+
+`--review-only` stages every item for review and publishes nothing, even items that pass their
+checks. It is for a test run; without it the run publishes each item that passes.
 Building and deploying the site stay with the weekly command's site options.
 
 Before a change reaches the live sites, run it through Dev and then Test with

@@ -300,7 +300,7 @@ def test_test_one_meeting_runs_the_limit_command_and_shows_its_run(plain):
     assert reply.headers["location"].startswith("/runs/")
     run_id = int(reply.headers["location"].rsplit("/", 1)[1])
     station.join_workers()
-    assert steps.argvs and steps.argvs[-1][-2:] == ["--limit", "1"]
+    assert steps.argvs and steps.argvs[-1][-3:] == ["--limit", "1", "--review-only"]
     assert "civiccast_brief.weekly" in steps.argvs[-1]
     assert steps.argvs[-1][0] == sys.executable
     run = station.run(run_id)
@@ -322,11 +322,11 @@ def test_the_weekly_job_page_shows_the_test_section_above_the_schedule(plain):
     assert "last N days" not in page
 
 
-def test_the_weekly_job_page_says_what_test_one_meeting_publishes(plain):
+def test_the_weekly_job_page_says_test_one_meeting_publishes_nothing(plain):
     app, _, _, _ = plain
     page = signed_in(app).get("/runs").text
-    assert "Nothing is published" not in page
-    assert "go to the website with the next publish" in page
+    assert "Nothing is published" in page
+    assert "go to the website with the next publish" not in page
 
 
 def test_the_weekly_job_page_says_what_the_job_publishes(plain):

@@ -157,6 +157,7 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         diarize=args.diarize,
         site=site,
         worker=args.worker,
+        review_only=args.review_only,
     )
     if listers is not None:
         return _week(city.name, sources, first, last, listers, settings, args.limit)
@@ -236,6 +237,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="N",
         help="run only the N newest meetings that would be run; skip the roundup",
+    )
+    run.add_argument(
+        "--review-only",
+        action="store_true",
+        help="stage every item for review; publish nothing",
     )
     _site_options(run)
     publish = commands.add_parser("publish", help="build the site from what is published now")

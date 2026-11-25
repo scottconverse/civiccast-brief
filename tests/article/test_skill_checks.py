@@ -503,15 +503,10 @@ Status: primary record.
 """
 
 
-def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
+def _seat_only_story_to_stage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The weekly run writes with `skill`, then stages the same story one call later.
-
-    Stage must not add a roster name a seat-only sentence did not have: the skill path left
-    "the Mayor Pro Tem" unnamed on purpose, and naming it again would print it twice in the
-    "Name, the mayor pro tem" shape the audit found in a published story.
-    """
+) -> tuple[Path, Path, Path]:
+    """Write the seat-only skill story, then return (city, recap, article JSON)."""
     city = tmp_path / "city"
     city.mkdir()
     (city / "roster.json").write_text(
@@ -562,6 +557,19 @@ def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
     out = tmp_path / "out" / "article"
     out.parent.mkdir()
     assert main(["skill", "--recap", str(recap_path), "--out", str(out), "--city", str(city)]) == 0
+    return city, recap_path, out.with_suffix(".json")
+
+
+def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The weekly run writes with `skill`, then stages the same story one call later.
+
+    Stage must not add a roster name a seat-only sentence did not have: the skill path left
+    "the Mayor Pro Tem" unnamed on purpose, and naming it again would print it twice in the
+    "Name, the mayor pro tem" shape the audit found in a published story.
+    """
+    city, recap_path, article_json = _seat_only_story_to_stage(tmp_path, monkeypatch)
 
     db = tmp_path / "desk.db"
     staged = main(
@@ -572,7 +580,7 @@ def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
             "--recap",
             str(recap_path),
             "--article",
-            str(out.with_suffix(".json")),
+            str(article_json),
             "--city",
             str(city),
         ]
@@ -587,6 +595,34 @@ def test_stage_keeps_the_skill_paths_rule_and_never_names_a_seat_twice(
     )
     assert "Mayor Pro Tem" in text
     assert "Kaaoush" not in text
+
+
+def test_stage_review_only_keeps_a_passing_story_in_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`article stage --review-only` holds a story that passed its checks in review."""
+    city, recap_path, article_json = _seat_only_story_to_stage(tmp_path, monkeypatch)
+
+    db = tmp_path / "desk.db"
+    staged = main(
+        [
+            "stage",
+            "--db",
+            str(db),
+            "--recap",
+            str(recap_path),
+            "--article",
+            str(article_json),
+            "--city",
+            str(city),
+            "--review-only",
+        ]
+    )
+    assert staged == 0
+    with ReviewStore(db) as store:
+        [item] = store.list_items()
+    assert item.checks_passed is True
+    assert item.status == "review"
 
 
 def test_skill_writes_the_evidence_beside_the_story_not_beside_the_recap(

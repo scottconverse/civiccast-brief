@@ -839,6 +839,7 @@ def _stage(args: argparse.Namespace) -> int:
             checks_passed=report.passed,
             checks_note=report.render(),
             article=article_to_dict(article),
+            auto_publish=not args.review_only,
         )
     except ReviewError as exc:
         print(f"stage failed: {exc}", file=sys.stderr)
@@ -917,6 +918,11 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("--transcript", type=Path, help="default: transcript.json next to the recap")
     stage.add_argument("--documents", type=Path, help="default: documents.json next to the recap")
     stage.add_argument("--roster", type=Path, help="default: the city roster for the recap's body")
+    stage.add_argument(
+        "--review-only",
+        action="store_true",
+        help="put the item in review even if its checks pass",
+    )
     stage.set_defaults(func=_stage)
     args = parser.parse_args(argv)
     return int(args.func(args))

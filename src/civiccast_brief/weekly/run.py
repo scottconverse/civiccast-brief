@@ -138,6 +138,8 @@ class Settings:
     site: Site | None = None
     #: The PC worker's folder: YouTube captions and audio come from a Windows PC.
     worker: Path | None = None
+    #: Stage every item for review and publish nothing (the desk's Test one meeting).
+    review_only: bool = False
 
 
 def slug(text: str) -> str:
@@ -252,6 +254,11 @@ def _on_desk(settings: Settings, folder: Path, kind: str) -> bool:
         return any(i.kind == kind and i.meeting_id == meeting_id for i in store.list_items())
 
 
+def _review_only(settings: Settings) -> list[str]:
+    """The stage flag that keeps everything in review; empty for the normal weekly job."""
+    return ["--review-only"] if settings.review_only else []
+
+
 def _stage_episode(steps: Steps, settings: Settings, folder: Path, script_json: Path) -> None:
     if _on_desk(settings, folder, "episode"):
         return
@@ -265,6 +272,7 @@ def _stage_episode(steps: Steps, settings: Settings, folder: Path, script_json: 
             str(folder),
             "--script",
             str(script_json),
+            *_review_only(settings),
         ],
         "episode stage",
     )
@@ -299,6 +307,7 @@ def _article(steps: Steps, settings: Settings, folder: Path) -> str:
             str(article),
             *city,
             *docs,
+            *_review_only(settings),
         ],
         "article stage",
     )
@@ -508,6 +517,7 @@ def run_roundup(steps: Steps, settings: Settings, state: State, last: date) -> s
                         str(out.with_suffix(".json")),
                         "--city",
                         str(settings.city),
+                        *_review_only(settings),
                     ],
                     "roundup article stage",
                 )

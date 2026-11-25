@@ -39,8 +39,11 @@ def stage_item(
     recap: str = "",
     script: str = "",
     article: Mapping[str, Any] | None = None,
+    auto_publish: bool = True,
 ) -> DeskItem:
-    """Add one item to the desk and publish it at once when its checks passed."""
+    """Add one item to the desk and publish it at once when its checks passed.
+
+    With ``auto_publish=False`` the item waits in review even when its checks passed."""
     with ReviewStore(db) as store:
         return store.add_item(
             kind=kind,
@@ -54,7 +57,7 @@ def stage_item(
             article=article,
             checks_passed=checks_passed,
             checks_note=checks_note,
-            auto_publish=True,
+            auto_publish=auto_publish,
         )
 
 
