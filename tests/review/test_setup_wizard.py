@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 
@@ -11,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from civiccast_brief import setup_check
 from civiccast_brief.citybuild.read import Proof
-from civiccast_brief.review import setup_wizard
+from civiccast_brief.review import setup_wizard, site_settings
 from civiccast_brief.review import web as web_module
 from civiccast_brief.review.hub import make_hub_app
 from civiccast_brief.review.setup_wizard import SetupJobs
@@ -35,6 +36,22 @@ class FakeStation:
 
     def stop(self, timeout: float = 5.0) -> None:
         pass
+
+    def set_publish(self, steps) -> None:
+        pass
+
+
+class RecordingStation(FakeStation):
+    """Records the publish steps the desk builds it with, and every later replacement."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.publish = [list(step) for step in kwargs.get("publish", [])]
+        self.set_calls: list[list[list[str]]] = []
+
+    def set_publish(self, steps) -> None:
+        self.publish = [list(step) for step in steps]
+        self.set_calls.append(self.publish)
 
 
 def write_city(cities, slug: str, *, name: str = "", source: bool = False) -> None:
@@ -480,6 +497,154 @@ def test_the_copy_button_shows_what_it_did(hub_app):
     assert (cities / "bravo" / "city" / "models.json").read_text(encoding="utf-8") == "{}"
 
 
+# ----- the Website step -----------------------------------------------------------------------
+
+
+def website_form(client: TestClient, **values) -> dict[str, str]:
+    data = {
+        "token": token(client),
+        "action": "save",
+        "target": "none",
+        "base_url": "",
+        "media_base_url": "",
+        "out": "",
+        "media_out": "",
+        "project": "",
+        "bucket": "",
+        "prefix": "",
+        "account": "",
+    }
+    data.update(values)
+    return data
+
+
+def test_the_website_page_offers_the_three_choices_and_a_row_per_city(hub_app):
+    app, cities = hub_app
+    write_city(cities, "bravo", name="Bravo Town")
+    client = client_for(app)
+    page = client.get("/setup/website")
+    assert page.status_code == 200
+    for choice in ("none", "folder", "cloudflare"):
+        assert f'value="{choice}"' in page.text
+    assert "Alpha City" in page.text and "Bravo Town" in page.text
+    assert (
+        "cmdkey /generic:CivicCastBrief/cloudflare-deploy /user:token /pass:YOUR-TOKEN" in page.text
+    )
+    assert page.text.count("data-busy=") >= 2
+    assert "Next" not in page.text or "Finish" in page.text
+
+
+def test_saving_the_website_writes_each_city_s_site_json_with_the_slug_filled_in(hub_app):
+    app, cities = hub_app
+    write_city(cities, "bravo", name="Bravo Town")
+    client = client_for(app)
+    reply = client.post(
+        "/setup/website",
+        data=website_form(
+            client,
+            target="cloudflare",
+            base_url="https://{slug}.example.org",
+            media_base_url="https://media.example.org/{slug}",
+            project="civiccast-brief-{slug}",
+            bucket="media-bucket",
+            prefix="{slug}/",
+        ),
+        follow_redirects=False,
+    )
+    assert reply.status_code == 303
+    assert reply.headers["location"] == "/setup/website?notice=saved"
+    for slug in ("alpha", "bravo"):
+        saved = json.loads((cities / slug / "site.json").read_text(encoding="utf-8"))
+        assert saved["target"] == "cloudflare"
+        assert saved["base_url"] == f"https://{slug}.example.org"
+        assert saved["media_base_url"] == f"https://media.example.org/{slug}"
+        assert saved["project"] == f"civiccast-brief-{slug}"
+        assert saved["prefix"] == f"{slug}/"
+
+
+def test_a_bad_website_value_is_shown_per_city_and_nothing_is_saved(hub_app):
+    app, cities = hub_app
+    write_city(cities, "bravo", name="Bravo Town")
+    client = client_for(app)
+    page = client.post(
+        "/setup/website",
+        data=website_form(
+            client,
+            target="folder",
+            base_url="longmont.example.org",
+            out="web",
+            media_out="",
+        ),
+    )
+    assert page.status_code == 400
+    assert "Alpha City" in page.text and "Bravo Town" in page.text
+    assert "must start with http:// or https://" in page.text
+    assert "must be a full path" in page.text
+    assert not (cities / "alpha" / "site.json").exists()
+    assert not (cities / "bravo" / "site.json").exists()
+
+
+def test_none_is_saved_and_next_is_always_allowed(hub_app):
+    app, cities = hub_app
+    client = client_for(app)
+    reply = client.post(
+        "/setup/website", data=website_form(client, target="none"), follow_redirects=False
+    )
+    assert reply.status_code == 303
+    saved = json.loads((cities / "alpha" / "site.json").read_text(encoding="utf-8"))
+    assert saved["target"] == "none"
+    page = client.get("/setup/website")
+    assert 'href="/"' in page.text
+
+
+def test_check_cloudflare_reports_only_whether_the_token_and_npx_exist(hub_app, monkeypatch):
+    app, _ = hub_app
+    client = client_for(app)
+    secret = "super-secret-token-value"
+    monkeypatch.setattr(site_settings, "credential_exists", lambda: bool(secret))
+    monkeypatch.setattr(site_settings, "npx_present", lambda: False)
+    page = client.post(
+        "/setup/website", data=website_form(client, action="check", target="cloudflare")
+    )
+    assert page.status_code == 200
+    assert "Cloudflare deploy token" in page.text
+    assert "found" in page.text and "not found" in page.text  # token found, npx missing
+    assert secret not in page.text
+
+
+def test_saving_the_website_updates_the_running_station(hub_app, monkeypatch):
+    app, _cities = hub_app
+    monkeypatch.setattr(web_module, "Station", RecordingStation)
+    client = client_for(app)
+    assert client.get("/c/alpha/").status_code == 200
+    station = app.state.hub.desks["alpha"].station
+    assert station.publish == []  # no site.json yet
+
+    client.post(
+        "/setup/website",
+        data=website_form(
+            client,
+            target="cloudflare",
+            base_url="https://{slug}.example.org",
+            media_base_url="https://media.example.org/{slug}",
+            project="civiccast-brief-{slug}",
+            bucket="media-bucket",
+            prefix="{slug}/",
+        ),
+    )
+    assert station.set_calls
+    build, deploy = station.publish
+    assert build[:4] == [sys.executable, "-m", "civiccast_brief.weekly", "publish"]
+    assert deploy[:5] == [
+        sys.executable,
+        "-m",
+        "civiccast_brief.station",
+        "deploy",
+        "cloudflare",
+    ]
+    assert "--project" in deploy and "civiccast-brief-alpha" in deploy
+
+
 # ----- the step list and its gates -----------------------------------------------------------
 
 
@@ -569,6 +734,7 @@ def test_the_city_list_links_to_setup(hub_app):
         ("post", "/setup/check", {"action": "check"}),
         ("post", "/setup/check", {"action": "leave-out", "slug": "alpha"}),
         ("post", "/setup/models-voices", {"action": "copy"}),
+        ("post", "/setup/website", {"action": "save", "target": "none"}),
     ],
 )
 def test_every_post_needs_the_form_token(hub_app, method, path, data):

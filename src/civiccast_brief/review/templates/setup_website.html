@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Website</h2>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if cloudflare %}
+<div class="notice" role="status">
+  <p>Cloudflare deploy token in Windows Credential Manager:
+    {% if cloudflare[0] %}<strong>found</strong>{% else %}<strong>not found</strong>{% endif %}.</p>
+  <p>npx on PATH: {% if cloudflare[1] %}<strong>found</strong>{% else %}<strong>not found</strong>{% endif %}.</p>
+</div>
+{% endif %}
+<p class="muted">Where should the desk put each city's website? <strong>None</strong> builds
+nothing. <strong>A folder on this PC</strong> copies the site into a folder your web server
+serves. <strong>Cloudflare</strong> uploads the media to your R2 bucket and the site to Pages,
+in your own account. Write <code>{slug}</code> where a city's short name goes, and the desk
+fills it in for each city.</p>
+<form method="post" action="/setup/website">
+  <input type="hidden" name="token" value="{{ token }}">
+
+  <fieldset>
+    <legend>Where the website goes</legend>
+    <label><input type="radio" name="target" value="none"
+      {% if form.target == "none" %}checked{% endif %}> None</label>
+    <label><input type="radio" name="target" value="folder"
+      {% if form.target == "folder" %}checked{% endif %}> A folder on this PC</label>
+    <label><input type="radio" name="target" value="cloudflare"
+      {% if form.target == "cloudflare" %}checked{% endif %}> Cloudflare (your own account)</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>A folder on this PC</legend>
+    <label for="out">Web root pattern</label>
+    <input class="wide" type="text" id="out" name="out" value="{{ form.out }}"
+           placeholder="C:\web\{slug}">
+    <label for="media_out">Media folder pattern</label>
+    <input class="wide" type="text" id="media_out" name="media_out" value="{{ form.media_out }}"
+           placeholder="C:\web\{slug}\media">
+  </fieldset>
+
+  <fieldset>
+    <legend>Cloudflare (your own account)</legend>
+    <p class="muted">Make the Pages project and the R2 bucket in your Cloudflare account first.
+      Save an API token in Windows Credential Manager:</p>
+    <pre>cmdkey /generic:CivicCastBrief/cloudflare-deploy /user:token /pass:YOUR-TOKEN</pre>
+    <label for="project">Pages project pattern</label>
+    <input class="wide" type="text" id="project" name="project" value="{{ form.project }}"
+           placeholder="civiccast-brief-{slug}">
+    <label for="bucket">R2 bucket</label>
+    <input class="wide" type="text" id="bucket" name="bucket" value="{{ form.bucket }}">
+    <label for="prefix">Key prefix pattern</label>
+    <input class="wide" type="text" id="prefix" name="prefix" value="{{ form.prefix }}"
+           placeholder="{slug}/">
+    <label for="account">Account id (optional)</label>
+    <input class="wide" type="text" id="account" name="account" value="{{ form.account }}">
+  </fieldset>
+
+  <fieldset>
+    <legend>The addresses readers use</legend>
+    <label for="base_url">Site address pattern</label>
+    <input class="wide" type="text" id="base_url" name="base_url" value="{{ form.base_url }}"
+           placeholder="https://{slug}.civiccastbrief.org">
+    <label for="media_base_url">Media address pattern</label>
+    <input class="wide" type="text" id="media_base_url" name="media_base_url"
+           value="{{ form.media_base_url }}" placeholder="https://media.civiccastbrief.org/{slug}">
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit" name="action" value="save" class="primary"
+            data-busy="Saving…">Save the website settings</button>
+    <button type="submit" name="action" value="check"
+            data-busy="Checking Cloudflare…">Check Cloudflare</button>
+  </div>
+</form>
+
+<h2>What each city gets</h2>
+{% if rows %}
+<table>
+  <thead><tr><th>City</th><th>Choice</th><th>Values</th><th>Problems</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.name }} <span class="muted">({{ row.slug }})</span></td>
+    <td>{{ row.target }}</td>
+    <td>
+      {% if row.fields %}
+      <dl class="facts">
+        {% for label, value in row.fields %}<dt>{{ label }}</dt><dd>{{ value or "—" }}</dd>{% endfor %}
+      </dl>
+      {% else %}—{% endif %}
+    </td>
+    <td>
+      {% for field, message in row.errors %}
+      <p class="field-error">{{ field }}: {{ message }}</p>
+      {% else %}—{% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Add a city on the Cities step first.</p>
+{% endif %}
+<div class="next">
+  <a href="/setup/models-voices">&larr; Back</a>
+  <a href="/">Finish: All cities &rarr;</a>
+</div>
+{% endblock %}

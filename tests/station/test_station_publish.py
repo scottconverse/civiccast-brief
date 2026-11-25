@@ -89,6 +89,23 @@ def test_the_publish_steps_follow_the_job_and_run_even_when_the_job_fails(tmp_pa
     assert (s.runs()[0].status, s.runs()[0].exit_code) == ("failed", 2)
 
 
+def test_set_publish_replaces_the_steps_and_turns_publishing_on(tmp_path):
+    clock = Clock(WED_NOON)
+    steps = Steps()
+    s = station(tmp_path, clock, steps, publish=())
+    assert s.publish_steps == []
+    s.request_publish()  # with no publish steps there is nothing to queue
+    assert s.status().publish_at is None
+
+    s.set_publish([["build-site"], ["deploy-site"]])
+    assert s.publish_steps == [["build-site"], ["deploy-site"]]
+    s.request_publish()
+    assert s.status().publish_at == WED_NOON + DELAY
+    clock.now = WED_NOON + DELAY
+    assert s.tick() is not None
+    assert steps.ran == ["build-site", "deploy-site"]
+
+
 def test_a_desk_publish_queues_one_publish_run_that_starts_half_a_minute_later(tmp_path):
     clock = Clock(WED_NOON)
     steps = Steps()

@@ -10,6 +10,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
   (typed or pasted, one per line), finding and checking their sources, rosters, and models and
   voices, for one city or a whole county's towns. Each step's progress comes from the city folder's
   files.
+- A **Website** step in the setup wizard: each city's site goes nowhere, into a folder on this
+  PC, or to Cloudflare in your own account, and the desk's job builds and deploys it after each
+  weekly run and after you publish.
 - One desk can hold several cities: `review serve --cities DIR` mounts a desk per city folder
   (`DIR\<slug>\city\`, `desk.db`, `runs\weekly\`) behind one sign-in, with a city switcher and an
   **Add a city** form on the home page. A single-city desk is unchanged.

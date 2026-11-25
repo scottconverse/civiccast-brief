@@ -311,6 +311,23 @@ def test_test_one_meeting_runs_the_limit_command_and_shows_its_run(plain):
     assert "Test" in page
 
 
+def test_test_one_meeting_runs_no_publish_steps(tmp_path):
+    steps = Steps()
+    station = Station(
+        tmp_path / "desk.db",
+        [["find"]],
+        MONDAY_6,
+        runner=steps,
+        clock=Clock(datetime(2026, 11, 11, 12, 0, tzinfo=DENVER)),
+        publish=[["build-the-site"], ["deploy-the-site"]],
+    )
+    started = station.run_now_with([["test-meeting"]], "test")
+    assert started is not None
+    station.join_workers()
+    assert steps.ran == ["test-meeting"]
+    assert station.status().publish_at is None
+
+
 def test_the_weekly_job_page_shows_the_test_section_above_the_schedule(plain):
     app, _, _, _ = plain
     page = signed_in(app).get("/runs").text
