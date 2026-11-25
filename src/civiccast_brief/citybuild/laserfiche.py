@@ -45,6 +45,10 @@ DOCUMENT: Final = -2
 #: "2026 Planning Commission ..." is a year's folder; "2005-2019 ..." and "1999 & PRIOR ..." are
 #: not.
 _YEAR: Final = re.compile(r"^\s*(\d{4})\b(?!\s*(?:-|–|&|and\b|to\b))", re.IGNORECASE)
+#: "MINUTES Estes Park Planning Commission 2026" is a year's folder too, with the year last.
+_YEAR_LAST: Final = re.compile(r"(\d{4})\s*$")
+#: What before a last year makes it part of a span ("2005-2019", "1999 & 2000", "2005 to 2019").
+_SPAN_BEFORE: Final = re.compile(r"(?:-|–|&|\band|\bto)\s*$", re.IGNORECASE)
 _TAG: Final = re.compile(r"<[^>]{0,2000}>")
 #: How many months with meetings in them are read, newest first, where a year is filed by month.
 #: Empty month folders are passed over: a board that last met ten months ago is still read.
@@ -130,7 +134,12 @@ def listing(
 
 def year_of(name: str) -> int | None:
     match = _YEAR.match(name)
-    return int(match.group(1)) if match else None
+    if match:
+        return int(match.group(1))
+    match = _YEAR_LAST.search(name)
+    if not match or _SPAN_BEFORE.search(name[: match.start()]):
+        return None
+    return int(match.group(1))
 
 
 def month_of(name: str) -> int | None:

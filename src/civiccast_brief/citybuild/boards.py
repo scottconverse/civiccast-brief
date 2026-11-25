@@ -1,10 +1,13 @@
-"""Board rosters from a PrimeGov portal's member lists, for ``rosters/<body>.json``.
+"""Board rosters from a PrimeGov or CivicWeb portal's member lists, for ``rosters/<body>.json``.
 
 The weekly run names a board's speakers from ``rosters/<body>.json`` (see
 :func:`civiccast_brief.weekly.run.roster_for`), and a board meeting with no roster is not run. A
 PrimeGov portal publishes each committee's members as JSON, the list behind its public Committees
 page: each seat's holder, the seat ("Board Member - 4"), the title ("Vice Chair") and the term. The
 current holders are read by rule; no model is asked.
+
+A CivicWeb portal gives each meeting type a Members page, and that page prints each member's
+name, title and term as HTML. Those are read the same way, and staff are left out.
 
 Only names and titles are kept. The list also carries each member's email address and phone
 number, and those are never stored.
@@ -18,12 +21,13 @@ from __future__ import annotations
 import html
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Final
 
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError
 from civiccast_brief.citybuild.members import GOVERNING
+from civiccast_brief.citybuild.platforms import civicweb_base, civicweb_body
 from civiccast_brief.citybuild.read import committee_for, committees
 from civiccast_brief.sources import Source
 
@@ -142,6 +146,143 @@ def write_primegov_rosters(
         text = json.dumps(roster, indent=2, ensure_ascii=False) + "\n"
         path.write_text(text, encoding="utf-8", newline="\n")
         lines.append(f"{body}: wrote {path.name}, {len(members)} members")
+    return lines
+
+
+# ----- A CivicWeb portal's member pages ---------------------------------------------------------
+
+#: Each meeting type in ``/Portal/MeetingTypeList.aspx`` is one item, with its name and its Members
+#: link (``/portal/members.aspx?id=58``) inside it.
+_CIVICWEB_ITEM: Final = re.compile(
+    r'id="[^"]*MeetingTypeRepeater_ctl\d+_ItemTemplate"', re.IGNORECASE
+)
+_CIVICWEB_TITLE: Final = re.compile(
+    r'<a\b[^>]*class="meeting-type-item-title"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+)
+_CIVICWEB_MEMBERS: Final = re.compile(
+    r'<a\b[^>]*href="/portal/members\.aspx\?id=(\d+)"', re.IGNORECASE
+)
+#: A member on ``/portal/members.aspx?id=N``: each is a ``member-name`` heading, with its Title
+#: and Term spans under the same ``ctlNN``.
+_CIVICWEB_HEADING: Final = re.compile(r"<h2\b([^>]*)>(.*?)</h2>", re.IGNORECASE | re.DOTALL)
+_CIVICWEB_CTL: Final = re.compile(r'MembersRepeater_ctl(\d+)_Name"', re.IGNORECASE)
+
+
+def _fold(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def civicweb_member_pages(markup: str) -> dict[str, str]:
+    """Each meeting type's body name -> the id of its ``members.aspx`` page."""
+    pages: dict[str, str] = {}
+    for block in _CIVICWEB_ITEM.split(markup)[1:]:
+        title, link = _CIVICWEB_TITLE.search(block), _CIVICWEB_MEMBERS.search(block)
+        if title is None or link is None:
+            continue
+        name = _fold(civicweb_body(_text(title[1])))
+        if name:
+            pages.setdefault(name, link[1])
+    return pages
+
+
+def _span(markup: str, ctl: str, field: str) -> str:
+    match = re.search(
+        rf'MembersRepeater_ctl{ctl}_{field}"[^>]*>(.*?)</span>', markup, re.IGNORECASE | re.DOTALL
+    )
+    return _text(match[1]) if match else ""
+
+
+def _portal_day(text: str) -> date | None:
+    try:
+        return datetime.strptime(_fold(text), "%d %b %Y").date()
+    except ValueError:
+        return None
+
+
+def _term(text: str) -> tuple[date | None, date | None]:
+    """A term span's start and end ("06 Jan 2026 - 31 Dec 2028", or "02 Dec 2025 - Ongoing")."""
+    start, _, end = text.partition(" - ")
+    return _portal_day(start), _portal_day(end)
+
+
+def members_from_civicweb(markup: str, today: date) -> list[dict[str, str]]:
+    """The current members a CivicWeb members page prints, in the page's order, staff left out."""
+    from civiccast_brief.citybuild.boardsites import _STAFF
+
+    found: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for attrs, inner in _CIVICWEB_HEADING.findall(markup):
+        if "member-name" not in attrs.casefold():
+            continue
+        ctl = _CIVICWEB_CTL.search(attrs)
+        name = _text(inner)
+        if ctl is None or not name or name in seen:
+            continue
+        title = _span(markup, ctl[1], "Title")
+        if _STAFF.search(title):
+            continue
+        start, end = _term(_span(markup, ctl[1], "Term"))
+        if (end is not None and end < today) or (start is not None and start > today):
+            continue
+        seen.add(name)
+        words = name.split()
+        found.append(
+            {
+                "name": name,
+                "first": words[0],
+                "last": " ".join(words[1:]),
+                "role": title or "Member",
+            }
+        )
+    return found
+
+
+def write_civicweb_rosters(
+    folder: Path, source: Source, city: str, state: str, fetcher: Fetcher, today: date
+) -> list[str]:
+    """Write ``rosters/<body>.json`` for each of the source's boards the portal lists a Members
+    page for. Returns a line for each body."""
+    from civiccast_brief.weekly.run import roster_for
+
+    base = civicweb_base(source.tenant)
+    lines: list[str] = []
+    try:
+        pages = civicweb_member_pages(fetcher.get(base + "/Portal/MeetingTypeList.aspx").text)
+    except FetchError as exc:
+        return [f"{base}: the meeting type list could not be read: {exc}"]
+    for body in source.bodies:
+        if roster_for(folder, body) is not None:
+            continue
+        page_id = pages.get(_fold(body))
+        if page_id is None:
+            lines.append(f"{body}: the portal lists no member page for it")
+            continue
+        url = f"{base}/portal/members.aspx?id={page_id}"
+        try:
+            members = members_from_civicweb(fetcher.get(url).text, today)
+        except FetchError as exc:
+            lines.append(f"{body}: the member list could not be read: {exc}")
+            continue
+        if not members:
+            lines.append(f"{body}: the portal lists no current members")
+            continue
+        path = folder / ROSTERS_DIR / f"{slug(body)}.json"
+        roster = {
+            "city": city,
+            "state": state,
+            "body": body,
+            "retrieved": today.isoformat(),
+            "sources": [url],
+            "note": (
+                "Current members (term not ended, staff left out) as the city's CivicWeb portal "
+                f"lists them, read by rule (no model) on {today.isoformat()}."
+            ),
+            "members": members,
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(roster, indent=2, ensure_ascii=False) + "\n"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        lines.append(f"{body}: wrote {path.name}, {len(members)} members from {url}")
     return lines
 
 
