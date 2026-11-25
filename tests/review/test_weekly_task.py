@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 
 import pytest
 
@@ -157,6 +158,7 @@ def _hidable(monkeypatch, platform: str) -> None:
     monkeypatch.setattr(windows_process.sys, "executable", r"C:\Python\pythonw.exe")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_powershell_runs_with_its_console_hidden_on_windows(monkeypatch) -> None:
     _hidable(monkeypatch, "win32")
     calls: list[dict[str, object]] = []

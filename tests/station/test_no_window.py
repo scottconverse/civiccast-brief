@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from civiccast_brief.speech import windows_process
 from civiccast_brief.station import deploy, runner
@@ -37,6 +40,7 @@ class FakePopen:
         return 0
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_a_station_step_hides_its_console_on_windows(monkeypatch, tmp_path: Path) -> None:
     _hidable(monkeypatch, "win32")
     calls: list[dict[str, object]] = []
@@ -69,6 +73,7 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, "", "")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_a_deploy_hides_its_console_on_windows(monkeypatch) -> None:
     _hidable(monkeypatch, "win32")
     calls: list[dict[str, object]] = []
@@ -102,6 +107,7 @@ class FakeRunWrites(FakeRun):
         return subprocess.CompletedProcess(argv, 0, self.stdout, b"")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_direct_run_hides_its_console_on_windows(monkeypatch) -> None:
     from civiccast_brief.meeting import direct
 
@@ -126,6 +132,7 @@ def test_direct_run_adds_no_flag_on_other_systems(monkeypatch) -> None:
     assert "creationflags" not in calls[0]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_granicus_audio_hides_its_console_on_windows(monkeypatch, tmp_path: Path) -> None:
     from civiccast_brief.meeting import granicus
 
@@ -151,6 +158,7 @@ def test_granicus_audio_hides_its_console_on_windows(monkeypatch, tmp_path: Path
     assert calls[0]["creationflags"] == subprocess.CREATE_NO_WINDOW
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CREATE_NO_WINDOW exists only on Windows")
 def test_diarize_hides_its_console_on_windows(monkeypatch, tmp_path: Path) -> None:
     from civiccast_brief.meeting import diarize
 
