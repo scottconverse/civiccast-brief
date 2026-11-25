@@ -273,6 +273,31 @@ def test_sources_add_edit_remove_and_errors_name_the_field(store, city):
     assert client.get("/sources", params={"edit": "youtube:nope"}).status_code == 404
 
 
+def test_editing_a_source_keeps_body_names_that_contain_commas(store, city):
+    bodies = "Parks, Open Space, Recreation, and Trails Committee\nPlanning Commission"
+    sources.add_source(
+        city, sources.make_source("primegov", {"url": "berthoud.primegov.com", "bodies": bodies})
+    )
+    client = client_for(store, city)
+    edit_page = client.get("/sources", params={"edit": "primegov:berthoud.primegov.com"})
+    assert bodies in edit_page.text  # the box holds one body per line, not comma-split
+    saved = client.post(
+        "/sources/edit",
+        data={
+            "token": token(client),
+            "source_id": "primegov:berthoud.primegov.com",
+            "kind": "primegov",
+            "url": "https://berthoud.primegov.com",
+            "bodies": bodies,
+        },
+    )
+    assert saved.status_code == 200 and "Saved https://berthoud.primegov.com" in saved.text
+    assert sources.load_sources(city)[0].bodies == (
+        "Parks, Open Space, Recreation, and Trails Committee",
+        "Planning Commission",
+    )
+
+
 def test_a_platform_source_opens_for_editing_with_its_tenant_filled_in(store, city):
     sources.add_source(
         city, sources.make_source("civicclerk", {"tenant": "erieco", "bodies": "Town Council"})

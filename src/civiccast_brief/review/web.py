@@ -1163,7 +1163,7 @@ def make_desk_app(
                     error=f"No source {edit}; it may have been removed.", status=404
                 )
             form = {
-                k: (", ".join(v) if k == "bodies" else str(v))
+                k: ("\n".join(v) if k == "bodies" else str(v))
                 for k, v in found[0].to_json().items()
                 if k != "id"
             }

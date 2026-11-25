@@ -4,6 +4,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from civiccast_brief.citybuild import detect, search
 from civiccast_brief.citybuild.read import read_latest
 from civiccast_brief.meeting import cablecast
@@ -12,6 +14,18 @@ from civiccast_brief.sources import make_source
 HOST = "reflect-cityofloveland-co.cablecast.tv"
 FIXTURES = Path(__file__).parent.parent / "meeting" / "fixtures" / "cablecast"
 TODAY = date(2026, 11, 12)
+
+
+@pytest.fixture(autouse=True)
+def _captions(monkeypatch):
+    """The source check reads the show's captions; answer them without the network."""
+    show = _shows()[0]
+    monkeypatch.setattr(cablecast, "find_show", lambda host, show_id: show)
+    monkeypatch.setattr(
+        cablecast,
+        "fetch_captions",
+        lambda s: [{"start_ms": 0, "end_ms": 1000, "text": "Roll call."}],
+    )
 
 
 def _shows():

@@ -19,7 +19,7 @@ def test_each_kind_is_checked_normalized_and_saved(tmp_path):
     )
     assert pg.url == "https://longmont.primegov.com"
     assert yt.channel_id == "UCH5_wkpLrKYb1JuUk6-UdNg"
-    assert yt.bodies == ("City Council", "Planning and Zoning Commission")
+    assert yt.bodies == ("City Council, Planning and Zoning Commission", "City Council")
     assert (gr.host, gr.view_id) == ("example.granicus.com", "2")
     for source in (pg, yt, gr):
         S.add_source(tmp_path, source)
@@ -31,6 +31,19 @@ def test_each_kind_is_checked_normalized_and_saved(tmp_path):
         "granicus:example.granicus.com/2",
     ]
     assert S.load_sources(tmp_path) == [pg, yt, gr]
+
+
+def test_a_body_name_with_commas_survives_when_the_text_has_lines():
+    assert S.parse_bodies(
+        "Parks, Open Space, Recreation, and Trails Committee\nPlanning Commission"
+    ) == ("Parks, Open Space, Recreation, and Trails Committee", "Planning Commission")
+
+
+def test_a_comma_only_text_still_splits_on_commas():
+    assert S.parse_bodies("City Council, Planning Commission") == (
+        "City Council",
+        "Planning Commission",
+    )
 
 
 @pytest.mark.parametrize(

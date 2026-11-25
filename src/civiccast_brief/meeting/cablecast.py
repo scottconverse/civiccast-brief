@@ -30,6 +30,7 @@ from urllib.parse import urljoin, urlsplit
 
 from civiccast_brief.meeting.granicus import parse_vtt
 from civiccast_brief.record.video.watch import title_day
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 FETCH_TIMEOUT_S = 60
 AUDIO_TIMEOUT_S = 3600
@@ -267,15 +268,18 @@ def capture(host: str, show_id: int, raw_dir: Path) -> CablecastCapture:
     raw_dir.mkdir(parents=True, exist_ok=True)
     show_file = raw_dir / "show.json"
     vtt_file = raw_dir / f"{show_id}.captions.vtt"
-    reused = vtt_file.exists() and show_file.exists()
-    if reused:
+    show: Show | None = None
+    items: list[dict[str, Any]] = []
+    if vtt_file.exists() and show_file.exists():
         show = Show(**json.loads(show_file.read_text(encoding="utf-8")))
-    else:
+        items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
+    # An empty saved file is not reused: a city may post its captions after the meeting.
+    reused = bool(items)
+    if not reused:
         show = find_show(host, show_id)
         items = fetch_captions(show)
         vtt_file.write_text(to_vtt(items), encoding="utf-8")
         show_file.write_text(json.dumps(asdict(show), indent=2) + "\n", encoding="utf-8")
-    items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
     if not items:
         raise CablecastError(
             f"show {show_id} on {host} has no caption lines; this city does not keep captions "
@@ -294,7 +298,13 @@ def fetch_audio(cap: CablecastCapture, work_dir: Path, *, ffmpeg: str = "ffmpeg"
     argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", cap.show.mp4_url, "-vn"]
     argv += ["-ac", "1", "-ar", "16000", str(part)]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=AUDIO_TIMEOUT_S, check=False)
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            timeout=AUDIO_TIMEOUT_S,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CablecastError(f"could not run ffmpeg for the audio: {exc}") from exc
     if done.returncode != 0 or not part.exists():

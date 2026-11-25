@@ -31,6 +31,7 @@ from civiccast_brief.record.stt.textflowkit import (
     textflowkit_argv,
     transcription_timeout_s,
 )
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 FETCH_TIMEOUT_S = 120
 AUDIO_TIMEOUT_S = 3600
@@ -104,7 +105,9 @@ def capture(
 
 def _run(argv: list[str], timeout_s: float) -> subprocess.CompletedProcess[bytes]:
     """Run the speech program as a child of this process."""
-    return subprocess.run(argv, capture_output=True, timeout=timeout_s, check=False)
+    return subprocess.run(
+        argv, capture_output=True, timeout=timeout_s, check=False, **hidden_process_kwargs()
+    )
 
 
 def _transcript_file(stdout: bytes, out_dir: Path) -> Path | None:
@@ -192,7 +195,13 @@ def fetch_audio(media_url: str, work_dir: Path, meeting_id: str, *, ffmpeg: str 
     argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", media_url, "-vn", "-ac", "1"]
     argv += ["-ar", "16000", str(part)]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=AUDIO_TIMEOUT_S, check=False)
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            timeout=AUDIO_TIMEOUT_S,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise DirectError(f"could not run ffmpeg for the audio: {exc}") from exc
     if done.returncode != 0 or not part.exists():

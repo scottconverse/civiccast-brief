@@ -39,6 +39,8 @@ from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
+
 #: How much of a run's output is kept: the end, where the failure is.
 MAX_LOG_CHARS: Final = 200_000
 #: How often a running job's output is written to the database for the desk to show.
@@ -158,6 +160,7 @@ def run_command(argv: Sequence[str], cwd: Path, output: Callable[[str], None]) -
             text=True,
             encoding="utf-8",
             errors="replace",
+            **hidden_process_kwargs(),
         ) as proc:
             assert proc.stdout is not None
             for line in proc.stdout:

@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from civiccast_brief import townlight_imports
+from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 FETCH_TIMEOUT_S = 60
 AUDIO_TIMEOUT_S = 3600
@@ -222,16 +223,20 @@ def capture(host: str, view_id: int, clip_id: int, raw_dir: Path) -> GranicusCap
     raw_dir.mkdir(parents=True, exist_ok=True)
     clip_file = raw_dir / "clip.json"
     vtt_file = raw_dir / f"{clip_id}.captions.vtt"
-    reused = vtt_file.exists() and clip_file.exists()
-    if reused:
+    clip: Clip | None = None
+    items: list[dict[str, Any]] = []
+    if vtt_file.exists() and clip_file.exists():
         clip = Clip(**json.loads(clip_file.read_text(encoding="utf-8")))
-    else:
+        items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
+    # An empty saved file is not reused: a city may post its captions after the meeting.
+    reused = bool(items)
+    if not reused:
         clip = find_clip(host, view_id, clip_id)
         vtt_file.write_text(
             _fetch(f"https://{host}/videos/{clip_id}/captions.vtt"), encoding="utf-8"
         )
         clip_file.write_text(json.dumps(asdict(clip), indent=2) + "\n", encoding="utf-8")
-    items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
+        items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
     if not items:
         raise GranicusError(
             f"clip {clip_id} on {host} has no caption lines; this city does not keep captions "
@@ -262,7 +267,13 @@ def fetch_audio(cap: GranicusCapture, work_dir: Path, *, ffmpeg: str = "ffmpeg")
     argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", source, "-vn", "-ac", "1"]
     argv += ["-ar", "16000", str(part)]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=AUDIO_TIMEOUT_S, check=False)
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            timeout=AUDIO_TIMEOUT_S,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise GranicusError(f"could not run ffmpeg for the audio: {exc}") from exc
     if done.returncode != 0 or not part.exists():

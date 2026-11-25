@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Any, Final, Protocol
@@ -286,27 +287,38 @@ class Chrome:
         self._playwright = self._browser = self._page = None
 
 
-_shared: Browser | None = None
+#: Each thread's own Chrome. Playwright objects belong to the thread that made them, and the
+#: desk runs each Find/Add in a threadpool thread; one process-wide Chrome made a second thread
+#: fail with "Cannot switch to a different thread" (2026-11-25).
+_shared = threading.local()
+#: A browser given by :func:`use`, returned to every thread (tests give a fake one).
+_used: Browser | None = None
 
 
 def shared() -> Browser:
-    """The one browser this run reads with, opened when a reader first asks for a page."""
-    global _shared
-    if _shared is None:
-        _shared = Chrome()
+    """This thread's browser, opened when it first asks for a page. A browser given by
+    :func:`use` is returned to every thread instead."""
+    if _used is not None:
+        return _used
+    chrome = getattr(_shared, "browser", None)
+    if chrome is None:
+        chrome = Chrome()
+        _shared.browser = chrome
         atexit.register(close_shared)
-    return _shared
+    return chrome
 
 
 def use(browser: Browser | None) -> None:
-    """Read with ``browser`` from now on (tests give a fake one); ``None`` goes back to Chrome."""
-    global _shared
-    _shared = browser
+    """Read with ``browser`` in every thread (tests give a fake one); ``None`` goes back to a
+    Chrome of each thread's own."""
+    global _used
+    _used = browser
 
 
 def close_shared() -> None:
-    """Close Chrome if this run opened it. A browser given by :func:`use` is left as it is."""
-    global _shared
-    if isinstance(_shared, Chrome):
-        _shared.close()
-        _shared = None
+    """Close this thread's Chrome. A browser given by :func:`use` is left as it is, and another
+    thread's Chrome is never touched: it belongs to that thread."""
+    chrome = getattr(_shared, "browser", None)
+    if _used is None and isinstance(chrome, Chrome):
+        chrome.close()
+        _shared.browser = None

@@ -67,6 +67,9 @@ class Fetcher:
     max_bytes: int = MAX_BYTES
     asked: list[str] = field(default_factory=list)
     sleep: Callable[[float], None] = time.sleep
+    #: Why the last :meth:`try_get` could not read its page ("... answered HTTP 403"); empty when
+    #: it could. Kept so a caller can tell a site that turns a plain client away from a missing one.
+    last_error: str = ""
 
     def __post_init__(self) -> None:
         if self.client is None:
@@ -147,9 +150,12 @@ class Fetcher:
         raise AssertionError("unreachable: the loop returns or raises on its last attempt")
 
     def try_get(self, url: str) -> Page | None:
-        """GET ``url``, or None when it cannot be read."""
+        """GET ``url``, or None when it cannot be read. Why not is kept in :attr:`last_error`."""
         try:
-            return self.get(url)
+            page = self.get(url)
         except FetchError as exc:
+            self.last_error = str(exc)
             self.log(f"  no: {exc}")
             return None
+        self.last_error = ""
+        return page
