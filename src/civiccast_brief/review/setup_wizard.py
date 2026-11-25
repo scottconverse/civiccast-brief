@@ -50,6 +50,7 @@ STEPS: Final = (
     ("website", "Website"),
     ("test", "Test"),
     ("weekly", "Every week"),
+    ("done", "Everything works"),
 )
 
 

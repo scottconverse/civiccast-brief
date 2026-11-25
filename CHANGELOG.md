@@ -6,6 +6,10 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 
 ### The desk
 
+- The setup wizard ends on **Everything works**: one page reads this computer, the Windows task,
+  and each city's sources, rosters, test brief, weekly schedule and website, and shows OK or Needs
+  work with one sentence and a link to the page that fixes it. The home page opens the wizard on a
+  new install (no city yet) and stays the city list once a city exists.
 - A **Set up** wizard on the cities desk walks a new install through this computer, the cities
   (typed or pasted, one per line), finding and checking their sources, rosters, and models and
   voices, for one city or a whole county's towns. Each step's progress comes from the city folder's

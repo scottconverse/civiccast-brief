@@ -1004,5 +1004,298 @@ def test_every_week_is_finished_when_the_task_is_set_and_every_schedule_is_on(ri
         },
     )
     page = client.get("/setup/weekly")
-    assert "Finish: All cities" in page.text
+    assert "Next: Everything works" in page.text
+    assert 'href="/setup/done"' in page.text
     assert page.text.count('<span class="status ok">On</span>') == 2
+
+
+# ----- the Everything works step -------------------------------------------------------------
+
+
+@pytest.fixture
+def done_hub_app(tmp_path, monkeypatch):
+    """A hub whose Test runs finish at once, with the PC checks and the Windows task OK."""
+    monkeypatch.setattr(web_module, "Station", RunStation)
+    RunStation.EVENTS = []
+    cities = tmp_path / "cities"
+    write_city(cities, "alpha", name="Alpha City")
+    write_city(cities, "bravo", name="Bravo Town")
+    app = make_hub_app(tmp_path / "hub.db", cities)
+    app.state.hub.task_runner, _calls = task_runner(installed=True)
+    monkeypatch.setattr(setup_check, "run_checks", lambda **kw: ready_checks())
+    return app, cities
+
+
+def prepare_everything_ok(app, cities, client: TestClient) -> None:
+    """Give both cities every file the page reads, then run the Test step once."""
+    for slug in ("alpha", "bravo"):
+        write_city(cities, slug, source=True)
+        city = cities / slug / "city"
+        (city / "city-check.json").write_text(
+            json.dumps({"results": [{"body": "City Council", "ok": True}]}), encoding="utf-8"
+        )
+        (city / "roster.json").write_text(
+            json.dumps({"body": "City Council", "members": [{"name": "Ada"}]}),
+            encoding="utf-8",
+        )
+        (city / "weekly.json").write_text(
+            json.dumps(
+                {
+                    "enabled": True,
+                    "schedule": {
+                        "day": "monday",
+                        "time": "06:00",
+                        "timezone": "America/Denver",
+                    },
+                    "days": 14,
+                    "diarize": False,
+                }
+            ),
+            encoding="utf-8",
+        )
+        add_review_item(app, slug, f"{slug}-1")
+    client.post("/setup/test", data={"token": token(client), "action": "test"})
+    wait(app.state.hub.test_jobs)
+
+
+def test_everything_works_says_so_when_every_row_is_ok(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+
+    page = client.get("/setup/done")
+    assert page.status_code == 200
+    assert "Everything works." in page.text
+    assert "Needs work" not in page.text
+    assert page.text.count('<span class="status ok">OK</span>') == 12  # 2 PC rows + 5 per city
+
+
+def test_no_sources_needs_work_and_links_to_the_city_s_sources(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "city" / "sources.json").unlink()
+
+    page = client.get("/setup/done")
+    assert "1 thing needs work." in page.text
+    assert "No sources are saved yet." in page.text
+    assert 'href="/c/alpha/sources"' in page.text
+
+
+def test_a_not_read_body_is_named_and_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "city" / "city-check.json").write_text(
+        json.dumps({"results": [{"body": "Parks Board", "ok": False}]}), encoding="utf-8"
+    )
+
+    page = client.get("/setup/done")
+    assert "NOT READ: Parks Board." in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/c/alpha/sources"' in page.text
+
+
+def test_no_test_run_yet_needs_work_and_links_to_the_test_step(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    write_city(cities, "charlie", name="Charlie City", source=True)
+    city = cities / "charlie" / "city"
+    (city / "city-check.json").write_text(
+        json.dumps({"results": [{"body": "City Council", "ok": True}]}), encoding="utf-8"
+    )
+    (city / "roster.json").write_text(
+        json.dumps({"body": "City Council", "members": [{"name": "Ada"}]}), encoding="utf-8"
+    )
+    (city / "weekly.json").write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "schedule": {"day": "monday", "time": "06:00", "timezone": "America/Denver"},
+                "days": 14,
+                "diarize": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = client.get("/setup/done")
+    assert "No test run yet." in page.text
+    assert 'href="/setup/test"' in page.text
+
+
+def test_a_failed_test_run_shows_its_message_and_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    # Charlie is added after the Test job, so no job row hides its station's own failed run.
+    write_city(cities, "charlie", name="Charlie City", source=True)
+    city = cities / "charlie" / "city"
+    (city / "city-check.json").write_text(
+        json.dumps({"results": [{"body": "City Council", "ok": True}]}), encoding="utf-8"
+    )
+    (city / "roster.json").write_text(
+        json.dumps({"body": "City Council", "members": [{"name": "Ada"}]}), encoding="utf-8"
+    )
+    (city / "weekly.json").write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "schedule": {"day": "monday", "time": "06:00", "timezone": "America/Denver"},
+                "days": 14,
+                "diarize": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    station = app.state.hub.load("charlie").station
+    run = station.run(station.run_now_with([["true"]], "test"))
+    run.status = "failed"
+    run.log = "> the model failed\nno audio came back"
+
+    page = client.get("/setup/done")
+    assert "no audio came back" in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/test"' in page.text
+
+
+def test_schedule_off_needs_work_and_links_to_every_week(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "city" / "weekly.json").write_text(
+        json.dumps(
+            {
+                "enabled": False,
+                "schedule": {"day": "monday", "time": "06:00", "timezone": "America/Denver"},
+                "days": 14,
+                "diarize": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = client.get("/setup/done")
+    assert "The weekly schedule is off." in page.text
+    assert 'href="/setup/weekly"' in page.text
+
+
+def test_a_missing_windows_task_needs_work_and_links_to_every_week(done_hub_app):
+    app, cities = done_hub_app
+    app.state.hub.task_runner, _calls = task_runner(installed=False)
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+
+    page = client.get("/setup/done")
+    assert "The Windows task is not set up." in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/weekly"' in page.text
+
+
+def test_a_chosen_website_with_nothing_published_is_ok_with_the_note(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "site.json").write_text(
+        json.dumps({"target": "cloudflare", "base_url": "https://alpha.example.org"}),
+        encoding="utf-8",
+    )
+
+    page = client.get("/setup/done")
+    assert "The website is built after you publish a brief on the desk." in page.text
+    assert "Everything works." in page.text  # OK-with-note, not Needs work
+    assert 'href="/c/alpha/"' in page.text
+
+
+def test_a_chosen_website_with_a_published_item_but_no_build_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "site.json").write_text(
+        json.dumps({"target": "cloudflare", "base_url": "https://alpha.example.org"}),
+        encoding="utf-8",
+    )
+    store = app.state.hub.desks["alpha"].store
+    store.publish(store.list_items("review")[0].id)
+
+    page = client.get("/setup/done")
+    assert "The website is chosen but has not been built yet." in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/website"' in page.text
+
+
+def test_a_folder_website_whose_web_root_has_no_index_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    web_root = cities / "alpha-web"
+    web_root.mkdir()
+    (cities / "alpha" / "site.json").write_text(
+        json.dumps(
+            {
+                "target": "folder",
+                "base_url": "https://alpha.example.org",
+                "media_base_url": "https://alpha.example.org/media",
+                "out": str(web_root),
+                "media_out": str(web_root / "media"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = app.state.hub.desks["alpha"].store
+    store.publish(store.list_items("review")[0].id)
+    # The build output exists, so the only problem is the empty web root.
+    out = cities / "alpha" / "site" / "out"
+    out.mkdir(parents=True)
+    (out / "index.html").write_text("<html></html>", encoding="utf-8")
+
+    page = client.get("/setup/done")
+    assert "has no index.html" in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/website"' in page.text
+
+
+def test_no_website_is_ok(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    (cities / "alpha" / "site.json").write_text(json.dumps({"target": "none"}), encoding="utf-8")
+
+    page = client.get("/setup/done")
+    assert "No website (your choice)." in page.text
+    assert "Everything works." in page.text
+
+
+def test_the_home_page_opens_the_wizard_when_there_is_no_city(tmp_path, monkeypatch):
+    monkeypatch.setattr(web_module, "Station", FakeStation)
+    app = make_hub_app(tmp_path / "hub.db", tmp_path / "empty-cities")
+    client = client_for(app)
+    reply = client.get("/", follow_redirects=False)
+    assert reply.status_code == 303
+    assert reply.headers["location"] == "/setup"
+
+
+def test_the_home_page_stays_the_city_list_with_one_city(hub_app):
+    app, _cities = hub_app
+    client = client_for(app)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'href="/setup"' in page.text  # the Set up link, not a redirect
+
+
+def test_sign_up_still_comes_first_before_the_wizard(tmp_path, monkeypatch):
+    monkeypatch.setattr(web_module, "Station", FakeStation)
+    app = make_hub_app(tmp_path / "hub.db", tmp_path / "empty-cities")
+    anon = TestClient(app, base_url="https://127.0.0.1")
+    reply = anon.get("/", follow_redirects=False)
+    assert reply.status_code == 303
+    assert reply.headers["location"] == "/sign-in"
+
+
+def test_the_everything_works_page_needs_a_sign_in(hub_app):
+    app, _cities = hub_app
+    anon = TestClient(app, base_url="https://127.0.0.1")
+    reply = anon.get("/setup/done", follow_redirects=False)
+    assert reply.status_code == 303
+    assert reply.headers["location"] == "/sign-in"
