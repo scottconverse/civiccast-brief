@@ -141,6 +141,35 @@ open a new desk, make its account on the sign-up page: the first account owns th
 after that sign-up is closed. Sessions last 7 days. After 10 wrong passwords an account locks
 for 15 minutes.
 
+### Several cities on one desk
+
+One desk window can hold a whole county of cities, with one sign-in. Start it with a folder of
+cities instead of one city:
+
+```
+python -m civiccast_brief.review serve --db desk.db --cities "C:\Users\you\Documents\CivicCast Brief\cities"
+```
+
+Each subfolder is one city, and each keeps its own city folder, items and weekly work:
+
+| Path | Holds |
+|---|---|
+| `cities\<slug>\city\` | the city folder: `city.json`, `sources.json`, `roster.json`, `weekly.json` |
+| `cities\<slug>\desk.db` | that city's items and its weekly job's runs |
+| `cities\<slug>\runs\weekly\` | that city's weekly work folder |
+
+`<slug>` is the city's short web name (lowercase letters and digits, single hyphens). The
+desk's own `--db` holds only the accounts: signing in once covers every city.
+
+The home page lists the cities and has an **Add a city** form. Give the city's name and state;
+the desk makes its folders and opens its Find page with the name and state filled in. Nothing
+else is written into the city folder until you add sources there. On a city's pages, the header's
+**City:** links switch between cities, and **All cities** goes back to the list.
+
+`--cities` cannot be combined with `--city` or `--work`: each city in the folder has its own city
+folder and work folder. A desk started without `--cities` is a single-city desk, exactly as
+before.
+
 ### What readers see
 
 - The front page leads with the newest story. Each story has its own page.
@@ -224,7 +253,8 @@ The flag groups, all read from `--help`:
 - **episode**: `stage --db --meeting --script`; `assemble --item --meeting --script --audio
   --media-base-url --city --published --out [--article]`; `story --article --meeting --city
   --published --out`; `names --file --meeting`.
-- **review**: `serve --db [--city --work --port]`; `export --db --out`.
+- **review**: `serve --db [--city --work --port]`, or `serve --db --cities DIR [--port]` for
+  several cities; `export --db --out`.
 - **audio**: the script; `--engine` and `--fallback-engine` (`dia2`, `chatterbox`, `gemini`,
   `lfm3`, `fake`), `--out`, `--intro`, `--outro`, `--config`.
 - **site**: `build --episodes --out --base-url [--stills]`; `home [--cities] --out [--base-url]`.

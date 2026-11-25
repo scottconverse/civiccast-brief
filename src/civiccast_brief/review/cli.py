@@ -20,12 +20,20 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from civiccast_brief.review import weekly_job
+from fastapi import FastAPI
+
 from civiccast_brief.review.export import export_published
+from civiccast_brief.review.hub import make_hub_app
 from civiccast_brief.review.store import ReviewError, ReviewStore
-from civiccast_brief.review.web import BIND_HOST, DEFAULT_PORT, make_desk_app, serve
+from civiccast_brief.review.web import (
+    BIND_HOST,
+    DEFAULT_PORT,
+    city_desk,
+    make_desk_app,
+    serve,
+)
 from civiccast_brief.review.writers import desk_writer
-from civiccast_brief.station.runner import Station, StationError
+from civiccast_brief.station.runner import StationError
 
 
 def _port(text: str) -> int:
@@ -49,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--db", required=True, type=Path, help="SQLite desk database")
     run.add_argument("--city", type=Path, help="city folder (models.json, sources.json)")
     run.add_argument(
+        "--cities",
+        type=Path,
+        help="a folder of cities, each holding city/ and desk.db; one desk, several cities",
+    )
+    run.add_argument(
         "--work",
         type=Path,
         help="the weekly run's work folder; connects Redraft to the story and script writers",
@@ -68,60 +81,66 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "serve":
-        return _serve(args.db, args.city, args.port, args.work)
+        return _serve(args.db, args.city, args.port, args.work, args.cities)
     return _export(args.db, args.out)
 
 
-def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> int:
-    if city is not None and not city.is_dir():
-        print(f"error: the city folder {city} does not exist", file=sys.stderr)
-        return 1
-    if work is not None and not work.is_dir():
-        print(f"error: the work folder {work} does not exist", file=sys.stderr)
-        return 1
-    if work is not None and city is None:
-        print("error: --work needs --city, which picks the writers' models", file=sys.stderr)
-        return 1
+def _serve(
+    db: Path,
+    city: Path | None,
+    port: int,
+    work: Path | None = None,
+    cities: Path | None = None,
+) -> int:
+    if cities is not None:
+        if city is not None or work is not None:
+            print(
+                "error: --cities cannot be used with --city or --work; each city in the "
+                "folder has its own city folder and work folder",
+                file=sys.stderr,
+            )
+            return 1
+        if cities.exists() and not cities.is_dir():
+            print(f"error: {cities} is not a folder", file=sys.stderr)
+            return 1
+    else:
+        if city is not None and not city.is_dir():
+            print(f"error: the city folder {city} does not exist", file=sys.stderr)
+            return 1
+        if work is not None and not work.is_dir():
+            print(f"error: the work folder {work} does not exist", file=sys.stderr)
+            return 1
+        if work is not None and city is None:
+            print("error: --work needs --city, which picks the writers' models", file=sys.stderr)
+            return 1
     writer = desk_writer(work, city) if work is not None else None
     try:
+        if cities is not None:
+            cities.mkdir(parents=True, exist_ok=True)
+            app = make_hub_app(db, cities)
+            print(f"editor desk: http://{BIND_HOST}:{port}/  (Ctrl+C to stop)", flush=True)
+            serve(app, port)
+            return 0
         weekly_work = None
-        settings = None
         if city is not None:
-            settings = weekly_job.DEFAULT
-            try:
-                settings = weekly_job.load(city)
-            except weekly_job.WeeklyJobError as exc:
-                # A broken weekly.json must not keep the desk from starting: use the defaults
-                # with the schedule off, and let the Weekly job page show what is wrong.
-                print(
-                    f"warning: {exc}; starting with the schedule off",
-                    file=sys.stderr,
-                )
             weekly_work = work if work is not None else db.parent / "runs" / "weekly"
-            weekly_work.mkdir(parents=True, exist_ok=True)
         with ReviewStore(db) as store:
             if store.migrated:
                 print(f"moved {store.migrated} items from the old review screen to the desk")
-            station = None
-            if settings is not None and city is not None and weekly_work is not None:
-                station = Station(
-                    store.path,
-                    weekly_job.job_steps(settings, city, store.path, weekly_work),
-                    settings.schedule,
-                    cwd=db.parent,
-                    scheduled=settings.enabled,
+            app: FastAPI
+            if city is not None and weekly_work is not None:
+                app, _ = city_desk(store, city, weekly_work=weekly_work, writer=writer)
+            else:
+                app = make_desk_app(
+                    store,
+                    city_dir=city,
+                    writer=writer,
+                    plain_weekly=True,
+                    weekly_work=None,
                 )
-            app = make_desk_app(
-                store,
-                city_dir=city,
-                writer=writer,
-                station=station,
-                plain_weekly=True,
-                weekly_work=weekly_work,
-            )
             print(f"editor desk: http://{BIND_HOST}:{port}/  (Ctrl+C to stop)", flush=True)
             serve(app, port)
-    except (ReviewError, weekly_job.WeeklyJobError, StationError, OSError, sqlite3.Error) as exc:
+    except (ReviewError, StationError, OSError, sqlite3.Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Cities</h2>
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if city_rows %}
+<table>
+  <thead><tr><th>City</th><th>State</th></tr></thead>
+  <tbody>
+  {% for c in city_rows %}
+  <tr>
+    <td><a href="/c/{{ c.slug }}/">{{ c.name }}</a></td>
+    <td>{{ c.state or "" }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No cities yet. Add one below.</p>
+{% endif %}
+
+<h2>Add a city</h2>
+<p class="muted">This makes a folder for the city. Its website and meeting sources come next,
+on the city's own Find page.</p>
+<form method="post" action="/cities/add">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label for="name">City name</label>
+  <input id="name" type="text" name="name" value="{{ form.get('name', '') }}"
+         placeholder="Longmont" required>
+  <label for="state">State</label>
+  <input id="state" type="text" name="state" value="{{ form.get('state', '') }}"
+         placeholder="CO">
+  <p><button type="submit" class="primary" data-busy="Adding the city…">Add a city</button></p>
+</form>
+{% endblock %}
