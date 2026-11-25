@@ -56,6 +56,13 @@
     .setup .todo .mark { color: var(--muted); }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
                clip-path: inset(50%); white-space: nowrap; }
+    .setup-tabs { margin: 0 0 1rem; }
+    .setup-tabs ol { display: flex; flex-wrap: wrap; gap: .3rem .5rem; list-style: none;
+                     padding: 0; margin: 0; }
+    .setup-tabs li + li::before { content: "·"; color: var(--muted); margin-right: .5rem; }
+    .setup-tabs li.current { font-weight: 700; }
+    .next { margin: 1.5rem 0; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+    .next .muted { max-width: 40rem; }
   </style>
   <script src="{{ root }}/static/desk.js" defer></script>
   {% block head %}{% endblock %}

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Cities</h2>
+<p><a href="/setup">Set up</a> walks through the steps for one city or several.</p>
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
 {% if city_rows %}
 <table>

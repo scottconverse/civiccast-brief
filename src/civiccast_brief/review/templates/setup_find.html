@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Find sources</h2>
+<p class="muted">One search for every city that has no sources yet. It reads each city's website
+and the meeting platforms it finds, then saves every source it can read. This page refreshes
+itself while the search runs.</p>
+<form method="post" action="/setup/find" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="find">
+  <button type="submit" class="primary" data-busy="Searching every city…">Find sources for every city</button>
+  {% if running %}<span class="muted">A search is running. Pressing again does nothing.</span>{% endif %}
+</form>
+<table>
+  <thead><tr><th>City</th><th>Status</th><th>Fix or add by hand</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.name }}</td>
+    <td>
+      {% if row.state == "waiting" %}<span class="muted">Waiting</span>
+      {% elif row.state == "searching" %}<span class="status">Searching…</span>
+      {% elif row.state == "saved" %}<span class="status ok">Saved {{ row.count }} source{{ "" if row.count == 1 else "s" }}</span>
+      {% elif row.state == "nothing" %}<span class="status failed">Found nothing</span>
+      {% elif row.state == "failed" %}<span class="status failed">Failed: {{ row.message }}</span>
+      {% else %}{{ row.state }}{% endif %}
+    </td>
+    <td>
+      <a href="/c/{{ row.slug }}/sources">Sources</a> &middot;
+      <a href="/c/{{ row.slug }}/sources/find">Find page</a>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="next">
+  <a href="/setup/cities">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/setup/check">Next: Check sources &rarr;</a>
+  {% else %}<span class="muted">Next is allowed when every city has at least one source.</span>{% endif %}
+</div>
+{% endblock %}

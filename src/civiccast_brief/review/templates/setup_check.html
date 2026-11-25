@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Check sources</h2>
+{% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+<p class="muted">Reads one recent meeting of every body, for every city, and saves the result in
+each city's <code>city-check.json</code>. A body that cannot be read says why. Fix a source on its
+city's Sources page, or leave the city out for now.</p>
+<form method="post" action="/setup/check" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="check">
+  <button type="submit" class="primary" data-busy="Checking every city…">Check every city's sources</button>
+  {% if running %}<span class="muted">A check is running. Pressing again does nothing.</span>{% endif %}
+</form>
+{% if running %}
+<table>
+  <thead><tr><th>City</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for row in job_rows %}
+  <tr>
+    <td>{{ row.name }}</td>
+    <td>
+      {% if row.state == "waiting" %}<span class="muted">Waiting</span>
+      {% elif row.state == "checking" %}<span class="status">Checking…</span>
+      {% elif row.state == "checked" %}<span class="status ok">Checked</span>
+      {% elif row.state == "failed" %}<span class="status failed">Failed: {{ row.message }}</span>
+      {% else %}{{ row.state }}{% endif %}
+    </td>
+    <td><a href="/c/{{ row.slug }}/sources">Sources</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% for city in check_cities %}
+<h3>{{ city.name }}</h3>
+{% if city.proofs %}
+<table>
+  <thead><tr><th>Body</th><th>Source</th><th>Result</th><th>What was read, or why not</th></tr></thead>
+  <tbody>
+  {% for p in city.proofs %}
+  <tr>
+    <td>{{ p.body }}</td>
+    <td>{{ p.kind }} &middot; {{ p.address }}</td>
+    <td class="status {% if p.ok %}ok{% else %}failed{% endif %}">{{ "READ" if p.ok else "NOT READ" }}</td>
+    <td>
+      {% if p.ok %}{{ p.what }}: {{ p.document }}
+      {% else %}{{ p.problem }}
+        &mdash; <a href="/c/{{ city.slug }}/sources">Fix this city's sources</a>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted"><a href="/c/{{ city.slug }}/sources">This city has no saved check yet.</a></p>
+{% endif %}
+<form method="post" action="/setup/check" class="actions">
+  <input type="hidden" name="token" value="{{ token }}">
+  <input type="hidden" name="action" value="leave-out">
+  <input type="hidden" name="slug" value="{{ city.slug }}">
+  <button type="submit"
+          data-confirm="Leave {{ city.name }} out of setup? Its folder moves to _left-out, where the setup steps ignore it. Nothing is deleted."
+          data-busy="Moving the folder…">Leave this city out</button>
+</form>
+{% endfor %}
+<div class="next">
+  <a href="/setup/find">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/setup/rosters">Next: Rosters &rarr;</a>
+  {% else %}<span class="muted">Next is allowed when every city has a saved check and every body
+  is READ, or when you leave a city out.</span>{% endif %}
+</div>
+{% endblock %}

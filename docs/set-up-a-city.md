@@ -15,11 +15,17 @@ home page lists them and has an **Add a city** form. A new install starts that w
 with one city before keeps working unchanged.
 
 Most people set up a city in the editor desk, not with commands. Install the program (next
-section), double-click `desk.cmd`, and open **Sources > Find a city's sources**. Type the city's
-name and state (and its website, when you know it), press **Search**, tick the sources it found and
-press **Add**. The **City** page holds the city's name, short web name, state and contact emails.
-The commands further down do the same work from a terminal. They are the other way, for scripts
-or for anyone who prefers a terminal.
+section), double-click `desk.cmd`, and open **Set up** from the Cities page. **Set up** walks
+through the steps for one city or several: this computer, the cities, finding their sources,
+checking them, rosters, and models and voices. Each step has Back and Next, and Next says what
+still blocks it. The cities step takes one city per line (`City, ST` or
+`City, ST, https://website`), so a county's towns can be pasted in at once.
+
+The same work is on each city's own pages. **Sources > Find a city's sources** searches one city:
+type its name and state (and its website, when you know it), press **Search**, tick the sources it
+found and press **Add**. The **City** page holds the city's name, short web name, state and
+contact emails. The commands further down do the same work from a terminal. They are the other
+way, for scripts or for anyone who prefers a terminal.
 
 `desk.cmd` opens your browser by itself, a few seconds after it starts, at `http://127.0.0.1:8765/`.
 It keeps its window open for as long as the desk runs: closing that window stops the desk.

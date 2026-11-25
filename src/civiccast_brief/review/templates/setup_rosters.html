@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_setup_steps.html" %}
+<h2>Rosters</h2>
+<p class="muted">Each body's members, read from its roster files. Names also fill in from each
+week's records.</p>
+{% for city in roster_cities %}
+<h3>{{ city.name }}</h3>
+{% if city.rosters %}
+<table>
+  <thead><tr><th>Body</th><th>File</th><th>Members</th></tr></thead>
+  <tbody>
+  {% for r in city.rosters %}
+  <tr><td>{{ r.body }}</td><td>{{ r.file }}</td><td>{{ r.members | length }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="notice error" role="alert">This city has no roster file yet. Names also fill in from
+each week's records, but the setup needs one to start.
+<a href="/c/{{ city.slug }}/roster">Open this city's Roster page</a>.</p>
+{% endif %}
+{% endfor %}
+<div class="next">
+  <a href="/setup/check">&larr; Back</a>
+  {% if setup_next_ready %}<a href="/setup/models-voices">Next: Models and voices &rarr;</a>
+  {% else %}<span class="muted">Next is allowed when every city has at least one roster file.</span>{% endif %}
+</div>
+{% endblock %}
