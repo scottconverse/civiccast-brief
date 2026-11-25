@@ -137,6 +137,23 @@ def test_a_member_listed_twice_keeps_the_seat_title():
     assert untitled == ["Michal Duffy"]
 
 
+def test_menu_links_are_not_members():
+    """Berthoud's page links ``Trustee Document Archive`` in its menu and prints ``Municipal
+    Election Results`` below the board; neither is a person (page saved 2026-11-25)."""
+    found, untitled = _read("berthoud-board-of-trustees.html", "Board of Trustees")
+    assert len(found) == 7
+    assert {name: role for name, _, _, role in found} == {
+        "William Karspeck": "Mayor",
+        "May Soricelli-Albrecht": "Mayor Pro Tem",
+        "Brett Wing": "Trustee",
+        "Casey Grace": "Trustee",
+        "Sean Murphy": "Trustee",
+        "Karen Anderson": "Trustee",
+        "Arno Olbricht": "Trustee",
+    }
+    assert untitled == []
+
+
 def test_the_governing_body_is_picked_over_a_board_listed_first():
     """Superior's search listed the Planning Commission first; the County's has no City Council."""
     assert governing_body(["Planning Commission", "Town Council", "Board of Education"]) == (
