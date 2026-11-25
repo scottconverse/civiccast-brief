@@ -137,6 +137,8 @@ class StationStatus:
     runs: list[Run]
     #: When the queued publish run starts, or None when none is queued.
     publish_at: datetime | None = None
+    #: False when the schedule is off: the job runs only when asked (Run now).
+    scheduled: bool = True
 
 
 #: Runs one command; calls ``output`` with each line; returns the exit code.
@@ -183,6 +185,7 @@ class Station:
         clock: Callable[[], datetime] = _now,
         runner: CommandRunner = run_command,
         publish: Sequence[Sequence[str]] = (),
+        scheduled: bool = True,
     ) -> None:
         if not steps:
             raise StationError("the job has no commands")
@@ -190,6 +193,8 @@ class Station:
         self.steps = _commands(steps)
         self.publish_steps = _commands(publish)
         self.schedule = schedule
+        #: False keeps the scheduler from starting the weekly run; Run now still runs.
+        self.scheduled = scheduled
         self.cwd = Path(cwd)
         self.clock = clock
         self.runner = runner
@@ -229,6 +234,17 @@ class Station:
             ).fetchall()
         return [_run(row, self.schedule.zone) for row in rows]
 
+    def has_run(self, trigger: str, status: str) -> bool:
+        """True when any run with that trigger ended with that status, however old.
+
+        Reads the table itself, not :meth:`runs`, which keeps only the newest 20 rows."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM station_runs WHERE trigger = ? AND status = ? LIMIT 1",
+                (trigger, status),
+            ).fetchone()
+        return row is not None
+
     def run(self, run_id: int) -> Run | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -251,7 +267,38 @@ class Station:
             last=last,
             runs=runs,
             publish_at=ready.astimezone(self.schedule.zone) if ready else None,
+            scheduled=self.scheduled,
         )
+
+    def reconfigure(
+        self,
+        *,
+        steps: Sequence[Sequence[str]] | None = None,
+        schedule: Schedule | None = None,
+        scheduled: bool | None = None,
+    ) -> None:
+        """Change the job, its schedule or whether the schedule runs, while the station is up.
+
+        Turning the schedule on starts from now: the first run is the next slot, not a slot that
+        passed while the schedule was off."""
+        if steps is not None:
+            self.steps = _commands(steps)
+        if schedule is not None:
+            self.schedule = schedule
+        if scheduled is not None:
+            turning_on = scheduled and not self.scheduled
+            self.scheduled = scheduled
+            if turning_on:
+                self._set_since(self.clock())
+        self._wake.set()
+
+    def _set_since(self, when: datetime) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO station_meta (key, value) VALUES ('since', ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (when.isoformat(),),
+            )
 
     # ----- the publish queue -------------------------------------------------------------------
 
@@ -385,7 +432,9 @@ class Station:
         with self._connect() as conn:
             conn.execute("UPDATE station_runs SET log = ? WHERE id = ?", (text, run_id))
 
-    def _execute(self, run_id: int, trigger: str = "manual") -> None:
+    def _execute(
+        self, run_id: int, trigger: str = "manual", steps: list[list[str]] | None = None
+    ) -> None:
         lines: list[str] = []
         flushed = _time.monotonic()
 
@@ -401,13 +450,15 @@ class Station:
         publish_done = False
         try:
             if trigger != "publish":
-                for step in self.steps:
+                for step in self.steps if steps is None else steps:
                     output("> " + " ".join(step))
                     code = self.runner(step, self.cwd, output)
                     if code != 0:
                         output(f"stopped: that step ended with code {code}")
                         break
-            if self.publish_steps:
+            # A one-off run of its own steps (the desk's Test one meeting) builds and deploys
+            # nothing.
+            if self.publish_steps and steps is None:
                 if code != 0:
                     output("publishing what the desk already published:")
                 covered = self._take_publish_request()
@@ -452,11 +503,25 @@ class Station:
 
     def run_now(self) -> int | None:
         """Start the job in the background (the desk's Run now). None when one is going."""
-        run_id = self._begin("manual")
+        return self._start("manual")
+
+    def run_now_with(self, steps: Sequence[Sequence[str]], trigger: str = "test") -> int | None:
+        """Start these commands instead of the job (the desk's Test one meeting).
+
+        Same one-run-at-a-time rule and the same ``station_runs`` record and log as
+        :meth:`run_now`; no publish steps follow it. None when a run is already going.
+        """
+        return self._start(trigger, _commands(steps))
+
+    def _start(self, trigger: str, steps: list[list[str]] | None = None) -> int | None:
+        run_id = self._begin(trigger)
         if run_id is None:
             return None
         worker = threading.Thread(
-            target=self._execute, args=(run_id,), name=f"station-run-{run_id}", daemon=True
+            target=self._execute,
+            args=(run_id, trigger) if steps is None else (run_id, trigger, steps),
+            name=f"station-run-{run_id}",
+            daemon=True,
         )
         self._workers.append(worker)
         worker.start()
@@ -475,7 +540,7 @@ class Station:
 
     def tick(self) -> int | None:
         """Start the scheduled run, or else a queued publish, when due. The scheduler calls this."""
-        if self.due():
+        if self.scheduled and self.due():
             return self.run_once("schedule")
         if self.publish_due():
             return self.run_once("publish")

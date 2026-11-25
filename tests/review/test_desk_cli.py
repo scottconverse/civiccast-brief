@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+from desk_signin import signed_in
 
 from civiccast_brief.review import cli
 from civiccast_brief.review.cli import build_parser, main
@@ -76,3 +77,27 @@ def test_module_entry_point_runs() -> None:
         check=False,
     )
     assert result.returncode == 0 and "Editor desk" in result.stdout
+
+
+def test_a_broken_weekly_json_does_not_stop_the_desk(tmp_path, monkeypatch, capsys):
+    seen = {}
+
+    def fake_serve(app, port):
+        seen["app"] = app
+
+    monkeypatch.setattr(cli, "serve", fake_serve)
+    city = tmp_path / "city"
+    city.mkdir()
+    (city / "weekly.json").write_text("{not json", encoding="utf-8")
+    args = ["serve", "--db", str(tmp_path / "d.db"), "--city", str(city), "--port", "9001"]
+
+    assert main(args) == 0
+    err = capsys.readouterr().err
+    assert "weekly.json" in err and "starting with the schedule off" in err
+    assert err.count("weekly.json") == 1  # the exception text already names the file
+    client = signed_in(seen["app"])
+    page = client.get("/runs")
+    assert page.status_code == 200
+    assert "weekly.json could not be read" in page.text
+    assert "Saving the form replaces it." in page.text
+    assert "Off; use Run now." in page.text

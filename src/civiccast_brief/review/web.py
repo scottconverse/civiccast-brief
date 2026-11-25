@@ -33,7 +33,9 @@ import json
 import logging
 import re
 import secrets
-from collections.abc import Callable, Mapping, Sequence
+import shlex
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -48,9 +50,10 @@ from civiccast_brief import city as city_file
 from civiccast_brief import models as model_settings
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk
+from civiccast_brief.review import desk, setup_steps, voices, weekly_job
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
+from civiccast_brief.station.runner import WEEKDAYS
 from civiccast_brief.weekly import rosterfill
 
 if TYPE_CHECKING:
@@ -216,6 +219,8 @@ class DeskApp:
         self.templates.filters["trigger"] = lambda v: TRIGGER_LABELS.get(v, v)
         #: True in the station, which adds the Weekly job page.
         self.has_station = False
+        #: The plain desk's weekly job work folder (the command's --work), if it has one.
+        self.weekly_work: Path | None = None
         #: Called after a desk action changes what readers see (the station queues a publish).
         self.on_public_change: Callable[[], None] | None = None
         self.templates.filters["pretty"] = lambda v: json.dumps(v, indent=2, ensure_ascii=False)
@@ -402,6 +407,65 @@ class DeskApp:
         path = model_settings.save_settings(self.city_dir, current)
         return f"Saved the model picks to {path}."
 
+    # ----- voices ---------------------------------------------------------------------------
+
+    def voices_page(
+        self,
+        *,
+        form: Mapping[str, str] | None = None,
+        notice: str = "",
+        error: str = "",
+        error_field: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        current = voices.Voices()
+        load_error = ""
+        if self.city_dir is not None:
+            try:
+                current = voices.load(self.city_dir)
+            except voices.VoicesError as exc:
+                load_error = f"{self.city_dir / voices.SETTINGS_NAME} cannot be read: {exc}"
+        engine = str(form.get("engine") or "") if form is not None else current.engine
+        if not engine and form is None:
+            engine = voices.DEFAULT_ENGINE
+        fallback = (
+            str(form.get("fallback_engine") or "")
+            if form is not None
+            else current.fallback_engine or voices.DEFAULT_FALLBACK
+        )
+        blocks = []
+        for name in voices.OFFERED:
+            inputs = []
+            for key in voices.VOICE_FIELDS[name]:
+                typed = form.get(voices.field_id(name, key)) if form is not None else None
+                inputs.append(
+                    {
+                        "id": voices.field_id(name, key),
+                        "label": "Host 1 voice" if key.endswith("1") else "Host 2 voice",
+                        "value": typed
+                        if typed is not None
+                        else voices.voice_value(current, name, key),
+                        "default": voices.default_voice(name, key),
+                    }
+                )
+            blocks.append({"engine": name, "label": voices.LABELS[name], "inputs": inputs})
+        return self.page(
+            "voices.html",
+            status=status,
+            title="Voices",
+            engines=[
+                {"name": name, "label": voices.LABELS[name], "summary": voices.SUMMARIES[name]}
+                for name in voices.OFFERED
+            ],
+            engine=engine,
+            fallback_engine=fallback,
+            blocks=blocks,
+            notice=notice,
+            error=error or load_error,
+            error_field=error_field,
+            path=(self.city_dir / voices.SETTINGS_NAME) if self.city_dir else None,
+        )
+
     # ----- sources --------------------------------------------------------------------------
 
     def sources_page(
@@ -523,7 +587,12 @@ def _problems(items: Sequence[DeskItem], job: Any) -> list[Problem]:
 
 
 #: How a run started, as the Weekly job page says it.
-TRIGGER_LABELS: Final = {"manual": "Run now", "schedule": "Schedule", "publish": "Publish"}
+TRIGGER_LABELS: Final = {
+    "manual": "Run now",
+    "schedule": "Schedule",
+    "publish": "Publish",
+    "test": "Test",
+}
 
 
 def _redirect(location: str) -> RedirectResponse:
@@ -539,33 +608,90 @@ RUN_NOTICES: Final = {
 def _add_run_routes(
     app: FastAPI,
     state: DeskApp,
-    station: Station,
+    station: Station | None,
     read_form: Callable[[Request], Any],
     bad_token: Callable[[], Response],
+    *,
+    editable: bool,
 ) -> None:
-    """The Weekly job page: last run, next run, Run now, and each run's output."""
+    """The Weekly job page: last run, next run, Run now, each run's output.
 
-    def runs_page(notice: str = "", bad: bool = False, code: int = 200) -> HTMLResponse:
+    ``editable`` is True in the plain desk, where the Schedule form writes the city's
+    weekly.json and updates the running station. In the station the schedule comes from
+    station.json, so the page shows it read-only.
+    """
+
+    def weekly_settings() -> tuple[weekly_job.WeeklyJob, str]:
+        """The city's weekly job and, when weekly.json is broken, what to say about it."""
+        if state.city_dir is None:
+            return weekly_job.DEFAULT, ""
+        try:
+            return weekly_job.load(state.city_dir), ""
+        except weekly_job.WeeklyJobError as exc:
+            return (
+                weekly_job.DEFAULT,
+                f"weekly.json could not be read: {exc}. Saving the form replaces it.",
+            )
+
+    def weekly_form(state_form: Mapping[str, str] | None = None) -> dict[str, str]:
+        if state_form is not None:
+            return dict(state_form)
+        return weekly_job.form_values(weekly_settings()[0])
+
+    def runs_page(
+        notice: str = "",
+        bad: bool = False,
+        code: int = 200,
+        form: Mapping[str, str] | None = None,
+        error: str = "",
+        error_field: str = "",
+    ) -> HTMLResponse:
+        settings, load_error = weekly_settings()
+        command = ""
+        if state.city_dir is not None and state.weekly_work is not None:
+            steps = weekly_job.job_steps(
+                settings, state.city_dir, state.store.path, state.weekly_work
+            )
+            command = shlex.join(steps[0])
         return state.page(
             "runs.html",
             status=code,
             title="Weekly job",
-            job=station.status(),
+            job=station.status() if station is not None else None,
             notice=notice,
             notice_bad=bad,
+            no_city=state.city_dir is None,
+            editable=editable and station is not None,
+            schedule_form=weekly_form(form),
+            work=str(state.weekly_work or ""),
+            command=command,
+            days=settings.days,
+            weekdays=WEEKDAYS,
+            error=error or load_error,
+            error_field=error_field,
         )
 
     @app.get("/runs", response_class=HTMLResponse)
     def runs(notice: str = "") -> HTMLResponse:
         text, bad = RUN_NOTICES.get(notice, ("", False))
+        if notice == "saved" and station is not None:
+            status = station.status()
+            text = (
+                f"Saved. Next run: {status.next_at:%a %Y-%m-%d %H:%M %Z}."
+                if status.scheduled
+                else "Saved. The schedule is off; use Run now."
+            )
         return runs_page(text, bad)
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     def one_run(run_id: int) -> HTMLResponse:
-        run = station.run(run_id)
+        run = station.run(run_id) if station is not None else None
         if run is None:
             return runs_page(f"There is no run {run_id}.", True, 404)
         return state.page("run.html", title=f"Run {run_id}", run=run)
+
+    if station is None:
+        return
 
     @app.post("/runs/now")
     async def run_now(request: Request) -> Response:
@@ -573,6 +699,52 @@ def _add_run_routes(
             return bad_token()
         started = await run_in_threadpool(station.run_now)
         return _redirect("/runs?notice=" + ("started" if started is not None else "busy"))
+
+    if not editable:
+        return
+
+    @app.post("/runs/schedule")
+    async def save_schedule(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return runs_page(
+                form=form,
+                error="The weekly job needs the desk started with a city folder.",
+                code=400,
+            )
+        try:
+            job = weekly_job.from_form(form)
+            weekly_job.save(state.city_dir, job)
+        except weekly_job.WeeklyJobError as exc:
+            return runs_page(form=form, error=f"Not saved: {exc}", error_field=exc.field, code=400)
+        except OSError as exc:
+            return runs_page(form=form, error=f"Not saved: {exc}", code=400)
+        assert state.weekly_work is not None
+        station.reconfigure(
+            steps=weekly_job.job_steps(job, state.city_dir, state.store.path, state.weekly_work),
+            schedule=job.schedule,
+            scheduled=job.enabled,
+        )
+        return _redirect("/runs?notice=saved")
+
+    @app.post("/runs/test")
+    async def test_one(request: Request) -> Response:
+        """Run the weekly job's command for just the newest meeting, for the desk to watch."""
+        if await read_form(request) is None:
+            return bad_token()
+        if state.city_dir is None or state.weekly_work is None:
+            return runs_page(
+                error="The weekly job needs the desk started with a city folder.", code=400
+            )
+        settings, _ = weekly_settings()
+        steps = weekly_job.job_steps(settings, state.city_dir, state.store.path, state.weekly_work)
+        steps[0] = [*steps[0], "--limit", "1"]
+        started = await run_in_threadpool(station.run_now_with, steps, "test")
+        if started is None:
+            return _redirect("/runs?notice=busy")
+        return _redirect(f"/runs/{started}")
 
 
 def make_desk_app(
@@ -584,18 +756,42 @@ def make_desk_app(
     auth: DeskAuth | None = None,
     root: str = "",
     station: Station | None = None,
+    plain_weekly: bool = False,
+    weekly_work: str | Path | None = None,
 ) -> FastAPI:
     """The desk. ``writer`` powers Redraft; ``regenerate`` handles Regenerate audio.
 
     ``auth`` holds the accounts and sessions; by default they live in the desk's own file.
     ``root`` is the path the desk is mounted at ("/desk" in the station). ``station`` adds the
     Runs page: the weekly job's last run, next run and Run now.
+
+    ``plain_weekly`` gives the plain desk that page too (the nav link and ``/runs``), with a
+    Schedule form that writes the city's weekly.json. ``weekly_work`` is the work folder the job
+    passes as ``--work``. The station app leaves ``plain_weekly`` off: its schedule comes from
+    station.json and its page is read-only.
     """
     root = root.rstrip("/")
     state = DeskApp(store, city_dir=city_dir, writer=writer, regenerate=regenerate, root=root)
+    state.weekly_work = Path(weekly_work) if weekly_work is not None else None
     accounts = auth if auth is not None else DeskAuth(store.path)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # The plain desk runs the weekly job's scheduler itself; the station app starts its own.
+        if station is not None and plain_weekly:
+            station.start()
+        try:
+            yield
+        finally:
+            if station is not None and plain_weekly:
+                station.stop()
+
     app = FastAPI(
-        title="CivicCast Brief editor desk", docs_url=None, redoc_url=None, openapi_url=None
+        title="CivicCast Brief editor desk",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=lifespan,
     )
     app.state.desk = state
 
@@ -724,10 +920,12 @@ def make_desk_app(
             (STATIC_DIR / "desk.js").read_text(encoding="utf-8"), media_type="text/javascript"
         )
 
-    if station is not None:
+    if station is not None or plain_weekly:
         state.has_station = True
-        state.on_public_change = station.request_publish
-        _add_run_routes(app, state, station, read_form, bad_token)
+        if station is not None and not plain_weekly:
+            # Only the station has publish steps; the plain desk publishes each brief that passes.
+            state.on_public_change = station.request_publish
+        _add_run_routes(app, state, station, read_form, bad_token, editable=plain_weekly)
 
     @app.get("/", response_class=HTMLResponse)
     def items(status: str = "") -> HTMLResponse:
@@ -746,6 +944,7 @@ def make_desk_app(
         counts = {s: sum(1 for i in everything if i.status == s) for s in STATUSES}
         shown = [i for i in everything if not status or i.status == status]
         job = station.status() if station is not None else None
+        setup = setup_steps.checklist(state.city_dir, station)
         return state.page(
             "list.html",
             title="Items",
@@ -754,6 +953,7 @@ def make_desk_app(
             statuses=STATUSES,
             current=status,
             error="",
+            setup=setup if setup.show else None,
             job=job,
             problems=_problems(everything, job),
             went_out=[i for i in everything if i.status == "published"],
@@ -880,6 +1080,36 @@ def make_desk_app(
         except (city_file.CityError, OSError) as exc:
             return city_page(form, error=f"Not saved: {exc}", status=400)
         return _redirect("/city?saved=1")
+
+    @app.get("/voices", response_class=HTMLResponse)
+    def voices_page(saved: str = "") -> HTMLResponse:
+        notice = ""
+        if saved and state.city_dir is not None:
+            try:
+                notice = voices.saved_notice(voices.load(state.city_dir))
+            except voices.VoicesError:
+                notice = "Saved."
+        return state.voices_page(notice=notice)
+
+    @app.post("/voices")
+    async def save_voices(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        if state.city_dir is None:
+            return state.voices_page(
+                form=form, error="Start the desk with --city to save the voices.", status=400
+            )
+        try:
+            current = voices.load(state.city_dir)
+            voices.save(state.city_dir, voices.from_form(form, current))
+        except voices.VoicesError as exc:
+            return state.voices_page(
+                form=form, error=f"Not saved: {exc}", error_field=exc.field, status=400
+            )
+        except OSError as exc:
+            return state.voices_page(form=form, error=f"Not saved: {exc}", status=400)
+        return _redirect("/voices?saved=1")
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(edit: str = "", done: str = "", id: str = "") -> HTMLResponse:

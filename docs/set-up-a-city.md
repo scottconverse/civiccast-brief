@@ -4,6 +4,10 @@ This guide takes one city from nothing to a built site. Each step names the comm
 writes. Run the commands from the repository folder with the project's Python
 (`uv sync`, then `.venv\Scripts\python.exe`, shown below as `python`).
 
+The desk's Items page shows these steps as a checklist until they are done: each tick comes from
+the files and run records in the city folder, so it is done when the step really is. The panel
+disappears once every required step is done. The sections below are the same steps in order.
+
 ## Start here: the desk's Find page
 
 Most people set up a city in the editor desk, not with commands. Install the program (next
@@ -314,6 +318,13 @@ The run writes `transcript.json`, `speakers.json`, `recap.json`, `verify-report.
 `summary.json`. Every recap claim carries a quote that appears word for word in the transcript, with
 its time.
 
+The desk's **Weekly job** page also has **Test one meeting**, which runs
+`python -m civiccast_brief.weekly run ... --limit 1` for the newest meeting, so one real meeting
+goes through captions, recap, story and script before you turn on the weekly schedule. Items that
+pass their checks are published on the desk and go to the website with the next publish; items
+that fail a check wait in Items for review. The test run itself does not build or deploy the
+website.
+
 ## 4. Write and check the script
 
 ```
@@ -460,6 +471,31 @@ Chatterbox need the GPU PC.
 
 This writes `episode.mp3` (at -18 LUFS, under -1.5 dBTP), `chapters.json` and `transcript.vtt`.
 
+### Choose the voices on the desk
+
+The desk's **Voices** page picks the engine, the engine to retry with (or **None**) and each
+host's voice. It saves `voices.json` in the city folder:
+
+```json
+{
+  "engine": "gemini",
+  "fallback_engine": "lfm3",
+  "audio": {"gemini": {"voice_s1": "Bodi", "voice_s2": "Sola"}}
+}
+```
+
+The `audio` part uses the keys the audio command's `--config` file takes; the page writes only the
+voices changed from the code default. The weekly run uses the file only when it is given it:
+
+```
+python -m civiccast_brief.weekly run --city cities/yourcity ... --voices cities/yourcity/voices.json
+```
+
+Its `engine` and `fallback_engine` fill in for `--audio-engine` and `--audio-fallback-engine` when
+those flags are not given (the flags win), and its `audio` part is written to the work folder's
+`audio-config.json` and passed to the audio command as `--config`. Without `--voices`, the audio
+step is exactly as before.
+
 ## 7. Build the site
 
 Turn each exported item into a site episode, saved in the city folder:
@@ -565,6 +601,12 @@ Windows:
 ```
 schtasks /Create /TN "CivicCast Brief weekly" /SC WEEKLY /D TUE /ST 06:00 /TR "C:\path\to\python.exe -m civiccast_brief.weekly run --city ... (the rest of the command)"
 ```
+
+The editor desk started with `--city` also has a **Weekly job** page that sets this schedule from
+a form, saved in `weekly.json` in the city folder; **Run now** runs the job immediately. The desk's
+job finds the week's meetings and writes each brief: a brief that passes its checks is published on
+the desk at once, and one that fails a check waits in Items for review. Building and deploying the
+site stays with the weekly command's site options.
 
 ## 10. A cloud station with a Windows PC worker
 

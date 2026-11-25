@@ -2,11 +2,28 @@
 {% set nav = "items" %}
 {% block content %}
 {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+{% if setup %}
+<section class="setup" aria-labelledby="setup-title">
+  <h2 id="setup-title">Set up {{ setup.city or "your city" }}</h2>
+  <p class="muted">{{ setup.required_done }} of {{ setup.required_total }} required steps done.</p>
+  <ol class="setup-steps">
+  {% for step in setup.steps %}
+    <li class="{% if step.done %}done{% else %}todo{% endif %}">
+      <span class="mark" aria-hidden="true">{% if step.done %}✓{% else %}☐{% endif %}</span>
+      <span class="sr-only">{% if step.done %}Done{% else %}To do{% endif %}:</span>
+      {% if step.href %}<a href="{{ root }}{{ step.href }}">{{ step.title }}</a>{% else %}<strong>{{ step.title }}</strong>{% endif %}
+      {% if step.optional %}<span class="muted">(optional)</span>{% endif %}
+      <br><span class="muted hint">{{ step.hint }}</span>
+    </li>
+  {% endfor %}
+  </ol>
+</section>
+{% endif %}
 {% if not current and not error %}
 <h2>Control room</h2>
 {% if job %}
 <p>Weekly job: {% if job.running %}<strong>running</strong> since {{ job.running.started_at|when }}{% elif job.last %}last run <span class="status {{ job.last.status }}">{{ job.last.status }}</span> {{ job.last.started_at|when }}{% else %}no run yet{% endif %}
-  &middot; next run {{ job.next_at|when }}{% if job.publish_at %} &middot; <strong>publish queued</strong> for {{ job.publish_at|when }}{% endif %}
+  &middot; {% if job.scheduled %}next run {{ job.next_at|when }}{% else %}schedule off{% endif %}{% if job.publish_at %} &middot; <strong>publish queued</strong> for {{ job.publish_at|when }}{% endif %}
   &middot; <a href="{{ root }}/runs">Weekly job and Run now</a></p>
 {% endif %}
 <h3>Problems ({{ problems|length }})</h3>

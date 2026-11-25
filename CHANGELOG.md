@@ -2,6 +2,27 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
+## Unreleased
+
+### The desk
+
+- The Items page shows a **Set up your city** checklist until the desk is set up: city, sources,
+  check, roster, models, voices, a test meeting and the weekly schedule. Each tick is read from
+  the city folder's files and the run records; the panel goes away when every required step is
+  done.
+- The plain desk (`desk.cmd`) has a **Weekly job** page: set the weekly run's schedule (saved in
+  `weekly.json` in the city folder), see the work folder and command, and press **Run now**. The
+  desk's job finds the week's meetings, publishes each brief that passes its checks on the desk,
+  and leaves the rest for review.
+- The Weekly job page has **Test one meeting**: it runs the newest meeting the same way the weekly
+  job does (captions, recap, story and script). Items that pass their checks are published on the
+  desk and go to the website with the next publish; items that fail a check wait in review. The
+  test run itself does not build or deploy the website (`weekly run --limit 1`). A broken
+  `weekly.json` no longer stops the desk from starting.
+- The plain desk has a **Voices** page: choose the voice engine, the engine to retry with and each
+  host's voice, saved in the city folder's `voices.json`. `weekly run` and `publish` take
+  `--voices PATH` and use it for the audio step (the `--audio-engine` flags still win).
+
 ## 0.5.0 — 2026-11-24
 
 ### The podcast

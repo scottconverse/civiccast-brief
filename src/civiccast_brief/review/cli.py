@@ -20,10 +20,12 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from civiccast_brief.review import weekly_job
 from civiccast_brief.review.export import export_published
 from civiccast_brief.review.store import ReviewError, ReviewStore
 from civiccast_brief.review.web import BIND_HOST, DEFAULT_PORT, make_desk_app, serve
 from civiccast_brief.review.writers import desk_writer
+from civiccast_brief.station.runner import Station, StationError
 
 
 def _port(text: str) -> int:
@@ -82,13 +84,44 @@ def _serve(db: Path, city: Path | None, port: int, work: Path | None = None) -> 
         return 1
     writer = desk_writer(work, city) if work is not None else None
     try:
+        weekly_work = None
+        settings = None
+        if city is not None:
+            settings = weekly_job.DEFAULT
+            try:
+                settings = weekly_job.load(city)
+            except weekly_job.WeeklyJobError as exc:
+                # A broken weekly.json must not keep the desk from starting: use the defaults
+                # with the schedule off, and let the Weekly job page show what is wrong.
+                print(
+                    f"warning: {exc}; starting with the schedule off",
+                    file=sys.stderr,
+                )
+            weekly_work = work if work is not None else db.parent / "runs" / "weekly"
+            weekly_work.mkdir(parents=True, exist_ok=True)
         with ReviewStore(db) as store:
             if store.migrated:
                 print(f"moved {store.migrated} items from the old review screen to the desk")
-            app = make_desk_app(store, city_dir=city, writer=writer)
+            station = None
+            if settings is not None and city is not None and weekly_work is not None:
+                station = Station(
+                    store.path,
+                    weekly_job.job_steps(settings, city, store.path, weekly_work),
+                    settings.schedule,
+                    cwd=db.parent,
+                    scheduled=settings.enabled,
+                )
+            app = make_desk_app(
+                store,
+                city_dir=city,
+                writer=writer,
+                station=station,
+                plain_weekly=True,
+                weekly_work=weekly_work,
+            )
             print(f"editor desk: http://{BIND_HOST}:{port}/  (Ctrl+C to stop)", flush=True)
             serve(app, port)
-    except (ReviewError, OSError, sqlite3.Error) as exc:
+    except (ReviewError, weekly_job.WeeklyJobError, StationError, OSError, sqlite3.Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

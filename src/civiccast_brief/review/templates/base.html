@@ -47,6 +47,15 @@
     .facts { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; }
     .facts dt { font-weight: 600; } .facts dd { margin: 0; }
     #busy-status { min-height: 1.2em; margin: 0; }
+    .setup { border: 1px solid var(--line); padding: .5rem 1rem; margin: 1rem 0; }
+    .setup h2 { margin: .5rem 0; }
+    .setup ol { margin: .5rem 0; padding-left: 1.5rem; }
+    .setup li { margin: .4rem 0; }
+    .setup .mark { display: inline-block; width: 1.2em; font-weight: 700; }
+    .setup .done .mark { color: var(--ok); }
+    .setup .todo .mark { color: var(--muted); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+               clip-path: inset(50%); white-space: nowrap; }
   </style>
   <script src="{{ root }}/static/desk.js" defer></script>
   {% block head %}{% endblock %}
@@ -58,6 +67,7 @@
   <nav aria-label="Desk">
     <a href="{{ root }}/" {% if nav == "items" %}aria-current="page"{% endif %}>Items</a>
     <a href="{{ root }}/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Models</a>
+    <a href="{{ root }}/voices" {% if nav == "voices" %}aria-current="page"{% endif %}>Voices</a>
     <a href="{{ root }}/city" {% if nav == "city" %}aria-current="page"{% endif %}>City</a>
     <a href="{{ root }}/sources" {% if nav == "sources" %}aria-current="page"{% endif %}>Sources</a>
     <a href="{{ root }}/roster" {% if nav == "roster" %}aria-current="page"{% endif %}>Roster</a>

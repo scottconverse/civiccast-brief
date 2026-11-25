@@ -47,6 +47,7 @@ from civiccast_brief.audio.ffmpeg import probe_duration
 from civiccast_brief.episode.build import meeting_slug, meeting_suffix
 from civiccast_brief.meeting.capture import LIVE_NOT_STARTED_REASON
 from civiccast_brief.meeting.cli import LIVE_NOT_STARTED_EXIT
+from civiccast_brief.review import voices
 from civiccast_brief.review.store import ReviewStore
 from civiccast_brief.script.writer import (
     ROUNDUP_ID,
@@ -123,6 +124,9 @@ class Site:
     slug: str
     audio_engine: str = ""
     audio_fallback_engine: str = ""
+    #: voices.json: its engine and fallback fill in for flags not given, and its audio part is
+    #: handed to the audio command as --config.
+    voices: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -934,6 +938,16 @@ def publish(
     if city_file.is_file():
         shutil.copyfile(city_file, site.episodes / CITY_FILE)
     log += _drop_unpublished_episodes(site, state, items)
+    # The city's voices, when the run was given a voices.json: they fill in engine flags not
+    # given, and their audio part is the file the audio command reads.
+    spoken: voices.Voices | None = None
+    audio_config: Path | None = None
+    if site.voices is not None:
+        try:
+            spoken = voices.load_file(site.voices)
+            audio_config = voices.write_audio_config(settings.work / "audio-config.json", spoken)
+        except (voices.VoicesError, OSError) as exc:
+            raise StepFailed(f"voices: {exc}") from exc
     ids = _same_day_ids(items, runs, built, site.slug)
     for path, meta in items:
         meeting_id = str(meta.get("meeting_id"))
@@ -971,10 +985,19 @@ def publish(
                         )
                         continue
                 else:
-                    engine = ["--engine", site.audio_engine] if site.audio_engine else []
-                    if site.audio_fallback_engine:
-                        engine += ["--fallback-engine", site.audio_fallback_engine]
-                    _call(steps.audio, [str(script_txt), "--out", str(audio), *engine], "audio")
+                    engine_name = site.audio_engine or (spoken.engine if spoken else "")
+                    fallback = site.audio_fallback_engine or (
+                        spoken.fallback_engine if spoken else ""
+                    )
+                    engine = ["--engine", engine_name] if engine_name else []
+                    if fallback:
+                        engine += ["--fallback-engine", fallback]
+                    config = ["--config", str(audio_config)] if audio_config is not None else []
+                    _call(
+                        steps.audio,
+                        [str(script_txt), "--out", str(audio), *engine, *config],
+                        "audio",
+                    )
             out = folder / "episode.json"
             argv = [
                 "assemble",
@@ -1042,13 +1065,28 @@ def run_week(
     last: date,
     steps: Steps | None = None,
     published: str | None = None,
+    limit: int | None = None,
 ) -> Report:
     """Run every meeting not done yet, the roundup, and the site. One meeting's failure is
-    recorded and the run goes on with the next."""
+    recorded and the run goes on with the next.
+
+    With ``limit`` only that many of the newest meetings that would be run (no ``reason`` and
+    not ``done``) are run, newest day first; the rest are left out and not recorded in the
+    state. The roundup is skipped, since it would cover meetings that were not run."""
     steps = steps or Steps()
     state = State(settings.work / STATE_NAME)
     report = Report()
-    for meeting in meetings:
+    selected = list(meetings)
+    if limit is not None:
+        runnable = [
+            meeting
+            for meeting in meetings
+            if not meeting.reason
+            and state.data["meetings"].get(meeting.key, {}).get("status") != "done"
+        ]
+        runnable.sort(key=lambda meeting: meeting.day, reverse=True)
+        selected = runnable[:limit]
+    for meeting in selected:
         entry = state.meeting(meeting.key)
         entry.update(title=meeting.title, week=last.isoformat())
         # A meeting run before keeps its run, even when it would not be run now: its episode
@@ -1083,8 +1121,11 @@ def run_week(
         report.add(f"{meeting.day} {meeting.title}: done")
         for line in [*entry.get("documents", []), *entry.get("roster", [])]:
             report.add(f"{meeting.day} {meeting.title}: {line}")
-    line = run_roundup(steps, settings, state, last)
-    report.add(line, failed=line.startswith("roundup: failed"))
+    if limit is not None:
+        report.add("roundup: skipped (--limit)")
+    else:
+        line = run_roundup(steps, settings, state, last)
+        report.add(line, failed=line.startswith("roundup: failed"))
     if settings.site is not None:
         _publish_into(report, steps, settings, state, published)
     return report

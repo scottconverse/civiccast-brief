@@ -173,6 +173,19 @@ def test_the_job_runs_real_commands_and_keeps_their_output(tmp_path):
     assert "could not start no-such-program-ccb" in gone.log
 
 
+def test_has_run_finds_a_run_older_than_the_newest_twenty(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    s = Station(tmp_path / "desk.db", [["find"]], MONDAY_6, clock=clock, runner=Steps())
+    assert not s.has_run("test", "ok")
+    s.run_once("test")
+    for _ in range(25):
+        s.run_once("manual")
+    assert len(s.runs()) == 20
+    assert s.has_run("test", "ok")
+    assert not s.has_run("test", "failed")
+    assert not s.has_run("schedule", "ok")
+
+
 @pytest.fixture
 def app(tmp_path):
     clock = Clock(at(2026, 11, 11, 12, 0))
@@ -300,3 +313,34 @@ def test_the_scheduler_runs_while_the_app_is_up(app):
         thread = s._thread
     assert s._thread is None
     assert not thread.is_alive()
+
+
+def test_a_one_off_run_runs_its_own_steps_and_never_publishes(tmp_path):
+    clock = Clock(at(2026, 11, 11, 12, 0))
+    steps = Steps()
+    s = station(tmp_path, clock, steps)
+
+    run_id = s.run_now_with([["test-meeting"]], "test")
+
+    assert run_id is not None
+    s.join_workers()
+    assert steps.ran == ["test-meeting"]
+    run = s.run(run_id)
+    assert run is not None
+    assert (run.trigger, run.status, run.exit_code) == ("test", "ok", 0)
+    assert "> test-meeting" in run.log
+
+
+def test_a_one_off_run_waits_while_another_run_is_going(tmp_path):
+    clock = Clock(at(2026, 11, 11, 12, 0))
+    steps = Steps()
+    gate = threading.Event()
+    steps.gate = gate
+    s = station(tmp_path, clock, steps)
+
+    first = s.run_now()
+    assert first is not None
+    assert s.run_now_with([["test-meeting"]], "test") is None
+
+    gate.set()
+    s.join_workers()

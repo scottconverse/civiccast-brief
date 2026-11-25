@@ -86,6 +86,12 @@ The front page is the control room:
 
 Below that, every item is listed, with a tab for each state.
 
+Until the desk is set up, the front page also shows a **Set up your city** checklist above the
+list: the city, its sources, a check of those sources, the roster, the models and voices, a test
+run of one meeting, and the weekly schedule. Each step links to the page that does it and ticks
+when the step is really done, so there is nothing to dismiss; the panel goes away when every
+required step is done. Models and voices are marked optional.
+
 ### Items and their states
 
 An item is an **episode** (speakers, recap and podcast script) or an **article** (the news
@@ -124,6 +130,8 @@ lists every action.
 - **Roster**: each body's members and the record each one was read from. You do not type
   members in; the weekly run reads them from the meetings' own records.
 - **Models**: which writing model each task uses, per body.
+- **Voices**: the voice engine, the engine to retry with if it fails, and each host's voice. It
+  saves `voices.json` in the city folder, which the weekly run uses when it makes the audio.
 - **Weekly job**: (on a station) the last run, the next run, a queued publish and **Run now**.
 
 ### Signing in
@@ -221,8 +229,8 @@ The flag groups, all read from `--help`:
   `lfm3`, `fake`), `--out`, `--intro`, `--outro`, `--config`.
 - **site**: `build --episodes --out --base-url [--stills]`; `home [--cities] --out [--base-url]`.
 - **weekly run**: `--city`, `--work`, `--db`, `--days` (default 7), `--first`, `--last`,
-  `--diarize`, `--episodes`, `--media`, `--site-out`, `--base-url`, `--media-base-url`,
-  `--audio-engine`, `--audio-fallback-engine`, `--worker`.
+  `--limit`, `--diarize`, `--episodes`, `--media`, `--site-out`, `--base-url`,
+  `--media-base-url`, `--audio-engine`, `--audio-fallback-engine`, `--worker`.
 - **station**: `serve --config station.json [--port]`; `deploy cloudflare --site --media
   --project --bucket --prefix --media-url [--account]`; `deploy folder --site --media --out
   --media-out`; `worker --station URL [--work] [--every] [--once]`.
@@ -237,6 +245,7 @@ The flag groups, all read from `--help`:
 | `sources.json` | where meetings come from, and which bodies each covers | `city find`, the desk's Sources page |
 | `roster.json`, `rosters/<body>.json` | members, each with the record that printed them | the weekly run (`city rosters` writes them too) |
 | `models.json` | the writing model per task and body | the desk's Models page |
+| `voices.json` | the voice engine, its fallback and the two hosts' voices | the desk's Voices page |
 | `city-check.json` | the last source check | `city check`, **Check all sources** |
 
 A meeting's run folder also holds `documents.json` (the packet and minutes pages), `transcript.json`,
@@ -324,6 +333,25 @@ Gemini Flash TTS to Flash-Lite TTS on a quota error before the engine itself fai
 The hosts are Pat (speaker S1) and Alex (speaker S2). The bake-off that compared the engines is in
 [voice-bakeoff.md](voice-bakeoff.md).
 
+The desk's **Voices** page picks the engine, the engine to retry with (or **None**) and each
+host's voice, for the chosen engine. It saves `voices.json` in the city folder:
+
+```json
+{
+  "engine": "gemini",
+  "fallback_engine": "lfm3",
+  "audio": {"gemini": {"voice_s1": "Bodi", "voice_s2": "Sola"}}
+}
+```
+
+The `audio` part holds the same keys as the audio command's own `--config` file. The page writes
+only the voices you changed from the code default, so a later change to a default still applies
+everywhere else. The weekly run uses the file only when it is given it:
+`weekly run ... --voices cities/yourcity/voices.json`. Its engine and fallback fill in for
+`--audio-engine` and `--audio-fallback-engine` when those flags are not given (the flags win), and
+its `audio` part is passed to the audio command as `--config`. Without `--voices`, nothing about
+the audio step changes.
+
 ### The weekly run
 
 ```
@@ -339,6 +367,18 @@ story built from the week's stories). Then it exports what is published, makes a
 episodes, writes each published story as a stand-alone story file, assembles episodes, and builds
 the site. `weekly-state.json` records each step, so running the same command again retries only
 what failed. Exit 0 means everything finished.
+
+The desk started with `--city` has a **Weekly job** page (in the nav) that sets this run's
+schedule from a form, saved in `weekly.json` in the city folder; **Run now** runs it at once.
+That job finds the week's meetings, writes each brief, and publishes it on the desk when its checks
+pass; the rest wait in Items for review.
+**Test one meeting** runs the same command with `--limit 1`, so only the newest meeting that would
+be run goes through; the roundup is skipped.
+
+`--limit N` runs only the N newest meetings that would be run (no reason given, not done yet),
+newest day first. The others are left alone and not recorded in `weekly-state.json`, and the
+weekly roundup is skipped.
+Building and deploying the site stay with the weekly command's site options.
 
 Before a change reaches the live sites, run it through Dev and then Test with
 `ops\stage.ps1`: Dev builds a copy of a city on this PC and serves it on `127.0.0.1` only (test-tone
