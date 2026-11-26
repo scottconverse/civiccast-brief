@@ -1252,7 +1252,7 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         return done_row(
             "Every week",
             True,
-            f"Every {job.day.strip().lower()} at {job.at} ({job.zone}); next {when}.",
+            f"Every {job.day.strip().capitalize()} at {job.at} ({job.zone}); next {when}.",
             "/setup/weekly",
             "Every week",
         )
@@ -1327,16 +1327,29 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
                 "Every week",
             )
         elif task is not None and task.installed:
-            when = (
-                task.next_run.strftime("%a %Y-%m-%d %H:%M %Z") if task.next_run else "not scheduled"
-            )
-            task_row = done_row(
-                "Windows task",
-                True,
-                f"The Windows task is set up; next run {when}.",
-                "/setup/weekly",
-                "Every week",
-            )
+            elsewhere = weekly_task.other_desk(task, hub.cities_dir)
+            if elsewhere:
+                task_row = done_row(
+                    "Windows task",
+                    False,
+                    f"The Windows task runs another desk's cities ({elsewhere}), so these "
+                    "cities run only while this desk is open.",
+                    "/setup/weekly",
+                    "Every week",
+                )
+            else:
+                when = (
+                    task.next_run.strftime("%a %Y-%m-%d %H:%M %Z")
+                    if task.next_run
+                    else "not scheduled"
+                )
+                task_row = done_row(
+                    "Windows task",
+                    True,
+                    f"The Windows task is set up; next run {when}.",
+                    "/setup/weekly",
+                    "Every week",
+                )
         else:
             task_row = done_row(
                 "Windows task",
