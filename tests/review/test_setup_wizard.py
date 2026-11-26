@@ -628,7 +628,7 @@ def test_the_copy_button_shows_what_it_did(hub_app):
     client = client_for(app)
     page = client.post("/setup/models-voices", data={"token": token(client), "action": "copy"})
     assert page.status_code == 200
-    assert "bravo: copied models.json." in page.text
+    assert "Bravo Town: copied models.json." in page.text
     assert (cities / "bravo" / "city" / "models.json").read_text(encoding="utf-8") == "{}"
 
 
@@ -1482,3 +1482,64 @@ def test_every_body_with_a_roster_makes_the_rosters_row_ok_again(done_hub_app):
     page = client.get("/setup/done")
     assert "No members for" not in page.text
     assert "Everything works." in page.text
+
+
+# ----- the Models and voices step's wording ---------------------------------------------------
+
+
+def test_copy_settings_names_the_cities_it_talks_about(tmp_path):
+    source = tmp_path / "cities" / "alpha" / "city"
+    same = tmp_path / "cities" / "bravo" / "city"
+    missing = tmp_path / "cities" / "charlie" / "city"
+    for folder in (source, same, missing):
+        folder.mkdir(parents=True)
+    (source / "models.json").write_text("models", encoding="utf-8")
+    (source / "voices.json").write_text("voices", encoding="utf-8")
+    (same / "models.json").write_text("models", encoding="utf-8")
+
+    lines = setup_wizard.copy_settings(
+        source,
+        [same, missing],
+        names={source: "Alpha City", same: "Bravo Town", missing: "Charlie City"},
+    )
+
+    assert "Bravo Town: copied voices.json." in lines
+    assert "Charlie City: copied models.json, voices.json." in lines
+    assert not any("bravo:" in line or "charlie:" in line for line in lines)
+
+
+def test_copy_settings_says_the_first_city_uses_the_built_in_models(tmp_path):
+    source = tmp_path / "cities" / "alpha" / "city"
+    keeps = tmp_path / "cities" / "bravo" / "city"
+    plain = tmp_path / "cities" / "charlie" / "city"
+    for folder in (source, keeps, plain):
+        folder.mkdir(parents=True)
+    (keeps / "models.json").write_text("own", encoding="utf-8")
+
+    lines = setup_wizard.copy_settings(
+        source,
+        [keeps, plain],
+        names={source: "Alpha City", keeps: "Bravo Town", plain: "Charlie City"},
+    )
+
+    assert "Alpha City uses the built-in models; there is no models.json to copy." in lines
+    assert "Bravo Town keeps its own models.json." in lines
+    assert not any("Charlie City keeps" in line for line in lines)
+
+
+def test_voice_summary_with_no_voices_json_names_no_engine(tmp_path):
+    summary = setup_wizard.voice_summary(tmp_path)
+    assert summary["engine"] == "Not chosen yet"
+    assert summary["fallback"] == "—"
+    assert summary["voices"] == {}
+    assert summary["note"] == "Open the Voices page and press Save."
+
+
+def test_voice_summary_shows_an_empty_saved_fallback_as_none(tmp_path):
+    (tmp_path / "voices.json").write_text(
+        json.dumps({"engine": "gemini", "fallback_engine": "", "audio": {}}), encoding="utf-8"
+    )
+    summary = setup_wizard.voice_summary(tmp_path)
+    assert summary["engine"] == "Gemini"
+    assert summary["fallback"] == "None (no retry)"
+    assert summary["note"] == ""

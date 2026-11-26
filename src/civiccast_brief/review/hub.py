@@ -398,8 +398,8 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
             email=email,
         )
 
-    def with_session(token: str) -> Response:
-        response = _redirect("/")
+    def with_session(token: str, to: str = "/") -> Response:
+        response = _redirect(to)
         response.set_cookie(
             SESSION_COOKIE,
             token,
@@ -463,7 +463,9 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
             )
         except AuthError as exc:
             return refused(exc, email)
-        return with_session(token)
+        # A new owner starts at step 1. "/" would ask /setup, which skips a This computer step
+        # that already passes and lands them on Cities (2026-11-25).
+        return with_session(token, "/" if hub.slugs() else "/setup/computer")
 
     @app.post("/sign-out")
     async def sign_out_post(request: Request) -> Response:
@@ -836,7 +838,11 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         specs = city_specs()
         if not specs:
             return models_step("Add a city on the Cities step first.")
-        lines = setup_wizard.copy_settings(specs[0].city_dir, [spec.city_dir for spec in specs[1:]])
+        lines = setup_wizard.copy_settings(
+            specs[0].city_dir,
+            [spec.city_dir for spec in specs[1:]],
+            names={spec.city_dir: display_name(spec) for spec in specs},
+        )
         notice = " ".join(lines) or "Every other city already has the same files."
         return models_step(notice)
 

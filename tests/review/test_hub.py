@@ -168,3 +168,58 @@ def test_the_hub_starts_and_stops_every_city_station(hub_app):
         assert len(stations) == 2
         assert all(s.started == 1 and s.stopped == 0 for s in stations)
     assert all(s.stopped == 1 for s in stations)
+
+
+def test_sign_up_on_a_hub_with_no_city_opens_the_first_step(tmp_path, monkeypatch):
+    monkeypatch.setattr(web_module, "Station", FakeStation)
+    cities = tmp_path / "cities"
+    cities.mkdir()
+    app = make_hub_app(tmp_path / "hub.db", cities)
+    with anon(app) as client:
+        reply = client.post(
+            "/sign-up",
+            data={
+                "token": app.state.hub.token,
+                "email": EMAIL,
+                "password": PASSWORD,
+                "confirm": PASSWORD,
+            },
+            follow_redirects=False,
+        )
+        assert reply.status_code == 303, reply.text
+        assert reply.headers["location"] == "/setup/computer"
+        assert client.cookies.get("__Host-ccb.session_token")
+
+
+def test_sign_up_with_a_city_still_opens_the_city_list(hub_app):
+    app, _, _ = hub_app
+    with anon(app) as client:
+        reply = client.post(
+            "/sign-up",
+            data={
+                "token": app.state.hub.token,
+                "email": EMAIL,
+                "password": PASSWORD,
+                "confirm": PASSWORD,
+            },
+            follow_redirects=False,
+        )
+        assert reply.status_code == 303, reply.text
+        assert reply.headers["location"] == "/"
+
+
+def test_the_models_step_notice_names_the_cities(hub_app):
+    app, _, cities = hub_app
+    (cities / "bravo" / "city" / "city.json").write_text(
+        json.dumps({"name": "Bravo Town", "state": "Colorado"}), encoding="utf-8"
+    )
+    (cities / "alpha" / "city" / "models.json").write_text("{}", encoding="utf-8")
+    with anon(app) as client:
+        sign_up(client)
+        page = client.post(
+            "/setup/models-voices",
+            data={"token": app.state.hub.token, "action": "copy"},
+        )
+        assert page.status_code == 200
+        assert "Bravo Town: copied models.json." in page.text
+        assert "bravo: copied" not in page.text

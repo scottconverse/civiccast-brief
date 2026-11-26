@@ -45,7 +45,12 @@ sources below and press Add.</p>
     {% for c in found.candidates %}
     <p><label><input type="checkbox" name="chosen" value="{{ c.source.id }}" checked>
       <strong>{{ kind_labels[c.source.kind] }}</strong> {{ c.source.address }}</label><br>
-      <span class="muted">Bodies: {{ c.source.bodies|join(", ") }}</span><br>
+      <span class="muted">Bodies:</span>
+      {% for b in bodies[c.source.id] %}
+      <label class="muted"><input type="checkbox" name="body:{{ c.source.id }}" value="{{ b.body }}"
+        {% if b.checked %}checked{% endif %}{% if b.disabled %} disabled{% endif %}> {{ b.body }}{% if b.note %} ({{ b.note }}){% endif %}</label>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+      {% if not bodies[c.source.id] %}<span class="muted">{{ c.source.bodies|join(", ") }}</span>{% endif %}<br>
       <span class="muted">How it was found: {{ c.how }}</span></p>
     {% endfor %}
     <p class="muted">Adding writes <code>sources.json</code>, and <code>city.json</code> and

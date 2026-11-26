@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
@@ -366,21 +366,36 @@ def model_rows(city_dir: str | Path | None) -> list[dict[str, str]]:
 
 
 def voice_summary(city_dir: str | Path | None) -> dict[str, Any]:
-    """The engine and each host's voice, from voices.json or the built-in defaults."""
+    """The engine and each host's voice, from voices.json; without the file, nothing is chosen.
+
+    The run uses no engine and no fallback unless voices.json says so, so the page must not
+    claim the built-in defaults were picked.
+    """
+    if city_dir is None or not (Path(city_dir) / voices.SETTINGS_NAME).is_file():
+        return {
+            "engine": "Not chosen yet",
+            "fallback": "—",
+            "voices": {},
+            "note": "Open the Voices page and press Save.",
+        }
     chosen = voices.Voices()
-    if city_dir is not None and (Path(city_dir) / voices.SETTINGS_NAME).is_file():
-        try:
-            chosen = voices.load(city_dir)
-        except voices.VoicesError:
-            chosen = voices.Voices()
+    try:
+        chosen = voices.load(city_dir)
+    except voices.VoicesError:
+        chosen = voices.Voices()
     engine = chosen.chosen_engine
     fields = voices.VOICE_FIELDS.get(engine, ())
     audio = dict(chosen.audio)
     spoken = {field_name: str(audio.get(field_name, "") or "") for field_name in fields}
     return {
         "engine": voices.LABELS.get(engine, engine),
-        "fallback": voices.LABELS.get(chosen.fallback_engine, chosen.fallback_engine or "None"),
+        "fallback": (
+            voices.LABELS.get(chosen.fallback_engine, chosen.fallback_engine)
+            if chosen.fallback_engine
+            else "None (no retry)"
+        ),
         "voices": spoken,
+        "note": "",
     }
 
 
@@ -389,14 +404,31 @@ def voice_summary(city_dir: str | Path | None) -> dict[str, Any]:
 COPY_FILES: Final = (model_settings.SETTINGS_NAME, voices.SETTINGS_NAME)
 
 
-def copy_settings(source_city_dir: str | Path, target_dirs: Iterable[str | Path]) -> list[str]:
+def copy_settings(
+    source_city_dir: str | Path,
+    target_dirs: Iterable[str | Path],
+    names: Mapping[Path, str] | None = None,
+) -> list[str]:
     """Copy the first city's models.json and voices.json to every other city that lacks a
     different one. Files that already match are left alone, and the source city is never
-    written. Returns one line per city changed (or why nothing was)."""
+    written. Returns one line per city changed (or why nothing was).
+
+    ``names`` gives each city folder's display name for those lines; the folder slug is used
+    when it does not.
+    """
     source = Path(source_city_dir)
+    targets = [Path(target) for target in target_dirs]
+
+    def label(folder: Path) -> str:
+        return (names or {}).get(folder) or folder.parent.name
+
     lines: list[str] = []
-    for target in target_dirs:
-        target = Path(target)
+    if not (source / model_settings.SETTINGS_NAME).is_file():
+        lines.append(f"{label(source)} uses the built-in models; there is no models.json to copy.")
+        for target in targets:
+            if target != source and (target / model_settings.SETTINGS_NAME).is_file():
+                lines.append(f"{label(target)} keeps its own models.json.")
+    for target in targets:
         if target == source:
             continue
         copied: list[str] = []
@@ -413,7 +445,7 @@ def copy_settings(source_city_dir: str | Path, target_dirs: Iterable[str | Path]
             tmp.replace(here)
             copied.append(name)
         if copied:
-            lines.append(f"{target.parent.name}: copied {', '.join(copied)}.")
+            lines.append(f"{label(target)}: copied {', '.join(copied)}.")
     return lines
 
 
