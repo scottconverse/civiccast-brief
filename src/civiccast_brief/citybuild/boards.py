@@ -95,6 +95,17 @@ def _empty(path: Path) -> bool:
     return isinstance(data, dict) and not data.get("members")
 
 
+def _hand(path: Path) -> bool:
+    """A roster file the Roster page wrote: its members were entered by hand, so keep them."""
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("hand") is True
+
+
 def _governing(body: str) -> bool:
     return body.casefold() in {b.casefold() for b in GOVERNING}
 
@@ -114,6 +125,9 @@ def write_primegov_rosters(
         if _governing(body):
             continue
         path = folder / ROSTERS_DIR / f"{slug(body)}.json"
+        if _hand(path):
+            lines.append(f"{body}: kept {path.name}; its members were entered by hand")
+            continue
         if not _empty(path):
             lines.append(f"{body}: kept {path.name} (it lists members)")
             continue
@@ -251,7 +265,10 @@ def write_civicweb_rosters(
     except FetchError as exc:
         return [f"{base}: the meeting type list could not be read: {exc}"]
     for body in source.bodies:
-        if roster_for(folder, body) is not None:
+        existing = roster_for(folder, body)
+        if existing is not None:
+            if _hand(existing):
+                lines.append(f"{body}: kept {existing.name}; its members were entered by hand")
             continue
         page_id = pages.get(_fold(body))
         if page_id is None:
@@ -420,6 +437,9 @@ def write_page_rosters(
     lines: list[str] = []
     for body, starts in start_pages(folder, sources).items():
         path = folder / ROSTERS_DIR / f"{slug(body)}.json"
+        if _hand(path):
+            lines.append(f"{body}: kept {path.name}; its members were entered by hand")
+            continue
         if _governing(body) or not _empty(path):
             continue
         members, page = find_board_members(starts, fetcher, pause)

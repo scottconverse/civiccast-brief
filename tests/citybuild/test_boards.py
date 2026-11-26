@@ -343,3 +343,54 @@ def test_a_town_sharing_the_boards_source_gets_the_same_roster(tmp_path, web):
     ours = roster_for(erie, "Board of Education")
     assert ours is not None
     assert ours.read_bytes() == (lyons / "rosters" / "board-of-education.json").read_bytes()
+
+
+# ----- a roster entered on the Roster page is kept by every writer -----------------------------
+
+
+HAND_NOTE = "; its members were entered by hand"
+
+
+def test_the_primegov_writer_keeps_a_hand_entered_roster(tmp_path, web, capsys):
+    folder = _city(tmp_path, web)
+    own = folder / "rosters" / "planning-and-zoning-commission.json"
+    own.parent.mkdir()
+    own.write_text(
+        json.dumps(
+            {
+                "body": "Planning and Zoning Commission",
+                "hand": True,
+                "members": [{"name": "Ada Lovelace", "source": "https://example.org/ada"}],
+            }
+        )
+    )
+    before = own.read_text()
+    cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
+    assert own.read_text() == before
+    out = capsys.readouterr().out
+    assert (
+        "Planning and Zoning Commission: kept planning-and-zoning-commission.json" + HAND_NOTE
+        in out
+    )
+
+
+def test_the_civicweb_writer_keeps_a_hand_entered_roster(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    path = folder / "rosters" / "planning-commission.json"
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps(
+            {
+                "body": "Planning Commission",
+                "hand": True,
+                "members": [{"name": "Ada Lovelace", "source": "https://example.org/ada"}],
+            }
+        )
+    )
+    before = path.read_text()
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    assert path.read_text() == before
+    assert lines == ["Planning Commission: kept planning-commission.json" + HAND_NOTE]

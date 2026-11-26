@@ -228,6 +228,7 @@ def loaded_rosters(city: Path) -> list[dict[str, Any]]:
                     "role": str(member.get("role", "")),
                     "seen": [str(s) for s in member.get("seen", [])],
                     "records": records,
+                    "source": str(member.get("source", "")),
                 }
             )
         out.append(

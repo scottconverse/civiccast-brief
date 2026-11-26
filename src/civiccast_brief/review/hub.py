@@ -1172,6 +1172,19 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
 
     def rosters_row(spec: setup_wizard.CitySpec) -> dict[str, Any]:
         rosters = setup_wizard.rosters(spec.city_dir)
+        missing = [
+            str(row["body"])
+            for row in setup_wizard.roster_body_rows(spec.city_dir)
+            if not row["file"]
+        ]
+        if missing:
+            return done_row(
+                "Rosters",
+                False,
+                "No members for: " + ", ".join(missing) + ".",
+                "/setup/rosters",
+                "Rosters",
+            )
         if not rosters:
             return done_row("Rosters", False, "No roster file yet.", "/setup/rosters", "Rosters")
         members = sum(len(roster.get("members") or []) for roster in rosters)
