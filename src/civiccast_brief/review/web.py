@@ -444,11 +444,14 @@ class DeskApp:
         engine = str(form.get("engine") or "") if form is not None else current.engine
         if not engine and form is None:
             engine = voices.DEFAULT_ENGINE
-        fallback = (
-            str(form.get("fallback_engine") or "")
-            if form is not None
-            else current.fallback_engine or voices.DEFAULT_FALLBACK
-        )
+        has_file = self.city_dir is not None and (self.city_dir / voices.SETTINGS_NAME).is_file()
+        if form is not None:
+            fallback = str(form.get("fallback_engine") or "")
+        elif has_file:
+            # The saved file is the truth, including an empty fallback (None).
+            fallback = current.fallback_engine
+        else:
+            fallback = voices.DEFAULT_FALLBACK
         blocks = []
         for name in voices.OFFERED:
             inputs = []
@@ -530,7 +533,11 @@ MAX_SEARCHES = 5
 
 
 def _city_names(city_dir: Path | None) -> dict[str, str]:
-    """The city's name and state from city.json and roster.json, to start the find form."""
+    """The city's name, state and website, to start the find form.
+
+    ``city.json`` and ``roster.json`` hold them once the city is built; a new city has neither
+    yet, so its ``setup.json`` (in the city folder's parent) fills whatever is still missing.
+    """
     out: dict[str, str] = {}
     if city_dir is None:
         return out
@@ -543,6 +550,47 @@ def _city_names(city_dir: Path | None) -> dict[str, str]:
             value = data.get(key) if isinstance(data, dict) else None
             if isinstance(value, str) and value.strip() and key not in out:
                 out[key] = value.strip()
+    for key in ("name", "state", "website"):
+        if out.get(key):
+            continue
+        value = getattr(setup_wizard.read_setup(city_dir.parent), key, "")
+        if value:
+            out[key] = value
+    return out
+
+
+def _body_choices(found: Any, city_dir: Path | None) -> dict[str, list[dict[str, Any]]]:
+    """Each candidate's bodies as checkboxes: what the saved source covers is checked and
+    disabled, and a body a saved source lacks starts unticked, so Add cannot put it back."""
+    saved: dict[str, city_sources.Source] = {}
+    if city_dir is not None:
+        try:
+            saved = {source.id: source for source in city_sources.load_sources(city_dir)}
+        except city_sources.SourceError:
+            saved = {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for candidate in found.candidates:
+        old = saved.get(candidate.source.id)
+        rows: list[dict[str, Any]] = []
+        for body in candidate.source.bodies:
+            if old is None:
+                rows.append({"body": body, "checked": True, "disabled": False, "note": ""})
+                continue
+            covered = any(body.casefold() == kept.casefold() for kept in old.bodies)
+            if covered:
+                rows.append(
+                    {"body": body, "checked": True, "disabled": True, "note": "already saved"}
+                )
+            else:
+                rows.append(
+                    {
+                        "body": body,
+                        "checked": False,
+                        "disabled": False,
+                        "note": "not on the saved source; tick to add",
+                    }
+                )
+        out[candidate.source.id] = rows
     return out
 
 
@@ -1469,9 +1517,12 @@ def make_desk_app(
         return state.page(
             "find.html",
             title="Find sources",
-            form=form,
+            # The "other bodies" lines have been searched; show the city fields, not them, so
+            # a second Search does not send the same lines again.
+            form={key: value for key, value in form.items() if key != "also"},
             found=found,
             search_id=search_id,
+            bodies=_body_choices(found, state.city_dir),
             kind_labels=city_sources.KIND_LABELS,
             error="",
             error_field="",
@@ -1481,6 +1532,7 @@ def make_desk_app(
     async def find_save(request: Request) -> Response:
         from civiccast_brief.citybuild import browser
         from civiccast_brief.citybuild.build import build_city
+        from civiccast_brief.citybuild.search import Candidate
 
         raw = await request.form()
         form = {k: str(v) for k, v in raw.items()}
@@ -1502,25 +1554,57 @@ def make_desk_app(
                 error="That search is no longer kept. Search again, then add.",
             )
         chosen = [str(v) for v in raw.getlist("chosen")]
-        if not chosen:
+        search_id = form.get("search", "")
+
+        def show(error: str) -> HTMLResponse:
             return state.page(
                 "find.html",
                 status=400,
                 title="Find sources",
-                form={},
+                form=_city_names(state.city_dir),
                 found=found,
-                search_id=form.get("search", ""),
+                search_id=search_id,
+                bodies=_body_choices(found, state.city_dir),
                 error_field="",
                 kind_labels=city_sources.KIND_LABELS,
-                error="Nothing was added: check at least one source.",
+                error=error,
             )
+
+        if not chosen:
+            return show("Nothing was added: check at least one source.")
+        try:
+            saved = {source.id: source for source in city_sources.load_sources(state.city_dir)}
+        except city_sources.SourceError as exc:
+            return state.sources_page(error=f"Not saved: {exc}", status=400)
+        picked_ids = set(chosen)
+        narrowed: list[Any] = []
+        for candidate in found.candidates:
+            source_id = candidate.source.id
+            if source_id not in picked_ids:
+                continue
+            ticked = {str(value) for value in raw.getlist(f"body:{source_id}")}
+            picked = tuple(body for body in candidate.source.bodies if body in ticked)
+            old = saved.get(source_id)
+            if old is None:
+                if not picked:
+                    return show(f"Tick at least one body for {candidate.source.address}.")
+                bodies = picked
+            else:
+                known = {body.casefold() for body in old.bodies}
+                bodies = old.bodies + tuple(b for b in picked if b.casefold() not in known)
+            narrowed.append(
+                Candidate(dataclasses.replace(candidate.source, bodies=bodies), candidate.how)
+            )
+        # Only the ticked bodies go forward: a body removed on the Sources page must not come
+        # back through merge_sources, which fills in every body a saved source lacks.
+        to_save = dataclasses.replace(found, candidates=narrowed)
         try:
             built = await run_in_threadpool(
                 _then_close_chrome,
                 build_city,
                 state.city_dir,
-                found,
-                chosen=chosen,
+                to_save,
+                chosen=[candidate.source.id for candidate in narrowed],
                 fetcher=state.make_fetcher(),
                 open_in_browser=browser.open_page,
             )
@@ -1563,9 +1647,10 @@ def make_desk_app(
                 "find.html",
                 status=400,
                 title="Find sources",
-                form={},
+                form=_city_names(state.city_dir),
                 found=found,
                 search_id=search_id,
+                bodies=_body_choices(found, state.city_dir),
                 error_field="",
                 kind_labels=city_sources.KIND_LABELS,
                 error=error,

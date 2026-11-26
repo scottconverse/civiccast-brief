@@ -18,6 +18,7 @@ copy them into the others. Both settings are optional today.</p>
 </table>
 <p><a href="/c/{{ first.slug }}/settings">Change {{ first.name }}'s models</a></p>
 <h3>Voices</h3>
+{% if voice.note %}<p class="muted">{{ voice.note }}</p>{% endif %}
 <table>
   <thead><tr><th>Engine</th><th>Retry with</th><th>Voices</th></tr></thead>
   <tbody>

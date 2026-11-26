@@ -626,3 +626,141 @@ def test_the_page_shows_a_body_with_no_roster_and_its_entered_names(store, city)
     assert 'href="https://x.test" rel="noopener noreferrer">open</a>' in page
     assert "data-confirm" in page
     assert "/roster/add" in page
+
+
+# ----- the Find page's city fields and bodies, and the Voices page's saved fallback -----------
+
+
+def city_in_slug_folder(tmp_path, *, setup=None, sources_data=None):
+    """A city folder laid out as the hub makes it: DIR/<slug>/city, with setup.json beside it."""
+    slug = tmp_path / "estes-park"
+    city = slug / "city"
+    city.mkdir(parents=True)
+    if setup is not None:
+        (slug / "setup.json").write_text(json.dumps(setup), encoding="utf-8")
+    if sources_data is not None:
+        (city / "sources.json").write_text(json.dumps(sources_data), encoding="utf-8")
+    return city
+
+
+def search_with(*candidates):
+    from civiccast_brief.citybuild.search import Candidate, Search
+
+    return Search(
+        name="Longmont",
+        state="CO",
+        website="https://city.test/",
+        candidates=[Candidate(source, "from the site") for source in candidates],
+    )
+
+
+def test_the_find_page_starts_from_setup_json_for_a_new_city(store, tmp_path):
+    city = city_in_slug_folder(
+        tmp_path,
+        setup={"name": "Estes Park", "state": "CO", "website": "https://www.estes.org/"},
+    )
+    page = client_for(store, city).get("/sources/find")
+    assert page.status_code == 200
+    assert 'value="Estes Park"' in page.text
+    assert 'value="CO"' in page.text
+    assert 'value="https://www.estes.org/"' in page.text
+
+
+def test_the_find_result_keeps_the_city_fields_and_drops_the_searched_also_lines(
+    store, city, monkeypatch
+):
+    from civiccast_brief.citybuild import search as search_module
+
+    found = search_with(
+        sources.make_source(
+            "webpage", {"url": "https://x.test/agendas", "bodies": ["City Council"]}
+        )
+    )
+    monkeypatch.setattr(search_module, "search_city", lambda *args, **kwargs: found)
+    client = client_for(store, city)
+    page = client.post(
+        "/sources/find",
+        data={
+            "token": token(client),
+            "name": "Longmont",
+            "state": "CO",
+            "website": "https://x.test/",
+            "also": "DDA | https://x.test/dda",
+        },
+    )
+    assert page.status_code == 200
+    assert 'value="Longmont"' in page.text and 'value="CO"' in page.text
+    assert "DDA | https://x.test/dda" not in page.text
+    assert (
+        'placeholder="Board of Education | https://www.yourdistrict.org/board/meetings/"></textarea>'
+        in page.text
+    )
+
+
+def test_find_save_writes_only_the_ticked_bodies(store, tmp_path):
+    url = "https://x.test/agendas"
+    city = city_in_slug_folder(
+        tmp_path,
+        sources_data={
+            "format": 1,
+            "sources": [{"kind": "webpage", "url": url, "bodies": ["City Council"]}],
+        },
+    )
+    client = client_for(store, city)
+    client.app.state.desk.make_fetcher = lambda: None
+    source = sources.make_source("webpage", {"url": url, "bodies": ["City Council", "DDA"]})
+    client.app.state.desk.searches["s1"] = search_with(source)
+    only_council = client.post(
+        "/sources/find/save",
+        data={
+            "token": token(client),
+            "search": "s1",
+            "chosen": source.id,
+            f"body:{source.id}": ["City Council"],
+        },
+        follow_redirects=False,
+    )
+    assert only_council.status_code == 303
+    assert sources.load_sources(city)[0].bodies == ("City Council",)
+
+    client.app.state.desk.searches["s2"] = search_with(source)
+    both = client.post(
+        "/sources/find/save",
+        data={
+            "token": token(client),
+            "search": "s2",
+            "chosen": source.id,
+            f"body:{source.id}": ["City Council", "DDA"],
+        },
+        follow_redirects=False,
+    )
+    assert both.status_code == 303
+    assert sources.load_sources(city)[0].bodies == ("City Council", "DDA")
+
+
+def test_find_save_refuses_a_new_source_with_no_body_ticked(store, city):
+    client = client_for(store, city)
+    client.app.state.desk.make_fetcher = lambda: None
+    source = sources.make_source("webpage", {"url": "https://y.test/agendas", "bodies": ["DDA"]})
+    client.app.state.desk.searches["s1"] = search_with(source)
+    refused = client.post(
+        "/sources/find/save",
+        data={"token": token(client), "search": "s1", "chosen": source.id},
+    )
+    assert refused.status_code == 400
+    assert "Tick at least one body for https://y.test/agendas." in refused.text
+    assert sources.load_sources(city) == []
+
+
+def test_the_voices_page_shows_the_saved_empty_fallback_as_none(store, city):
+    (city / "voices.json").write_text(
+        json.dumps({"engine": "gemini", "fallback_engine": "", "audio": {}}), encoding="utf-8"
+    )
+    page = client_for(store, city).get("/voices")
+    assert '<option value="" selected>None</option>' in page.text
+    assert '<option value="lfm3" selected>' not in page.text
+
+
+def test_the_voices_page_starts_on_lfm3_when_there_is_no_voices_json(store, city):
+    page = client_for(store, city).get("/voices")
+    assert '<option value="lfm3" selected>' in page.text

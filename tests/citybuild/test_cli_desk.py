@@ -148,14 +148,15 @@ def test_the_find_screen_searches_then_adds_only_the_checked_sources(web, desk, 
     assert load_sources(city) == []  # nothing is saved by the search
     search = client.app.state.desk.searches
     (search_id,) = search
-    saved = client.post(
-        "/sources/find/save",
-        data={
-            "token": t,
-            "search": search_id,
-            "chosen": [f"gdrive:{TPCA_ROOT}", "primegov:longmont.primegov.com"],
-        },
-    )
+    found_search = search[search_id]
+    data: dict[str, object] = {
+        "token": t,
+        "search": search_id,
+        "chosen": [f"gdrive:{TPCA_ROOT}", "primegov:longmont.primegov.com"],
+    }
+    for candidate in found_search.candidates:
+        data[f"body:{candidate.source.id}"] = list(candidate.source.bodies)
+    saved = client.post("/sources/find/save", data=data)
     assert saved.status_code == 200
     assert "Added 2 sources: PrimeGov portal (" in saved.text
     assert "Google Drive folder (1 body)" in saved.text
@@ -273,9 +274,15 @@ def test_the_desk_closes_chrome_in_the_thread_that_opened_it(web, desk, monkeypa
     assert found.status_code == 200
     assert threads["open"] and threads["close"] == threads["open"][:1]
     (search_id,) = client.app.state.desk.searches
+    candidate = client.app.state.desk.searches[search_id].candidates[0]
     saved = client.post(
         "/sources/find/save",
-        data={"token": t, "search": search_id, "chosen": "primegov:loveland.primegov.com"},
+        data={
+            "token": t,
+            "search": search_id,
+            "chosen": "primegov:loveland.primegov.com",
+            f"body:{candidate.source.id}": list(candidate.source.bodies),
+        },
     )
     assert saved.status_code == 303 or saved.status_code == 200
     assert threads["build"] and threads["close"][1:] == threads["build"]
