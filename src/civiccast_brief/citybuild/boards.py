@@ -29,6 +29,7 @@ from civiccast_brief.citybuild.fetch import Fetcher, FetchError
 from civiccast_brief.citybuild.members import GOVERNING
 from civiccast_brief.citybuild.platforms import civicweb_base, civicweb_body
 from civiccast_brief.citybuild.read import committee_for, committees
+from civiccast_brief.citybuild.search import state_name
 from civiccast_brief.sources import Source
 
 ROSTERS_DIR: Final = "rosters"
@@ -146,7 +147,7 @@ def write_primegov_rosters(
             continue
         roster = {
             "city": city,
-            "state": state,
+            "state": state_name(state),
             "body": body,
             "retrieved": today.isoformat(),
             "sources": [base + COMMITTEES_PAGE],
@@ -290,7 +291,7 @@ def write_civicweb_rosters(
             continue
         roster = {
             "city": city,
-            "state": state,
+            "state": state_name(state),
             "body": body,
             "retrieved": today.isoformat(),
             "sources": [url],
@@ -452,7 +453,7 @@ def write_page_rosters(
             continue
         roster = {
             "city": city,
-            "state": state,
+            "state": state_name(state),
             "body": body,
             "retrieved": today.isoformat(),
             "sources": [page],

@@ -32,6 +32,7 @@ from civiccast_brief.citybuild.boards import ROSTERS_DIR, _empty, _governing, sl
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError, Page
 from civiccast_brief.citybuild.members import _ANY, _UP, as_name, page_lines, split_name
 from civiccast_brief.citybuild.page import parse
+from civiccast_brief.citybuild.search import state_name
 from civiccast_brief.sources import Source
 
 #: Fewer members than this is not a roster.
@@ -544,7 +545,7 @@ def write_site_rosters(
             continue
         roster = {
             "city": city,
-            "state": state,
+            "state": state_name(state),
             "body": body,
             "retrieved": today.isoformat(),
             "sources": [page_url],

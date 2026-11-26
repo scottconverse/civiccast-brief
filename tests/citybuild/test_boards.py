@@ -414,3 +414,32 @@ def test_the_civicweb_writer_replaces_an_empty_hand_entered_roster(tmp_path, web
     assert lines == [
         f"Planning Commission: wrote planning-commission.json, 11 members from {PLANNING_MEMBERS}"
     ]
+
+
+def test_a_primegov_roster_stores_the_states_full_name_from_a_code(tmp_path, web, capsys):
+    folder = _city(tmp_path, web)
+    roster = json.loads((folder / "roster.json").read_text(encoding="utf-8"))
+    roster["state"] = "CO"
+    (folder / "roster.json").write_text(json.dumps(roster), encoding="utf-8")
+    cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
+    path = folder / "rosters" / "planning-and-zoning-commission.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["state"] == "Colorado"
+
+
+def test_a_civicweb_roster_stores_the_states_full_name_from_a_code(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "CO", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    path = folder / "rosters" / "planning-commission.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["state"] == "Colorado"
+
+
+def test_a_school_board_roster_stores_the_states_full_name_from_a_code(tmp_path, web, capsys):
+    web.add(SVVSD_BOARD, _page("svvsd-board-of-education.html"))
+    folder = _school_city(tmp_path, "lyons")
+    (folder / "roster.json").write_text(json.dumps({"state": "CO", "body": "City Council"}))
+    cli._rosters(argparse.Namespace(city=folder), fetcher=web.fetcher())
+    path = folder / "rosters" / "board-of-education.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["state"] == "Colorado"
