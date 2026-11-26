@@ -37,7 +37,7 @@
         <form method="post" action="{{ root }}/sources/remove">
           <input type="hidden" name="token" value="{{ token }}">
           <input type="hidden" name="source_id" value="{{ s.id }}">
-          <button type="submit" data-busy="Removing…">Remove</button>
+          <button type="submit" data-busy="Removing…" data-confirm="Remove {{ s.address }} for {{ s.bodies|join(", ") }}? The weekly run stops reading it.">Remove</button>
         </form>
       </td>
     </tr>
