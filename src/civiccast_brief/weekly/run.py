@@ -39,8 +39,9 @@ import shutil
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlparse
 
 from civiccast_brief.audio.errors import ToolError
 from civiccast_brief.audio.ffmpeg import probe_duration
@@ -851,6 +852,43 @@ def _refresh_names(
     return []
 
 
+def _rebase_media(site_file: Path, media: Path, media_base_url: str) -> list[tuple[str, bool]]:
+    """Move a built episode's media links to the city's current media address. The episode is
+    built again only when its desk content changes, so a Website step that changes the media
+    address never reached an episode already on the site, and the feed and its pages kept
+    pointing at the old one. A link moves only to a file the media folder holds."""
+    try:
+        data = json.loads(site_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    base = media_base_url.rstrip("/")
+    spots: list[tuple[dict[str, Any], str]] = []
+    audio = data.get("audio")
+    if isinstance(audio, dict):
+        spots.append((audio, "url"))
+    spots.append((data, "chapters_url"))
+    spots.append((data, "vtt_url"))
+    changed = False
+    for holder, key in spots:
+        url = holder.get(key)
+        if not isinstance(url, str) or not url:
+            continue
+        name = PurePosixPath(urlparse(url).path).name
+        want = f"{base}/{name}"
+        if url == want:
+            continue
+        if (media / name).is_file():
+            holder[key] = want
+            changed = True
+    if not changed:
+        return []
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    site_file.write_text(text, encoding="utf-8", newline="\n")
+    return [(f"{data.get('id')}: media links moved to {base}", False)]
+
+
 def _file_id(path: Path) -> str:
     """The ``id`` a built site file carries, or "" when it is missing or unreadable."""
     try:
@@ -1021,6 +1059,7 @@ def publish(
             built_file = site.episodes / f"{built[meeting_id]}.json"
             if built_file.is_file():
                 log += _refresh_names(steps, built_file, runs.get(meeting_id), meeting_id)
+                log += _rebase_media(built_file, site.media, site.media_base_url)
             continue
         entry = runs.get(meeting_id)
         if entry is None:
