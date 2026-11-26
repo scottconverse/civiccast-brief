@@ -322,6 +322,54 @@ def test_a_channel_whose_feed_answers_404_is_found_through_the_data_api(web, mon
     assert not [u for u in found.unread if u.platform == "YouTube"]
 
 
+def test_an_old_video_title_does_not_name_a_body(web):
+    """Berthoud's board is the Board of Trustees; its feed still holds 2023 "Town Board" videos."""
+    web.add(
+        "https://www.berthoud.test/",
+        '<html><a href="https://www.youtube.com/channel/UCH5_wkpLrKYb1JuUk6-UdNg">Meetings</a></html>',
+    )
+    web.add(
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UCH5_wkpLrKYb1JuUk6-UdNg",
+        feed(
+            ("aaaaaaaaaaa", "2023 07 11 Town Board Meeting", "2023-07-11T03:00:00+00:00"),
+            ("bbbbbbbbbbb", "10 27 2026 Board of Trustees Meeting", "2026-10-28T03:00:00+00:00"),
+        ),
+        "application/atom+xml",
+    )
+    found = search_city(
+        "Berthoud",
+        "CO",
+        website="https://www.berthoud.test/",
+        fetcher=web.fetcher(),
+        today=date(2026, 11, 25),
+    )
+    (channel,) = by_kind(found)["youtube"]
+    assert channel.bodies == ("Board of Trustees",)
+
+
+def test_a_channel_whose_only_body_titles_are_old_is_unread_not_saved(web):
+    web.add(
+        "https://www.berthoud.test/",
+        '<html><a href="https://www.youtube.com/channel/UCH5_wkpLrKYb1JuUk6-UdNg">Meetings</a></html>',
+    )
+    web.add(
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UCH5_wkpLrKYb1JuUk6-UdNg",
+        feed(("aaaaaaaaaaa", "2023 07 11 Town Board Meeting", "2023-07-11T03:00:00+00:00")),
+        "application/atom+xml",
+    )
+    found = search_city(
+        "Berthoud",
+        "CO",
+        website="https://www.berthoud.test/",
+        fetcher=web.fetcher(),
+        today=date(2026, 11, 25),
+    )
+    assert "youtube" not in by_kind(found)
+    (unread,) = [u for u in found.unread if u.platform == "YouTube"]
+    assert "older than a year" in unread.note
+    assert unread.channel == CHANNEL
+
+
 # ----- CivicClerk, eScribe and CivicPlus ---------------------------------------------------------
 
 

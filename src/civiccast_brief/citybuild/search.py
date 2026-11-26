@@ -116,6 +116,9 @@ COMMON_BODIES: Final = (
 KEYWORDS: Final = ("agenda", "meeting", "minutes", "board", "commission", "council", "video")
 #: How many of the city site's own pages are read after the home page.
 MAX_PAGES: Final = 8
+#: Only titles of videos published within this many days of today name a body: a channel's feed
+#: keeps old videos too, and a video titled with a retired body name is not that body today.
+OLD_TITLE_DAYS: Final = 365
 #: Words in a link's text that point at a page of meetings, agendas or video: read before the
 #: other pages with a keyword (a city's menu lists many pages, and only the first MAX_PAGES are read).
 _FIRST_WORDS: Final = ("meeting", "agenda", "minutes", "video", "watch", "council")
@@ -303,7 +306,7 @@ def search_city(
             _granicus(result, item, fetcher, None)
     youtube = [f for f in platforms if f.platform == "youtube"]
     for item in youtube:
-        _youtube(result, item, fetcher, None)
+        _youtube(result, item, fetcher, None, today)
     for item in platforms:
         if item.platform in _LISTED:
             _LISTED[item.platform](result, item, fetcher, today, None)
@@ -556,7 +559,14 @@ def channel_id(item: detect.Found, fetcher: Fetcher) -> str:
     return ""
 
 
-def _youtube(result: Search, item: detect.Found, fetcher: Fetcher, body: str | None) -> None:
+def _youtube(
+    result: Search,
+    item: detect.Found,
+    fetcher: Fetcher,
+    body: str | None,
+    today: date | None = None,
+) -> None:
+    today = today or date.today()
     try:
         channel = channel_id(item, fetcher)
     except FetchError as exc:
@@ -580,9 +590,24 @@ def _youtube(result: Search, item: detect.Found, fetcher: Fetcher, body: str | N
             Unread("YouTube", item.url, f"the channel feed did not answer: {exc}", channel)
         )
         return
-    titles = " | ".join(title for _, title, _ in videos)
-    bodies = [b for b in _known_bodies(result, body) if body_matches(b, titles, result.name)]
+    known = _known_bodies(result, body)
+    recent = [v for v in videos if (today - v[2]).days <= OLD_TITLE_DAYS]
+    titles = " | ".join(title for _, title, _ in recent)
+    bodies = [b for b in known if body_matches(b, titles, result.name)]
     if not bodies:
+        naming = [v for v in videos if any(body_matches(b, v[1], result.name) for b in known)]
+        if naming:
+            newest = max(naming, key=lambda v: v[2])[2]
+            result.unread.append(
+                Unread(
+                    "YouTube",
+                    item.url,
+                    "its videos naming a body are all older than a year "
+                    f"(newest {newest:%B} {newest.year})",
+                    channel,
+                )
+            )
+            return
         result.unread.append(
             Unread(
                 "YouTube",
@@ -643,7 +668,7 @@ def _extra_page(result: Search, body: str, url: str, fetcher: Fetcher, today: da
         )
         return
     if item is not None and item.platform == "youtube":
-        _youtube(result, item, fetcher, body)
+        _youtube(result, item, fetcher, body, today)
         return
     if item is not None and item.platform == "granicus":
         _granicus(result, item, fetcher, body)

@@ -33,6 +33,8 @@ COMMITTEES_PATH: Final = "/api/committee/GetCommitteeesListByShowInPublicPortal"
 FEED_URL: Final = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 #: How many meetings or documents a reader tries before it says it found none it could read.
 TRIES: Final = 5
+#: A body whose newest video is older than this has moved or stopped posting.
+STALE_DAYS: Final = 180
 #: The earliest year of a PrimeGov archive that is asked for a board's last meeting.
 PRIMEGOV_FIRST_YEAR: Final = 2015
 #: A meeting page that follows a list is read only when its date is this close to today.
@@ -407,8 +409,14 @@ def _youtube(
     proof.title = title
     proof.meeting_date = day
     proof.document = f"https://www.youtube.com/watch?v={video_id}"
+    if (today - day).days > STALE_DAYS:
+        proof.problem = (
+            f"the newest video naming {proof.body!r} is from {day:%B} {day.day}, {day.year}; "
+            "the channel has posted none for it since. Pick another video source for this body."
+        )
+        return
     if not captions:
-        proof.what = "video (captions not fetched; check with --captions)"
+        proof.what = "video (its captions are read when the meeting is written)"
         proof.lines = [f"published {day.isoformat()}"]
         proof.ok = True
         return

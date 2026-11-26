@@ -71,6 +71,7 @@ _NOT_NAME_HERE = re.compile(
 _SEAT_KINDS = frozenset({"resident", "student", "youth", "citizen", "owner", "designee"})
 _STAFF = re.compile(
     r"\b(?:liaison|staff|planner|director|manager|coordinator|specialist|engineer|attorney|counsel"
+    r"|chief"
     r"|administrator|analyst|technician|supervisor|clerk|advis[eo]r|volunteer|curator)\b",
     re.IGNORECASE,
 )

@@ -219,7 +219,7 @@ def members_from_civicweb(markup: str, today: date) -> list[dict[str, str]]:
         if ctl is None or not name or name in seen:
             continue
         title = _span(markup, ctl[1], "Title")
-        if _STAFF.search(title):
+        if _STAFF.search(title) or name.strip().casefold() == "vacant":
             continue
         start, end = _term(_span(markup, ctl[1], "Term"))
         if (end is not None and end < today) or (start is not None and start > today):

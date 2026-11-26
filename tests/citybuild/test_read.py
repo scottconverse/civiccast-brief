@@ -339,9 +339,40 @@ def test_youtube_without_captions_names_the_newest_matching_video(web):
     assert proof.document == "https://www.youtube.com/watch?v=bbbbbbbbbbb"
     # The meeting day is the one in the title, not the day the video went up.
     assert proof.meeting_date == date(2026, 10, 28)
-    assert proof.what.startswith("video (captions not fetched")
+    assert proof.what == "video (its captions are read when the meeting is written)"
     missing = read_latest(source, "Water Board", web.fetcher(), today=TODAY)
     assert not missing.ok and "names 'Water Board'" in missing.problem
+
+
+def test_a_youtube_body_whose_newest_video_is_stale_is_not_read(web):
+    # 200 days before TODAY (2026-11-10) is 2026-04-24: the channel stopped posting for it.
+    web.add(
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL}",
+        feed(
+            ("aaaaaaaaaaa", "City Council Regular Session 4/23/2026", "2026-04-24T03:00:00+00:00")
+        ),
+        "application/atom+xml",
+    )
+    source = make_source("youtube", {"channel_id": CHANNEL, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=TODAY)
+    assert not proof.ok
+    assert proof.title == "City Council Regular Session 4/23/2026"
+    assert proof.meeting_date == date(2026, 4, 23)
+    assert "is from" in proof.problem
+    assert "Pick another video source" in proof.problem
+
+
+def test_a_youtube_body_whose_newest_video_is_recent_is_read(web):
+    # 100 days before TODAY (2026-11-10) is 2026-08-02.
+    web.add(
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL}",
+        feed(("aaaaaaaaaaa", "City Council Regular Session 8/1/2026", "2026-08-02T03:00:00+00:00")),
+        "application/atom+xml",
+    )
+    source = make_source("youtube", {"channel_id": CHANNEL, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    assert proof.what == "video (its captions are read when the meeting is written)"
 
 
 def test_a_page_that_does_not_answer_is_a_problem_not_a_crash(web):
