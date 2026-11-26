@@ -60,6 +60,28 @@ def test_city_check_names_the_body_when_no_show_matches(web, monkeypatch):
     assert proof.problem == f"no show on {HOST} names 'Library Board' in its title"
 
 
+def test_city_check_reads_a_show_with_no_captions_as_transcribable(web, monkeypatch):
+    monkeypatch.setattr(cablecast, "list_shows", lambda host: _shows())
+
+    def no_captions(show):
+        raise cablecast.CablecastError(
+            f"show {show.show_id} on {show.host} has no caption lines; "
+            "the audio is transcribed on this computer"
+        )
+
+    monkeypatch.setattr(cablecast, "fetch_captions", no_captions)
+    source = make_source("cablecast", {"host": HOST, "bodies": ["City Council"]})
+    proof = read_latest(source, "City Council", web.fetcher(), today=TODAY)
+    assert proof.ok, proof.problem
+    assert proof.what == "video show with no captions; it is transcribed on this computer"
+    assert proof.lines == [
+        (
+            "no captions on Cablecast; the audio is transcribed on this computer when the "
+            "meeting is written"
+        )
+    ]
+
+
 def test_city_check_reports_a_listing_that_fails(web, monkeypatch):
     def broken(host):
         raise cablecast.CablecastError("could not fetch: HTTP Error 503")

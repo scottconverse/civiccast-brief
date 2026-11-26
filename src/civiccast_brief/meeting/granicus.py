@@ -6,7 +6,8 @@ The clip's captions, when the city keeps them, are at ``https://<host>/videos/<i
 The player page names the clip's MP4 file, which ffmpeg reads for the audio.
 
 Not every Granicus city keeps captions (some caption files are empty). A clip with no caption
-lines stops the run with that reason; nothing is transcribed from audio here.
+lines is transcribed on this machine: its audio is fetched with ffmpeg and turned into caption
+items by the local speech program (see :mod:`civiccast_brief.meeting.direct`).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from civiccast_brief import townlight_imports
+from civiccast_brief.meeting import direct
 from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
 FETCH_TIMEOUT_S = 60
@@ -200,6 +202,8 @@ class GranicusCapture:
     caption_file: Path
     caption_reused: bool
     items: list[dict[str, Any]]
+    #: True when the lines came from this machine's speech program rather than the city.
+    transcribed: bool = False
 
     @property
     def meeting_id(self) -> str:
@@ -238,9 +242,21 @@ def capture(host: str, view_id: int, clip_id: int, raw_dir: Path) -> GranicusCap
         clip_file.write_text(json.dumps(asdict(clip), indent=2) + "\n", encoding="utf-8")
         items = parse_vtt(vtt_file.read_text(encoding="utf-8"))
     if not items:
-        raise GranicusError(
-            f"clip {clip_id} on {host} has no caption lines; this city does not keep captions "
-            "for it, and CivicCast Brief does not transcribe audio"
+        # The city keeps no captions for this clip: transcribe its audio on this machine.
+        try:
+            spoken = direct.transcribe(
+                media_url(clip.host, clip.view_id, clip.clip_id, clip.mp3_url),
+                raw_dir,
+                meeting_id(clip.host, clip.clip_id),
+            )
+        except direct.DirectError as exc:
+            raise GranicusError(str(exc)) from exc
+        return GranicusCapture(
+            clip=clip,
+            caption_file=spoken.caption_file,
+            caption_reused=spoken.caption_reused,
+            items=spoken.items,
+            transcribed=True,
         )
     return GranicusCapture(clip=clip, caption_file=vtt_file, caption_reused=reused, items=items)
 

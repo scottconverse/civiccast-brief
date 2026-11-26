@@ -137,9 +137,9 @@ Find where the city puts its meeting videos.
 
 - **YouTube.** Each meeting is a video whose title holds the meeting date.
 - **Granicus.** The meeting list is at `https://<host>/ViewPublisher.php?view_id=<n>`. Open it in a
-  browser and note the host and the `view_id`. A clip works only when the city keeps captions for it
-  (`https://<host>/videos/<clip>/captions.vtt` has text). Some Granicus cities keep none, and
-  CivicCast Brief does not transcribe audio.
+  browser and note the host and the `view_id`. When the city keeps captions for a clip
+  (`https://<host>/videos/<clip>/captions.vtt` has text), those are the transcript. Some Granicus
+  cities keep none; then CivicCast Brief transcribes the clip's audio on this computer.
 
 The city's video platform is never guessed. Say it with `--platform` (`youtube`, `granicus`,
 `cablecast` or `none`), or let `setup` take the one it finds (`--granicus`, `--cablecast`, or a

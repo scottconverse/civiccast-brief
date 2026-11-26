@@ -34,16 +34,18 @@ def test_granicus_with_captions_reads_the_newest_clip(web, monkeypatch):
     ]
 
 
-def test_granicus_with_an_empty_caption_file_is_not_read(web, monkeypatch):
+def test_granicus_with_an_empty_caption_file_is_read_as_transcribable(web, monkeypatch):
     monkeypatch.setattr(granicus, "list_clips", lambda h, v: [_granicus_clip()])
     monkeypatch.setattr(granicus, "_fetch", lambda url: "WEBVTT\n")
     proof = read_latest(_granicus_source(), "City Council", web.fetcher(), today=TODAY)
-    assert not proof.ok
-    assert proof.problem == (
-        "the newest clip (November 4, 2026) has no captions on Granicus, and CivicCast Brief "
-        "needs a meeting's captions. Ask the city to turn on captions for its Granicus videos, "
-        "or pick another video source for this body."
-    )
+    assert proof.ok, proof.problem
+    assert proof.what == "video clip with no captions; it is transcribed on this computer"
+    assert proof.lines == [
+        (
+            "no captions on Granicus; the audio is transcribed on this computer when the "
+            "meeting is written"
+        )
+    ]
 
 
 def test_granicus_caption_fetch_that_fails_is_a_problem(web, monkeypatch):
@@ -92,21 +94,23 @@ def test_cablecast_with_captions_reads_the_newest_show(web, monkeypatch):
     ]
 
 
-def test_cablecast_with_no_captions_is_not_read(web, monkeypatch):
+def test_cablecast_with_no_captions_is_read_as_transcribable(web, monkeypatch):
     monkeypatch.setattr(cablecast, "list_shows", lambda host: [_cablecast_show()])
     monkeypatch.setattr(cablecast, "find_show", lambda host, show_id: _cablecast_show())
 
     def no_captions(show):
         raise cablecast.CablecastError(
-            f"show {show.show_id} on {show.host} has no caption lines; this city does not keep "
-            "captions for it, and CivicCast Brief does not transcribe audio"
+            f"show {show.show_id} on {show.host} has no caption lines; "
+            "the audio is transcribed on this computer"
         )
 
     monkeypatch.setattr(cablecast, "fetch_captions", no_captions)
     proof = read_latest(_cablecast_source(), "City Council", web.fetcher(), today=TODAY)
-    assert not proof.ok
-    assert proof.problem == (
-        "the newest show (November 4, 2026) has no captions on Cablecast, and CivicCast Brief "
-        "needs a meeting's captions. Ask the city to turn on captions for its Cablecast videos, "
-        "or pick another video source for this body."
-    )
+    assert proof.ok, proof.problem
+    assert proof.what == "video show with no captions; it is transcribed on this computer"
+    assert proof.lines == [
+        (
+            "no captions on Cablecast; the audio is transcribed on this computer when the "
+            "meeting is written"
+        )
+    ]

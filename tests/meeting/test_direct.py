@@ -5,6 +5,7 @@ Every test uses fakes: no network, no GPU and no real transcription.
 
 import json
 import subprocess
+import wave
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,32 @@ def test_a_meeting_without_captions_is_transcribed_from_its_audio(tmp_path, monk
     assert "transcribe" in seen[0]
     speech = direct.speech_command()
     assert seen[0][: len(speech)] == speech
+
+
+def test_the_timeout_comes_from_the_wav_length(tmp_path, monkeypatch):
+    wav = tmp_path / "meeting-9.wav"
+    with wave.open(str(wav), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(b"\x00\x00" * 32000)  # two seconds at 16 kHz
+    monkeypatch.setattr(direct, "fetch_audio", lambda *a, **k: wav)
+    timeouts: list[float] = []
+
+    def run(argv, timeout_s):
+        timeouts.append(timeout_s)
+        out_dir = Path(argv[argv.index("--output-dir") + 1])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / "meeting.json"
+        path.write_text(
+            json.dumps({"segments": [{"start": 1.0, "end": 2.5, "text": "Hello"}]}),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(argv, 0, stdout=f"{path}\n".encode(), stderr=b"")
+
+    direct.transcribe("https://cdn.test/9.mp4", tmp_path / "raw", "meeting-9", runner=run)
+
+    assert timeouts == [direct.transcription_timeout_s(2.0)]
 
 
 def test_a_saved_transcript_is_reused_without_running_the_speech_program(tmp_path, monkeypatch):

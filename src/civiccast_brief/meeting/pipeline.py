@@ -60,6 +60,12 @@ from civiccast_brief.script.recap import (
 
 Complete = Callable[[str], tuple[str, Any]]
 
+#: The source `capture` text for a meeting transcribed on this machine, whichever source listed it.
+TRANSCRIBED_CAPTURE = (
+    "this machine's speech program (civiccast_brief.speech), from the source's "
+    "media audio; the source lists no captions"
+)
+
 
 class PipelineError(RuntimeError):
     """A stage cannot continue (for example, no meeting date can be read)."""
@@ -123,7 +129,7 @@ def run(
         title = gcap.clip.name
         meeting_date = gcap.clip.date
         items = gcap.items
-        caption_kind = "granicus_captions"
+        caption_kind = "local_speech_to_text" if gcap.transcribed else "granicus_captions"
         source = {
             "platform": "granicus",
             "host": granicus_host,
@@ -133,7 +139,11 @@ def run(
             "caption_kind": caption_kind,
             "caption_file": gcap.caption_file.name,
             "caption_download_reused": gcap.caption_reused,
-            "capture": "the city's Granicus caption file (videos/<clip>/captions.vtt)",
+            "capture": (
+                TRANSCRIBED_CAPTURE
+                if gcap.transcribed
+                else "the city's Granicus caption file (videos/<clip>/captions.vtt)"
+            ),
         }
         video_id = gcap.meeting_id
 
@@ -149,7 +159,7 @@ def run(
         title = ccap.show.name
         meeting_date = ccap.show.date
         items = ccap.items
-        caption_kind = "cablecast_captions"
+        caption_kind = "local_speech_to_text" if ccap.transcribed else "cablecast_captions"
         source = {
             "platform": "cablecast",
             "host": cablecast_host,
@@ -159,7 +169,11 @@ def run(
             "caption_kind": caption_kind,
             "caption_file": ccap.caption_file.name,
             "caption_download_reused": ccap.caption_reused,
-            "capture": "the city's Cablecast caption segments (vod.m3u8 subtitles), joined",
+            "capture": (
+                TRANSCRIBED_CAPTURE
+                if ccap.transcribed
+                else "the city's Cablecast caption segments (vod.m3u8 subtitles), joined"
+            ),
         }
         video_id = ccap.meeting_id
 
@@ -188,8 +202,7 @@ def run(
             "caption_file": dcap.caption_file.name,
             "caption_download_reused": dcap.caption_reused,
             "capture": (
-                "this machine's speech program (civiccast_brief.speech), from the source's "
-                "media audio; the source lists no captions"
+                TRANSCRIBED_CAPTURE
                 if dcap.transcribed
                 else "the source's own public caption file (WebVTT)"
             ),

@@ -471,11 +471,16 @@ def _granicus(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> No
         return
     items = granicus.parse_vtt(text)
     if not items:
-        proof.problem = (
-            f"the newest clip ({when:%B} {when.day}, {when.year}) has no captions on Granicus, "
-            "and CivicCast Brief needs a meeting's captions. Ask the city to turn on captions "
-            "for its Granicus videos, or pick another video source for this body."
-        )
+        # No captions is not a problem: the clip's audio is transcribed when the meeting is
+        # written. This check does not transcribe.
+        proof.ok = True
+        proof.what = "video clip with no captions; it is transcribed on this computer"
+        proof.lines = [
+            (
+                "no captions on Granicus; the audio is transcribed on this computer when the "
+                "meeting is written"
+            )
+        ]
         return
     proof.ok = True
     proof.what = "video clip with captions"
@@ -525,11 +530,16 @@ def _cablecast(proof: Proof, source: Source, fetcher: Fetcher, today: date) -> N
         items = cablecast.fetch_captions(cablecast.find_show(source.host, show.show_id))
     except cablecast.CablecastError as exc:
         if "has no caption lines" in str(exc):
-            proof.problem = (
-                f"the newest show ({when:%B} {when.day}, {when.year}) has no captions on "
-                "Cablecast, and CivicCast Brief needs a meeting's captions. Ask the city to turn "
-                "on captions for its Cablecast videos, or pick another video source for this body."
-            )
+            # No captions is not a problem: the show's audio is transcribed when the meeting is
+            # written. This check does not transcribe.
+            proof.ok = True
+            proof.what = "video show with no captions; it is transcribed on this computer"
+            proof.lines = [
+                (
+                    "no captions on Cablecast; the audio is transcribed on this computer when "
+                    "the meeting is written"
+                )
+            ]
         else:
             proof.problem = f"could not read the captions: {exc}"
         return

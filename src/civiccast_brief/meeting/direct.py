@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import subprocess
 import urllib.request
+import wave
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,6 +111,16 @@ def _run(argv: list[str], timeout_s: float) -> subprocess.CompletedProcess[bytes
     )
 
 
+def _wav_seconds(path: Path) -> float | None:
+    """How long the WAV is, in seconds, or None when it cannot be read."""
+    try:
+        with wave.open(str(path), "rb") as handle:
+            rate = handle.getframerate()
+            return handle.getnframes() / rate if rate else None
+    except (OSError, EOFError, wave.Error):
+        return None
+
+
 def _transcript_file(stdout: bytes, out_dir: Path) -> Path | None:
     """The JSON file the speech program wrote: the path it printed, else the newest here."""
     text = stdout.decode("utf-8", errors="replace") if stdout else ""
@@ -157,7 +168,7 @@ def transcribe(
         argv = [*(speech or speech_command()), *textflowkit_argv(str(audio), str(out_dir))[1:]]
         run = runner or _run
         try:
-            done = run(argv, transcription_timeout_s(None))
+            done = run(argv, transcription_timeout_s(_wav_seconds(audio)))
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise DirectError(f"could not run the speech program for {name}: {exc}") from exc
         if done.returncode != 0:
