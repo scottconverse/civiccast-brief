@@ -963,7 +963,7 @@ def add_review_item(app, slug: str, meeting: str) -> None:
     )
 
 
-def task_runner(*, installed: bool = False):
+def task_runner(*, installed: bool = False, cities: str | None = None):
     """A fake PowerShell: answers the status call and records install and remove argv."""
     calls: list[list[str]] = []
 
@@ -975,19 +975,16 @@ def task_runner(*, installed: bool = False):
         if "Unregister-ScheduledTask" in script:
             return 0, "removed", ""
         if installed:
-            return (
-                0,
-                json.dumps(
-                    {
-                        "installed": True,
-                        "state": "Ready",
-                        "next": "2026-11-30T06:00:00-07:00",
-                        "last": "",
-                        "result": 267011,
-                    }
-                ),
-                "",
-            )
+            status: dict[str, object] = {
+                "installed": True,
+                "state": "Ready",
+                "next": "2026-11-30T06:00:00-07:00",
+                "last": "",
+                "result": 267011,
+            }
+            if cities is not None:
+                status["arguments"] = f'-m civiccast_brief.review run-due --cities "{cities}"'
+            return 0, json.dumps(status), ""
         return 0, '{"installed": false}', ""
 
     return runner, calls
@@ -1381,6 +1378,44 @@ def test_a_missing_windows_task_needs_work_and_links_to_every_week(done_hub_app)
     assert "The Windows task is not set up." in page.text
     assert "1 thing needs work." in page.text
     assert 'href="/setup/weekly"' in page.text
+
+
+def test_a_task_running_another_desk_s_cities_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    app.state.hub.task_runner, _calls = task_runner(
+        installed=True, cities=r"C:\wizard-larimer\cities"
+    )
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+
+    page = client.get("/setup/done")
+    # The page HTML escapes the apostrophe in "desk's".
+    assert "runs another desk&#39;s cities" in page.text
+    assert r"C:\wizard-larimer\cities" in page.text
+    assert "The Windows task is set up; next run" not in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/weekly"' in page.text
+
+
+def test_a_task_running_this_desk_s_cities_is_ok(done_hub_app):
+    app, cities = done_hub_app
+    app.state.hub.task_runner, _calls = task_runner(installed=True, cities=str(cities))
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+
+    page = client.get("/setup/done")
+    assert "The Windows task is set up; next run" in page.text
+    assert "runs another desk" not in page.text
+    assert "Everything works." in page.text
+
+
+def test_every_week_row_capitalises_the_day(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+
+    page = client.get("/setup/done")
+    assert "Every Monday at 06:00" in page.text
 
 
 def test_a_chosen_website_with_nothing_published_is_ok_with_the_note(done_hub_app):
