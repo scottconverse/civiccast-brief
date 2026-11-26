@@ -736,3 +736,58 @@ def test_an_old_run_that_wrote_default_for_its_roster_uses_the_city_roster_of_it
     used["body"] = "Planning and Zoning Commission"
     (meeting / "speakers.json").write_text(json.dumps({"roster": used}), encoding="utf-8")
     assert B._roster_of(meeting) is None
+
+
+def _golden_city(root: Path) -> tuple[Path, Path]:
+    """A Golden city folder with a council roster and a planning commission roster."""
+    city = root / "city"
+    (city / "rosters").mkdir(parents=True)
+    (city / "city.json").write_text(json.dumps({"name": "Golden"}), encoding="utf-8")
+    council = {
+        "city": "Golden",
+        "body": "City Council",
+        "state": "CO",
+        "members": [{"name": "Diane Crist", "first": "Diane", "last": "Crist", "role": "Ward 1"}],
+    }
+    (city / "roster.json").write_text(json.dumps(council), encoding="utf-8")
+    planning = {
+        "city": "Golden",
+        "body": "Planning Commission",
+        "state": "CO",
+        "members": [{"name": "Joan Peck", "first": "Joan", "last": "Peck", "role": "Commissioner"}],
+    }
+    planning_path = city / "rosters" / "planning-commission.json"
+    planning_path.write_text(json.dumps(planning), encoding="utf-8")
+    return city, planning_path
+
+
+def test_a_body_roster_finds_the_city_folder_and_the_other_rosters(tmp_path):
+    # #178: a body roster lives at <city>/rosters/<body>.json, so the city folder is its
+    # parent's parent, not its own parent.
+    _, planning_path = _golden_city(tmp_path)
+    meeting = tmp_path / "meeting"
+    meeting.mkdir()
+    (meeting / "speakers.json").write_text(
+        json.dumps({"roster": {"file": str(planning_path)}}), encoding="utf-8"
+    )
+    people = B._people_of(meeting, None)
+    assert people.places == frozenset({"golden"})
+    names = [person.name for person in people.persons]
+    assert "Joan Peck" in names  # the meeting's own body roster
+    assert "Diane Crist" in names  # the other roster (<city>/rosters was found)
+    assert names.count("Joan Peck") == 1  # own roster is not added again as an "other"
+
+
+def test_a_city_roster_still_finds_the_city_folder(tmp_path):
+    city, _ = _golden_city(tmp_path)
+    meeting = tmp_path / "meeting"
+    meeting.mkdir()
+    (meeting / "speakers.json").write_text(
+        json.dumps({"roster": {"file": str(city / "roster.json")}}), encoding="utf-8"
+    )
+    people = B._people_of(meeting, None)
+    assert people.places == frozenset({"golden"})
+    names = [person.name for person in people.persons]
+    assert "Diane Crist" in names
+    assert "Joan Peck" in names  # the body roster beside it is still another roster
+    assert names.count("Diane Crist") == 1
