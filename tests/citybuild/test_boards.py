@@ -394,3 +394,23 @@ def test_the_civicweb_writer_keeps_a_hand_entered_roster(tmp_path, web):
     )  # fmt: skip
     assert path.read_text() == before
     assert lines == ["Planning Commission: kept planning-commission.json" + HAND_NOTE]
+
+
+def test_the_civicweb_writer_replaces_an_empty_hand_entered_roster(tmp_path, web):
+    _civicweb(web)
+    folder = _civicweb_city(tmp_path, ["Planning Commission"])
+    path = folder / "rosters" / "planning-commission.json"
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps({"body": "Planning Commission", "hand": True, "members": []}),
+        encoding="utf-8",
+    )
+    lines = boards.write_civicweb_rosters(
+        folder, _source(["Planning Commission"]), "Loveland", "Colorado", web.fetcher(), LOVELAND_TODAY
+    )  # fmt: skip
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert len(data["members"]) == 11
+    assert "hand" not in data
+    assert lines == [
+        f"Planning Commission: wrote planning-commission.json, 11 members from {PLANNING_MEMBERS}"
+    ]

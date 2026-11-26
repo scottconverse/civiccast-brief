@@ -1200,7 +1200,7 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         missing = [
             str(row["body"])
             for row in setup_wizard.roster_body_rows(spec.city_dir)
-            if not row["file"]
+            if not row["file"] or row["members"] == 0
         ]
         if missing:
             return done_row(
