@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
+import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta
@@ -148,6 +150,79 @@ def test_a_run_cut_off_by_a_restart_is_marked_interrupted(tmp_path):
     again.join_workers()
     steps.gate.set()
     s.join_workers()
+
+
+def put_running_row(db, pid: int | None, started_at: datetime) -> None:
+    """A running run row, as another process (the desk) would have left it."""
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS station_runs ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, trigger TEXT NOT NULL,"
+            " started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL,"
+            " pid INTEGER, exit_code INTEGER, log TEXT NOT NULL DEFAULT '')"
+        )
+        conn.execute(
+            "INSERT INTO station_runs (trigger, started_at, status, pid) VALUES (?, ?, ?, ?)",
+            ("schedule", started_at.isoformat(), "running", pid),
+        )
+
+
+def sleeping_process() -> subprocess.Popen:
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+
+
+def test_a_run_going_in_another_live_process_is_left_alone(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    proc = sleeping_process()
+    try:
+        put_running_row(tmp_path / "desk.db", proc.pid, clock.now)
+        s = station(tmp_path, clock, Steps())
+        assert s.runs()[0].status == "running"
+        assert s.run_now() is None  # busy: the other process has the run
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_run_whose_process_has_ended_is_marked_interrupted(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    proc = sleeping_process()
+    proc.kill()
+    proc.wait()
+    put_running_row(tmp_path / "desk.db", proc.pid, clock.now)
+    s = station(tmp_path, clock, Steps())
+    assert s.runs()[0].status == "interrupted"
+
+
+def test_a_live_process_s_run_from_thirteen_hours_ago_is_marked_interrupted(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    proc = sleeping_process()
+    try:
+        put_running_row(tmp_path / "desk.db", proc.pid, clock.now - timedelta(hours=13))
+        s = station(tmp_path, clock, Steps())
+        assert s.runs()[0].status == "interrupted"
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_database_from_before_the_pid_column_opens(tmp_path):
+    clock = Clock(at(2026, 11, 16, 6, 0))
+    db = tmp_path / "desk.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE station_runs (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " trigger TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,"
+            " status TEXT NOT NULL, exit_code INTEGER, log TEXT NOT NULL DEFAULT '')"
+        )
+        conn.execute(
+            "INSERT INTO station_runs (trigger, started_at, status) VALUES ('schedule', ?, 'running')",
+            (clock.now.isoformat(),),
+        )
+    s = station(tmp_path, clock, Steps())
+    assert s.runs()[0].status == "interrupted"
+    with sqlite3.connect(db) as conn:
+        assert "pid" in {row[1] for row in conn.execute("PRAGMA table_info(station_runs)")}
 
 
 def test_the_job_runs_real_commands_and_keeps_their_output(tmp_path):

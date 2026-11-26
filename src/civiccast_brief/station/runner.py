@@ -16,8 +16,8 @@ and each run's log.
 
 Only one run goes at a time: a run starts only when no row says ``running``, checked and
 written in one ``BEGIN IMMEDIATE`` transaction, so Run now and the schedule cannot overlap.
-One station uses one database; a station that stops in the middle of a run marks that run
-``interrupted`` when it starts again.
+One station uses one database; a run is marked ``interrupted`` only when the process that
+started it is gone, or after 12 hours.
 
 A slot missed while the station was off (the PC was asleep on Monday morning) runs once when
 the station comes back; a new install waits for its first slot.
@@ -26,6 +26,7 @@ the station comes back; a new install waits for its first slot.
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import os
 import sqlite3
 import subprocess
@@ -53,6 +54,9 @@ PUBLISH_DELAY_SECONDS: Final = 30.0
 PUBLISH_RETRY_SECONDS: Final = 30.0 * 60
 #: How many times in a row a failed publish is retried before its request is dropped.
 PUBLISH_RETRIES_MAX: Final = 3
+#: A weekly run takes about an hour; a row that says running for longer than this is taken to be
+#: from a process that ended, and this guards against a reused pid.
+STALE_RUN_HOURS: Final = 12
 WEEKDAYS: Final = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 RUN_STATES: Final = ("running", "ok", "failed", "interrupted")
 
@@ -63,6 +67,7 @@ CREATE TABLE IF NOT EXISTS station_runs (
     started_at TEXT NOT NULL,
     finished_at TEXT,
     status TEXT NOT NULL,
+    pid INTEGER,
     exit_code INTEGER,
     log TEXT NOT NULL DEFAULT ''
 );
@@ -207,15 +212,29 @@ class Station:
         self._workers: list[threading.Thread] = []
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            if "pid" not in {row[1] for row in conn.execute("PRAGMA table_info(station_runs)")}:
+                conn.execute("ALTER TABLE station_runs ADD COLUMN pid INTEGER")
             conn.execute(
                 "INSERT OR IGNORE INTO station_meta (key, value) VALUES ('since', ?)",
                 (self.clock().isoformat(),),
             )
-            conn.execute(
-                "UPDATE station_runs SET status = 'interrupted', finished_at = ?"
-                " WHERE status = 'running'",
-                (self.clock().isoformat(),),
-            )
+            now = self.clock()
+            running = conn.execute(
+                "SELECT id, started_at, pid FROM station_runs WHERE status = 'running'"
+            ).fetchall()
+            for run_id, started_at, pid in running:
+                # A run still going in another process (the desk's) is left alone.
+                if (
+                    pid is None
+                    or int(pid) == os.getpid()
+                    or not _alive(int(pid))
+                    or now - datetime.fromisoformat(started_at) > timedelta(hours=STALE_RUN_HOURS)
+                ):
+                    conn.execute(
+                        "UPDATE station_runs SET status = 'interrupted', finished_at = ?"
+                        " WHERE id = ?",
+                        (now.isoformat(), run_id),
+                    )
 
     @contextlib.contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -425,9 +444,9 @@ class Station:
                     conn.execute("ROLLBACK")
                     return None
                 cur = conn.execute(
-                    "INSERT INTO station_runs (trigger, started_at, status)"
-                    " VALUES (?, ?, 'running')",
-                    (trigger, self.clock().isoformat()),
+                    "INSERT INTO station_runs (trigger, started_at, status, pid)"
+                    " VALUES (?, ?, 'running', ?)",
+                    (trigger, self.clock().isoformat(), os.getpid()),
                 )
                 conn.execute("COMMIT")
             except BaseException:
@@ -585,6 +604,32 @@ class Station:
         for worker in self._workers:
             worker.join(timeout)
         self._workers = [w for w in self._workers if w.is_alive()]
+
+
+def _alive(pid: int) -> bool:
+    """True when a process with this pid is still going.
+
+    Never uses ``os.kill(pid, 0)`` on Windows: there it would end the process."""
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        kernel32.OpenProcess.restype = ctypes.c_void_p  # a handle is pointer-sized
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _commands(steps: Sequence[Sequence[str]]) -> list[list[str]]:
