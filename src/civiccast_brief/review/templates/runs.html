@@ -57,8 +57,7 @@ run it.</p>
 {% endif %}
 {% if job %}
 {% if editable %}
-<p>It finds the week's meetings and writes each brief. A brief that passes its checks is published on this desk at once; one that fails a check waits in Items for review. Building and
-deploying the site stays with the weekly command's site options.</p>
+<p>It finds the week's meetings and writes each brief. A brief that passes its checks is published on this desk at once; one that fails a check waits in Items for review. {% if publishes %}After the briefs, it builds the website and puts it online, as the setup's Website step set it.{% else %}It does not build the website: set that up on the setup's Website step.{% endif %}</p>
 {% else %}
 <p>It runs {{ job.schedule }}: it finds the week's meetings, makes each brief, and publishes it.</p>
 {% endif %}

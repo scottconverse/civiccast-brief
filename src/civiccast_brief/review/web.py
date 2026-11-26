@@ -730,6 +730,7 @@ def _add_run_routes(
             notice_bad=bad,
             no_city=state.city_dir is None,
             editable=editable and station is not None,
+            publishes=bool(station is not None and station.publish_steps),
             schedule_form=weekly_form(form),
             work=str(state.weekly_work or ""),
             command=command,
