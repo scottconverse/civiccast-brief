@@ -1432,3 +1432,53 @@ def test_the_everything_works_page_needs_a_sign_in(hub_app):
     reply = anon.get("/setup/done", follow_redirects=False)
     assert reply.status_code == 303
     assert reply.headers["location"] == "/sign-in"
+
+
+# ----- the Rosters row counts every body the sources cover ------------------------------------
+
+
+def _two_body_sources(cities, slug="alpha"):
+    (cities / slug / "city" / "sources.json").write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "sources": [
+                    {
+                        "kind": "webpage",
+                        "url": "https://example.org/meetings",
+                        "bodies": ["City Council", "Planning Commission"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_body_with_no_roster_makes_the_rosters_row_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    _two_body_sources(cities)
+
+    page = client.get("/setup/done")
+    assert "No members for: Planning Commission." in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/rosters"' in page.text
+
+
+def test_every_body_with_a_roster_makes_the_rosters_row_ok_again(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    _two_body_sources(cities)
+    rosters = cities / "alpha" / "city" / "rosters"
+    rosters.mkdir()
+    (rosters / "planning-commission.json").write_text(
+        json.dumps({"body": "Planning Commission", "members": [{"name": "Ada"}]}),
+        encoding="utf-8",
+    )
+
+    page = client.get("/setup/done")
+    assert "No members for" not in page.text
+    assert "Everything works." in page.text

@@ -480,3 +480,149 @@ def test_a_recap_change_cannot_be_saved_so_the_export_still_matches_the_run(stor
     exported = export_published(store.path, out)
     assert len(exported.exported) == 1
     assert (out / "0001-m1" / "recap.txt").read_text(encoding="utf-8") == "Recap."
+
+
+# ----- the Roster page: members entered by hand, each with its source link ----------------------
+
+
+def roster_city(city, bodies=("City Council", "Planning Commission")):
+    sources.add_source(
+        city,
+        sources.make_source("primegov", {"url": "longmont.primegov.com", "bodies": list(bodies)}),
+    )
+    return city
+
+
+def roster_file(city, body="city-council"):
+    return city / "rosters" / f"{body}.json"
+
+
+def add_member(client, **data):
+    form = {"token": token(client), "body": "City Council", "role": "Member"}
+    form.update(data)
+    return client.post("/roster/add", data=form, follow_redirects=False)
+
+
+def test_roster_add_writes_the_member_with_its_source_and_hand_mark(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    page = client.get("/roster")
+    assert "Add member" in page.text
+    assert "No members yet" in page.text  # City Council and Planning Commission have none
+
+    added = add_member(
+        client,
+        name="Ada Lovelace",
+        role="Mayor",
+        source="https://example.org/council#members",
+    )
+    assert added.status_code == 303
+    assert added.headers["location"] == "/roster?notice=added"
+    data = json.loads(roster_file(city).read_text(encoding="utf-8"))
+    assert data["city"] == ""
+    assert (data["body"], data["hand"]) == ("City Council", True)
+    assert data["note"] == "Entered on the Roster page; each name's source is in its member entry."
+    assert data["sources"] == ["https://example.org/council#members"]
+    assert data["members"] == [
+        {
+            "name": "Ada Lovelace",
+            "first": "Ada",
+            "last": "Lovelace",
+            "role": "Mayor",
+            "source": "https://example.org/council#members",
+            "entered": data["members"][0]["entered"],
+        }
+    ]
+
+
+def test_a_second_add_to_the_same_body_extends_it(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    add_member(client, name="Ada Lovelace", source="https://example.org/ada")
+    add_member(client, name="Grace Hopper", source="https://example.org/grace")
+    data = json.loads(roster_file(city).read_text(encoding="utf-8"))
+    assert [m["name"] for m in data["members"]] == ["Ada Lovelace", "Grace Hopper"]
+    assert data["sources"] == ["https://example.org/ada", "https://example.org/grace"]
+
+
+@pytest.mark.parametrize("source", ["ftp://example.org/x", ""])
+def test_a_bad_source_link_is_refused_and_keeps_what_was_typed(store, city, source):
+    roster_city(city)
+    client = client_for(store, city)
+    response = add_member(client, name="Ada Lovelace", source=source)
+    assert response.status_code == 400
+    assert "http:// or https://" in response.text
+    assert 'value="Ada Lovelace"' in response.text
+    assert not roster_file(city).exists()
+
+
+def test_an_unknown_body_is_refused(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    response = add_member(client, body="Water Board", name="Ada Lovelace", source="https://x.test")
+    assert response.status_code == 400
+    assert "not one of this city" in response.text
+    assert not roster_file(city).exists()
+
+
+def test_vacant_is_not_a_person(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    response = add_member(client, name="Vacant", source="https://x.test")
+    assert response.status_code == 400
+    assert "Vacant is not a person" in response.text
+
+
+def test_a_duplicate_name_is_refused(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    add_member(client, name="Ada Lovelace", source="https://x.test")
+    response = add_member(client, name="ada  lovelace", source="https://y.test")
+    assert response.status_code == 400
+    assert "already on this roster" in response.text
+    data = json.loads(roster_file(city).read_text(encoding="utf-8"))
+    assert len(data["members"]) == 1
+
+
+def test_remove_takes_off_a_member_entered_on_the_page(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    add_member(client, name="Ada Lovelace", source="https://x.test")
+    removed = client.post(
+        "/roster/remove",
+        data={"token": token(client), "body": "City Council", "name": "Ada Lovelace"},
+        follow_redirects=False,
+    )
+    assert removed.status_code == 303
+    assert removed.headers["location"] == "/roster?notice=removed"
+    assert json.loads(roster_file(city).read_text(encoding="utf-8"))["members"] == []
+
+
+def test_remove_refuses_a_member_the_records_supplied(store, city):
+    roster_city(city)
+    roster_file(city).parent.mkdir()
+    roster_file(city).write_text(
+        json.dumps(
+            {"body": "City Council", "members": [{"name": "Ada Lovelace", "role": "Member"}]}
+        ),
+        encoding="utf-8",
+    )
+    client = client_for(store, city)
+    response = client.post(
+        "/roster/remove",
+        data={"token": token(client), "body": "City Council", "name": "Ada Lovelace"},
+    )
+    assert response.status_code == 400
+    assert "Only names entered on this page can be removed here." in response.text
+
+
+def test_the_page_shows_a_body_with_no_roster_and_its_entered_names(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    add_member(client, name="Ada Lovelace", source="https://x.test")
+    page = client.get("/roster").text
+    assert "Planning Commission" in page and "No members yet" in page
+    assert "Ada Lovelace" in page
+    assert 'href="https://x.test" rel="noopener noreferrer">open</a>' in page
+    assert "data-confirm" in page
+    assert "/roster/add" in page

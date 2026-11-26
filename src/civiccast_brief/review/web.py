@@ -39,7 +39,7 @@ import shlex
 import sys
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlencode
@@ -54,7 +54,14 @@ from civiccast_brief import models as model_settings
 from civiccast_brief import setup_check
 from civiccast_brief import sources as city_sources
 from civiccast_brief.citybuild.youtube import ChannelError, resolve_channel
-from civiccast_brief.review import desk, setup_steps, site_settings, voices, weekly_job
+from civiccast_brief.review import (
+    desk,
+    setup_steps,
+    setup_wizard,
+    site_settings,
+    voices,
+    weekly_job,
+)
 from civiccast_brief.review.auth import SESSION_COOKIE, SESSION_SECONDS, AuthError, DeskAuth
 from civiccast_brief.review.store import STATUSES, DeskItem, ReviewError, ReviewStore
 from civiccast_brief.station.runner import WEEKDAYS, Station
@@ -612,6 +619,10 @@ RUN_NOTICES: Final = {
     "started": ("The weekly job started. This page shows it until it ends.", False),
     "busy": ("A run is already going. Run now waits until it ends.", True),
 }
+ROSTER_NOTICES: Final = {
+    "added": "Added the member, with its source link.",
+    "removed": "Removed the member you entered here.",
+}
 
 
 def _add_run_routes(
@@ -1042,9 +1053,202 @@ def make_desk_app(
         return _redirect("/settings?notice=models")
 
     @app.get("/roster", response_class=HTMLResponse)
-    def roster() -> HTMLResponse:
-        rosters = rosterfill.loaded_rosters(state.city_dir) if state.city_dir else []
-        return state.page("roster.html", title="Roster", rosters=rosters)
+    def roster(notice: str = "") -> HTMLResponse:
+        return roster_page(notice=ROSTER_NOTICES.get(notice, ""))
+
+    def roster_page(
+        form: Mapping[str, str] | None = None,
+        *,
+        error: str = "",
+        error_field: str = "",
+        notice: str = "",
+        status: int = 200,
+    ) -> HTMLResponse:
+        city = state.city_dir
+        rosters = rosterfill.loaded_rosters(city) if city is not None else []
+        rows = setup_wizard.roster_body_rows(city) if city is not None else []
+        return state.page(
+            "roster.html",
+            status=status,
+            title="Roster",
+            rosters=rosters,
+            rows=rows,
+            form=dict(form or {}),
+            error=error,
+            error_field=error_field,
+            notice=notice,
+        )
+
+    def roster_body_error(form: Mapping[str, str]) -> tuple[str, str]:
+        """The body from the form and, when it is not one of the city's, what to say."""
+        body = str(form.get("body", "")).strip()
+        if state.city_dir is None:
+            return body, "Start the desk with a city folder to add members."
+        bodies = [str(row["body"]) for row in setup_wizard.roster_body_rows(state.city_dir)]
+        if body not in bodies:
+            return body, "That body is not one of this city's bodies."
+        return body, ""
+
+    def roster_add_errors(form: Mapping[str, str]) -> tuple[str, str]:
+        """(the field in error, the sentence) for the Add form, or ("", "") when it may be added."""
+        _body, error = roster_body_error(form)
+        if error:
+            return "body", error
+        name = " ".join(str(form.get("name", "")).split())
+        if not 2 <= len(name) <= 80:
+            return "name", "The name must be 2 to 80 characters."
+        if name.casefold() == "vacant":
+            return "name", "Vacant is not a person; leave the seat out instead."
+        source = str(form.get("source", "")).strip()
+        if not source.startswith(("http://", "https://")):
+            return (
+                "source",
+                "The source must be the link where you read the name (http:// or https://).",
+            )
+        return "", ""
+
+    def roster_path(body: str) -> Path:
+        """The file the roster_add route writes: ``roster_for``'s, else ``rosters/<body>.json``."""
+        from civiccast_brief.weekly.run import roster_for, slug
+
+        assert state.city_dir is not None
+        found = roster_for(state.city_dir, body)
+        return found if found is not None else state.city_dir / "rosters" / f"{slug(body)}.json"
+
+    def roster_identity() -> tuple[str, str]:
+        """The city's name and state, for a new roster file."""
+        assert state.city_dir is not None
+        for name in ("city.json", "roster.json"):
+            path = state.city_dir / name
+            if not path.is_file():
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                city = str(data.get("name") or data.get("city") or "")
+                if city:
+                    return city, str(data.get("state", ""))
+        return "", ""
+
+    @app.post("/roster/add")
+    async def roster_add(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        field_error, error = roster_add_errors(form)
+        if error:
+            return roster_page(form, error=error, error_field=field_error, status=400)
+        assert state.city_dir is not None
+        body = str(form.get("body", "")).strip()
+        name = " ".join(str(form.get("name", "")).split())
+        role = " ".join(str(form.get("role", "")).split()) or "Member"
+        source = str(form.get("source", "")).strip()
+        path = roster_path(body)
+        data: dict[str, Any] = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return roster_page(
+                    form,
+                    error=f"{path.name} could not be read; nothing was added.",
+                    status=400,
+                )
+            if not isinstance(loaded, dict):
+                return roster_page(
+                    form, error=f"{path.name} is not a roster file; nothing was added.", status=400
+                )
+            data = loaded
+        else:
+            city, state_name = roster_identity()
+            data = {
+                "city": city,
+                "state": state_name,
+                "body": body,
+                "retrieved": date.today().isoformat(),
+                "sources": [],
+                "members": [],
+            }
+        members = data.get("members")
+        if not isinstance(members, list):
+            members = []
+            data["members"] = members
+        wanted = " ".join(name.split()).casefold()
+        if any(
+            isinstance(m, dict) and " ".join(str(m.get("name", "")).split()).casefold() == wanted
+            for m in members
+        ):
+            return roster_page(form, error="That name is already on this roster.", status=400)
+        words = name.split()
+        members.append(
+            {
+                "name": name,
+                "first": words[0],
+                "last": " ".join(words[1:]),
+                "role": role,
+                "source": source,
+                "entered": date.today().isoformat(),
+            }
+        )
+        sources = data.get("sources")
+        if not isinstance(sources, list):
+            sources = []
+            data["sources"] = sources
+        if source not in sources:
+            sources.append(source)
+        data["hand"] = True
+        data["note"] = "Entered on the Roster page; each name's source is in its member entry."
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        return _redirect("/roster?notice=added")
+
+    @app.post("/roster/remove")
+    async def roster_remove(request: Request) -> Response:
+        form = await read_form(request)
+        if form is None:
+            return bad_token()
+        field_error, error = roster_body_error(form)
+        if error:
+            return roster_page(form, error=error, error_field=field_error, status=400)
+        assert state.city_dir is not None
+        body = str(form.get("body", "")).strip()
+        name = " ".join(str(form.get("name", "")).split())
+        path = roster_path(body)
+        if not path.is_file():
+            return roster_page(form, error="That body has no roster file yet.", status=400)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return roster_page(
+                form, error=f"{path.name} could not be read; nothing was removed.", status=400
+            )
+        members = data.get("members") if isinstance(data, dict) else None
+        wanted = name.casefold()
+        member = next(
+            (
+                m
+                for m in (members if isinstance(members, list) else [])
+                if isinstance(m, dict)
+                and " ".join(str(m.get("name", "")).split()).casefold() == wanted
+            ),
+            None,
+        )
+        if member is None:
+            return roster_page(form, error="That name is not on this roster.", status=400)
+        if not str(member.get("source", "")).strip():
+            return roster_page(
+                form,
+                error="Only names entered on this page can be removed here.",
+                status=400,
+            )
+        assert isinstance(members, list)
+        members.remove(member)
+        text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        return _redirect("/roster?notice=removed")
 
     def city_page(
         form: Mapping[str, str] | None = None,
