@@ -4,6 +4,10 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 
 ## Unreleased
 
+### Tooling
+
+- Removed the VerdictLite config (`vlite.json`). VerdictLite is no longer used here.
+
 ### The desk
 
 - The setup wizard ends on **Everything works**: one page reads this computer, the Windows task,
