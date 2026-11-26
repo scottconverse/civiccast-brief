@@ -10,8 +10,9 @@ by ``vod.m3u8`` (a ``SUBTITLES`` entry) and then by that playlist, in the MP4's 
 times are absolute from the start of the video. The segments are joined here, and a cue repeated
 at the edge of two segments is kept once.
 
-A show whose vod has no caption playlist, or no caption lines, stops the run with that reason;
-nothing is transcribed from audio here.
+A show whose vod has no caption playlist, or no caption lines, is transcribed on this machine:
+the vod's MP4 audio is fetched with ffmpeg and turned into caption items by the local speech
+program (see :mod:`civiccast_brief.meeting.direct`).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from civiccast_brief.meeting import direct
 from civiccast_brief.meeting.granicus import parse_vtt
 from civiccast_brief.record.video.watch import title_day
 from civiccast_brief.speech.windows_process import hidden_process_kwargs
@@ -217,13 +219,15 @@ def fetch_captions(show: Show) -> list[dict[str, Any]]:
     """The show's caption items, read from the segments next to its MP4 file."""
     base = show.mp4_url.rsplit("/", 1)[0] + "/"
     no_captions = (
-        f"show {show.show_id} on {show.host} has no caption lines; this city does not keep "
-        "captions for it, and CivicCast Brief does not transcribe audio"
+        f"show {show.show_id} on {show.host} has no caption lines; "
+        "the audio is transcribed on this computer"
     )
     try:
         master = _fetch(base + "vod.m3u8")
     except CablecastError as exc:
-        raise CablecastError(f"{no_captions} (no vod.m3u8 playlist: {exc})") from exc
+        raise CablecastError(
+            f"no vod.m3u8 playlist for show {show.show_id} on {show.host}: {exc}"
+        ) from exc
     uri = subtitles_uri(master)
     if not uri:
         raise CablecastError(no_captions)
@@ -244,6 +248,8 @@ class CablecastCapture:
     caption_file: Path
     caption_reused: bool
     items: list[dict[str, Any]]
+    #: True when the lines came from this machine's speech program rather than the city.
+    transcribed: bool = False
 
     @property
     def meeting_id(self) -> str:
@@ -277,13 +283,27 @@ def capture(host: str, show_id: int, raw_dir: Path) -> CablecastCapture:
     reused = bool(items)
     if not reused:
         show = find_show(host, show_id)
-        items = fetch_captions(show)
-        vtt_file.write_text(to_vtt(items), encoding="utf-8")
         show_file.write_text(json.dumps(asdict(show), indent=2) + "\n", encoding="utf-8")
+        try:
+            items = fetch_captions(show)
+        except CablecastError as exc:
+            if "has no caption lines" not in str(exc):
+                raise
+            items = []
+        if items:
+            vtt_file.write_text(to_vtt(items), encoding="utf-8")
     if not items:
-        raise CablecastError(
-            f"show {show_id} on {host} has no caption lines; this city does not keep captions "
-            "for it, and CivicCast Brief does not transcribe audio"
+        # The city keeps no captions for this show: transcribe its vod's audio on this machine.
+        try:
+            spoken = direct.transcribe(show.mp4_url, raw_dir, meeting_id(host, show_id))
+        except direct.DirectError as exc:
+            raise CablecastError(str(exc)) from exc
+        return CablecastCapture(
+            show=show,
+            caption_file=spoken.caption_file,
+            caption_reused=spoken.caption_reused,
+            items=spoken.items,
+            transcribed=True,
         )
     return CablecastCapture(show=show, caption_file=vtt_file, caption_reused=reused, items=items)
 

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from civiccast_brief.meeting import direct, pipeline
 from civiccast_brief.meeting import granicus as G
-from civiccast_brief.meeting import pipeline
 from civiccast_brief.meeting.roster import ROSTERS_DIR
 
 FIX = Path(__file__).parent / "fixtures" / "granicus"
@@ -48,14 +48,36 @@ def test_vtt_cues_become_caption_items():
     assert all(item["text"] for item in items)
 
 
-def test_an_empty_caption_file_stops_with_the_reason(tmp_path, monkeypatch):
+def test_an_empty_caption_file_is_transcribed_from_the_clips_audio(tmp_path, monkeypatch):
     clip = G.Clip(
-        host="berkeley.granicus.com", view_id=2, clip_id=5724, name="ZAB", date="October 8, 2026"
+        host="berkeley.granicus.com",
+        view_id=2,
+        clip_id=5724,
+        name="ZAB",
+        date="October 8, 2026",
+        mp3_url="https://archive-video.granicus.com/berkeley/zab.mp3",
     )
     monkeypatch.setattr(G, "find_clip", lambda *a: clip)
     monkeypatch.setattr(G, "_fetch", lambda url: "WEBVTT\n\n0\n")
-    with pytest.raises(G.GranicusError, match="has no caption lines"):
-        G.capture("berkeley.granicus.com", 2, 5724, tmp_path)
+    asked: list[tuple[str, Path, str]] = []
+
+    def transcribe(media_url, raw_dir, meeting_id, **kwargs):
+        asked.append((media_url, raw_dir, meeting_id))
+        return direct.DirectCapture(
+            Path("transcript.json"),
+            False,
+            [{"start_ms": 0, "end_ms": 1000, "text": "Hello"}],
+            transcribed=True,
+        )
+
+    monkeypatch.setattr(G.direct, "transcribe", transcribe)
+    cap = G.capture("berkeley.granicus.com", 2, 5724, tmp_path)
+    assert asked == [
+        ("https://archive-video.granicus.com/berkeley/zab.mp3", tmp_path, "granicus-berkeley-5724")
+    ]
+    assert cap.transcribed is True
+    assert cap.items == [{"start_ms": 0, "end_ms": 1000, "text": "Hello"}]
+    assert not cap.caption_reused
 
 
 def test_capture_is_saved_and_reused_without_the_network(tmp_path, monkeypatch):
@@ -66,8 +88,14 @@ def test_capture_is_saved_and_reused_without_the_network(tmp_path, monkeypatch):
     monkeypatch.setattr(
         G, "_fetch", lambda url: (FIX / "oakland-7806.vtt").read_text(encoding="utf-8")
     )
+
+    def no_transcribe(*a, **k):
+        raise AssertionError("a clip with captions was transcribed")
+
+    monkeypatch.setattr(G.direct, "transcribe", no_transcribe)
     first = G.capture("oakland.granicus.com", 2, 7806, tmp_path)
     assert not first.caption_reused and first.meeting_id == "granicus-oakland-7806"
+    assert first.transcribed is False
 
     def no_network(*a):
         raise AssertionError("network used")
@@ -150,6 +178,43 @@ def test_pipeline_runs_a_granicus_clip(tmp_path, monkeypatch):
     transcript = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
     assert transcript["source"]["platform"] == "granicus"
     assert transcript["source"]["video_url"].endswith("clip_id=7806")
+
+
+def test_pipeline_records_a_transcribed_granicus_clip(tmp_path, monkeypatch):
+    clip = G.Clip(
+        host="oakland.granicus.com",
+        view_id=2,
+        clip_id=7806,
+        name="City Council",
+        date="October 6, 2026",
+        mp3_url="https://archive-video.granicus.com/oakland/7806.mp3",
+    )
+    monkeypatch.setattr(G, "find_clip", lambda *a: clip)
+    monkeypatch.setattr(G, "_fetch", lambda url: "WEBVTT\n\n0\n")
+    monkeypatch.setattr(
+        G.direct,
+        "transcribe",
+        lambda *a, **k: direct.DirectCapture(
+            Path("transcript.json"),
+            False,
+            [{"start_ms": 0, "end_ms": 4000, "text": "The meeting is called to order."}],
+            transcribed=True,
+        ),
+    )
+
+    summary = pipeline.run(
+        "7806",
+        tmp_path,
+        granicus_host="oakland.granicus.com",
+        granicus_view_id=2,
+        roster_path=OAKLAND,
+        complete=lambda prompt: ("[]", {}),
+        log=lambda m: None,
+    )
+    assert summary["caption_kind"] == "local_speech_to_text"
+    transcript = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
+    assert transcript["source"]["caption_kind"] == "local_speech_to_text"
+    assert transcript["source"]["capture"] == pipeline.TRANSCRIBED_CAPTURE
 
 
 def test_pipeline_refuses_a_granicus_run_without_a_view_id(tmp_path):

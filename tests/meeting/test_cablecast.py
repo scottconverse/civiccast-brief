@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from civiccast_brief.meeting import cablecast as C
-from civiccast_brief.meeting import pipeline
+from civiccast_brief.meeting import direct, pipeline
 from civiccast_brief.meeting.roster import ROSTERS_DIR
 
 FIX = Path(__file__).parent / "fixtures" / "cablecast"
@@ -165,9 +165,23 @@ def test_capture_joins_the_segments_and_saves_the_show(tmp_path, web, monkeypatc
     assert again.caption_reused and again.show == cap.show and again.items == cap.items
 
 
-def test_a_vod_with_no_caption_playlist_stops_with_the_reason(tmp_path, web):
-    with pytest.raises(C.CablecastError, match="has no caption lines.*does not transcribe audio"):
-        C.capture(HOST, 732, tmp_path)
+def test_a_vod_with_no_caption_playlist_is_transcribed(tmp_path, web, monkeypatch):
+    asked: list[tuple[str, Path, str]] = []
+
+    def transcribe(media_url, raw_dir, meeting_id, **kwargs):
+        asked.append((media_url, raw_dir, meeting_id))
+        return direct.DirectCapture(
+            Path("transcript.json"),
+            False,
+            [{"start_ms": 0, "end_ms": 1000, "text": "Hello"}],
+            transcribed=True,
+        )
+
+    monkeypatch.setattr(C.direct, "transcribe", transcribe)
+    cap = C.capture(HOST, 732, tmp_path)
+    assert asked == [(STORE_732 + "vod.mp4", tmp_path, "cablecast-reflect-cityofloveland-co-732")]
+    assert cap.transcribed is True
+    assert cap.items == [{"start_ms": 0, "end_ms": 1000, "text": "Hello"}]
 
 
 def test_a_missing_vod_playlist_stops_with_the_reason(tmp_path, monkeypatch, web):
@@ -183,12 +197,23 @@ def test_a_missing_vod_playlist_stops_with_the_reason(tmp_path, monkeypatch, web
         C.capture(HOST, 746, tmp_path)
 
 
-def test_caption_segments_with_no_lines_stop_with_the_reason(tmp_path, monkeypatch, web):
+def test_caption_segments_with_no_lines_are_transcribed(tmp_path, monkeypatch, web):
     real = C._fetch
     empty = _text("captions.en.00000.vtt")
     monkeypatch.setattr(C, "_fetch", lambda url: empty if "/subtitles/" in url else real(url))
-    with pytest.raises(C.CablecastError, match="has no caption lines"):
-        C.capture(HOST, 746, tmp_path)
+    monkeypatch.setattr(
+        C.direct,
+        "transcribe",
+        lambda *a, **k: direct.DirectCapture(
+            Path("transcript.json"),
+            False,
+            [{"start_ms": 0, "end_ms": 1000, "text": "Hello"}],
+            transcribed=True,
+        ),
+    )
+    cap = C.capture(HOST, 746, tmp_path)
+    assert cap.transcribed is True
+    assert cap.items[0]["text"] == "Hello"
 
 
 def test_a_segment_on_another_host_is_not_fetched(tmp_path, monkeypatch, web):
@@ -242,13 +267,26 @@ def test_pipeline_runs_a_cablecast_show(tmp_path, web):
     assert recap["video_place"] == "website"
 
 
-def test_pipeline_reports_a_show_with_no_captions_as_a_pipeline_error(tmp_path, web):
-    with pytest.raises(pipeline.PipelineError, match="has no caption lines"):
-        pipeline.run(
-            "732",
-            tmp_path,
-            cablecast_host=HOST,
-            roster_path=OAKLAND,
-            complete=_complete,
-            log=lambda m: None,
-        )
+def test_pipeline_records_a_transcribed_cablecast_show(tmp_path, web, monkeypatch):
+    monkeypatch.setattr(
+        C.direct,
+        "transcribe",
+        lambda *a, **k: direct.DirectCapture(
+            Path("transcript.json"),
+            False,
+            [{"start_ms": 0, "end_ms": 4000, "text": "The meeting is called to order."}],
+            transcribed=True,
+        ),
+    )
+    summary = pipeline.run(
+        "732",
+        tmp_path,
+        cablecast_host=HOST,
+        roster_path=OAKLAND,
+        complete=_complete,
+        log=lambda m: None,
+    )
+    assert summary["caption_kind"] == "local_speech_to_text"
+    transcript = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
+    assert transcript["source"]["caption_kind"] == "local_speech_to_text"
+    assert transcript["source"]["capture"] == pipeline.TRANSCRIBED_CAPTURE
