@@ -186,6 +186,31 @@ CIVICWEB_MEMBERS_WITH_STAFF = """<!doctype html><html><body>
 </body></html>"""
 
 
+CIVICWEB_MEMBERS_WITH_CHIEF_AND_VACANCY = """<!doctype html><html><body>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl00_Name" class="member-name">Tim Doran</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl00_Title">Chief of Police</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl00_Term">06 Jan 2026 - 31 Dec 2028</span>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl01_Name" class="member-name">Vacant</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl01_Title">City Council Member Ward II</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl01_Term">02 Dec 2025 - Ongoing</span>
+<h2 id="ctl00_MainContent_MembersRepeater_ctl02_Name" class="member-name">Geoff Frahm</h2>
+<span id="ctl00_MainContent_MembersRepeater_ctl02_Title">City Council Member Ward I</span>
+<span id="ctl00_MainContent_MembersRepeater_ctl02_Term">02 Dec 2025 - Ongoing</span>
+</body></html>"""
+
+
+def test_a_civicweb_members_page_leaves_out_a_chief_and_a_vacant_seat():
+    members = boards.members_from_civicweb(CIVICWEB_MEMBERS_WITH_CHIEF_AND_VACANCY, LOVELAND_TODAY)
+    assert members == [
+        {
+            "name": "Geoff Frahm",
+            "first": "Geoff",
+            "last": "Frahm",
+            "role": "City Council Member Ward I",
+        },
+    ]
+
+
 def test_a_civicweb_members_page_leaves_staff_out():
     members = boards.members_from_civicweb(CIVICWEB_MEMBERS_WITH_STAFF, LOVELAND_TODAY)
     assert members == [
