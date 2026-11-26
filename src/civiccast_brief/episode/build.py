@@ -287,8 +287,19 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
     rosters = [(roster, roster_path)] if roster else []
     # The writer also saw the city's other body rosters (rosters/*.json). Their members are
     # matched only by exact name: see load_people.
+    # The roster file is either the city's own (<city>/roster.json) or one body's
+    # (<city>/rosters/<body>.json); the city folder is one level up in the second case.
+    parent = Path(roster_path).parent
+    city_dir = parent.parent if parent.name == "rosters" else parent
+    own = Path(roster_path).resolve() if roster_path else None
+    files = list((city_dir / "rosters").glob("*.json"))
+    if roster_path:
+        # The city's own roster file is another body's roster when the meeting used a body's.
+        files.append(city_dir / "roster.json")
     others = []
-    for other in sorted((Path(roster_path).parent / "rosters").glob("*.json")):
+    for other in sorted(files):
+        if own is not None and other.resolve() == own:
+            continue  # the meeting's own roster, already the first entry: not another body's
         try:
             others.append((load_roster(other), str(other)))
         except (OSError, ValueError):
@@ -302,7 +313,7 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
             except (OSError, ValueError):
                 continue
         pages = merged or None
-    city_name = city_name_of(Path(roster_path).parent) if roster_path else ""
+    city_name = city_name_of(city_dir) if roster_path else ""
     return load_people(
         rosters,
         pages,
