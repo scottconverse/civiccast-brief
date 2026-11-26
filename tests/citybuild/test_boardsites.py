@@ -9,6 +9,7 @@ import json
 import pytest
 
 from civiccast_brief.citybuild import boardsites, cli
+from civiccast_brief.citybuild.fetch import Page
 from civiccast_brief.sources import make_source, merge_sources
 from civiccast_brief.weekly.run import roster_for
 
@@ -216,10 +217,34 @@ def test_a_page_with_fewer_than_three_names_has_no_roster():
         ("Board of Adjustment/Board of Appeals", "Board of Adjustment", 3),
         ("Lafayette Cultural Arts Board", "Cultural Arts Board", 2),
         ("Planning Commission", "Join the Planning Commission", 0),
+        (
+            "Historic Preservation Advisory Commission",
+            "Historic Preservation Advisory Committee",
+            2,
+        ),
+        ("Planning Commission", "Planning Committee", 0),  # two words only: too short to assume
+        (
+            "Historic Preservation Advisory Commission",
+            "Historic Preservation Advisory Board",
+            0,
+        ),
     ],
 )
 def test_a_link_names_a_board(body, link, score):
     assert boardsites._score(body, link) == score
+
+
+def test_a_page_titled_committee_is_the_commission_it_lists():
+    page = Page(
+        url="https://www.berthoud.org/260/Historic-Preservation-Advisory-Committee",
+        status=200,
+        content=(
+            b"<html><head><title>Historic Preservation Advisory Committee | Berthoud, CO"
+            b"</title></head><body></body></html>"
+        ),
+        content_type="text/html; charset=utf-8",
+    )
+    assert boardsites._about("Historic Preservation Advisory Commission", page, False, page.url)
 
 
 # ----- A town's site ---------------------------------------------------------------------------
@@ -344,3 +369,48 @@ def test_two_boards_never_get_the_same_page(tmp_path, web, monkeypatch, capsys):
     assert roster_for(folder, "Library Board") is not None
     assert roster_for(folder, "Library Board of Trustees") is None
     assert "already Library Board's" in capsys.readouterr().out
+
+
+def test_a_board_page_titled_committee_gives_the_portals_commission_its_roster(
+    tmp_path, web, monkeypatch
+):
+    # The portal names the body "... Commission"; the town's own page is titled "... Committee".
+    commission = "Historic Preservation Advisory Commission"
+    folder = _town(tmp_path, web, ["Town Council", commission])
+    page_url = SITE + "/20/Historic-Preservation-Advisory-Committee"
+    web.add(
+        BOARDS_INDEX,
+        _page(
+            "Boards",
+            '<a href="/20/Historic-Preservation-Advisory-Committee">'
+            "Historic Preservation Advisory Committee</a>",
+        ),
+    )
+    term = "Term expires: September 2028"
+    web.add(
+        page_url,
+        _page(
+            "Historic Preservation Advisory Committee",
+            _list(
+                "Leslie Moore, Chair",
+                term,
+                "Carri Grimditch",
+                term,
+                "Cheryl Szydlo",
+                term,
+                "Vacant Seat",
+                term,
+                "Karen Anderson, Board Liaison",
+            ),
+        ),
+    )
+    _run(folder, web, monkeypatch)
+    path = roster_for(folder, commission)
+    assert path == folder / "rosters" / "historic-preservation-advisory-commission.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert [(m["name"], m["role"]) for m in data["members"]] == [
+        ("Leslie Moore", "Chair"),
+        ("Carri Grimditch", "Member"),
+        ("Cheryl Szydlo", "Member"),
+    ]
+    assert data["sources"] == [page_url]

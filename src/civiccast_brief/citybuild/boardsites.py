@@ -290,8 +290,14 @@ def _same(body: list[str], link: list[str]) -> bool:
     return head.casefold() == link[0].casefold() and _same(body[1:], link[1:])
 
 
+#: The two words a town and its portal swap for the same advisory body (Berthoud's page titled
+#: "Historic Preservation Advisory Committee" is the portal's "... Commission").
+_KIND_SWAP: Final = frozenset({"commission", "committee"})
+
+
 def _score(body: str, text: str) -> int:
-    """How well a link's text names the body: 3 the same, 2 one holds the other, 0 no."""
+    """How well a link's text names the body: 3 the same, 2 one holds the other, or the same name
+    ending Commission/Committee, 0 no."""
     if _NOT_A_BOARD_PAGE.search(text):
         return 0
     link = _words(text)
@@ -304,6 +310,16 @@ def _score(body: str, text: str) -> int:
     for part in parts:
         words = _words(part)
         if len(words) >= 2 and (_contains(link, words) or _contains(words, link)):
+            return 2
+    for part in parts:
+        a = _words(part)
+        if (
+            len(a) == len(link) >= 3
+            and a[:-1] == link[:-1]
+            and a[-1] != link[-1]
+            and a[-1] in _KIND_SWAP
+            and link[-1] in _KIND_SWAP
+        ):
             return 2
     return 0
 
