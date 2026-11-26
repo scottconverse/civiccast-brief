@@ -353,6 +353,20 @@ def test_the_weekly_job_page_says_what_the_job_publishes(plain):
     assert "passes its checks is published on this desk" in page
 
 
+def test_the_weekly_job_page_says_the_run_builds_and_puts_the_website_online(plain):
+    app, station, _, _ = plain
+    station.set_publish([["build-the-site"], ["deploy-the-site"]])
+    page = signed_in(app).get("/runs").text
+    assert "builds the website and puts it online" in page
+    assert "stays with the weekly command" not in page
+
+
+def test_the_weekly_job_page_says_the_run_does_not_build_the_website(plain):
+    app, _, _, _ = plain
+    page = signed_in(app).get("/runs").text
+    assert "It does not build the website" in page
+
+
 def test_test_one_meeting_without_a_city_starts_nothing(tmp_path):
     clock = Clock(datetime(2026, 11, 11, 12, 0, tzinfo=DENVER))
     steps = Steps()
