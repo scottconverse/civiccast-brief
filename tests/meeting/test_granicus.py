@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -295,3 +296,29 @@ def test_pipeline_judges_with_the_judge_writer_when_one_is_given(tmp_path, monke
     pipeline.run("7806", tmp_path / "a", complete=writer, judge_complete=judge, **common)
     pipeline.run("7806", tmp_path / "b", complete=writer, **common)
     assert used == [judge, writer]
+
+
+def test_the_audio_fetch_names_the_program_to_the_host(tmp_path, monkeypatch):
+    clip = G.Clip(
+        host="goldenco.granicus.com",
+        view_id=2,
+        clip_id=6736,
+        name="Council",
+        date="November 24, 2026",
+        mp3_url="https://x/a.mp3",
+    )
+    cap = G.GranicusCapture(
+        clip=clip, caption_file=Path("clip.vtt"), caption_reused=False, items=[]
+    )
+    seen = {}
+
+    def run(argv, **kw):
+        seen["argv"] = argv
+        Path(argv[-1]).write_bytes(b"wav")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    monkeypatch.setattr(G.subprocess, "run", run)
+    G.fetch_audio(cap, tmp_path / "audio")
+    argv = seen["argv"]
+    assert argv[argv.index("-user_agent") + 1] == direct.FETCH_USER_AGENT
+    assert argv.index("-user_agent") < argv.index("-i")

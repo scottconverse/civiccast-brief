@@ -131,3 +131,28 @@ def test_capture_reads_captions_when_listed_and_transcribes_otherwise(tmp_path, 
 
     with pytest.raises(direct.DirectError, match=direct.NO_MEDIA):
         direct.capture("", None, tmp_path / "none")
+
+
+def test_input_args_names_the_program_only_on_an_http_fetch():
+    assert direct.input_args("https://x/a.mp4") == [
+        "-user_agent",
+        direct.FETCH_USER_AGENT,
+        "-i",
+        "https://x/a.mp4",
+    ]
+    assert direct.input_args("C:/a.mp4") == ["-i", "C:/a.mp4"]
+
+
+def test_the_audio_fetch_names_the_program_to_the_host(tmp_path, monkeypatch):
+    seen = {}
+
+    def run(argv, **kw):
+        seen["argv"] = argv
+        Path(argv[-1]).write_bytes(b"wav")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    monkeypatch.setattr(direct.subprocess, "run", run)
+    direct.fetch_audio("https://x/a.mp4", tmp_path / "audio", "m1")
+    argv = seen["argv"]
+    assert argv[argv.index("-user_agent") + 1] == direct.FETCH_USER_AGENT
+    assert argv.index("-user_agent") < argv.index("-i")

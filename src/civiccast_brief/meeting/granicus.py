@@ -280,7 +280,17 @@ def fetch_audio(cap: GranicusCapture, work_dir: Path, *, ffmpeg: str = "ffmpeg")
         return wav
     source = media_url(cap.clip.host, cap.clip.view_id, cap.clip.clip_id, cap.clip.mp3_url)
     part = wav.with_suffix(".part.wav")
-    argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", source, "-vn", "-ac", "1"]
+    argv = [
+        ffmpeg,
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        *direct.input_args(source),
+        "-vn",
+        "-ac",
+        "1",
+    ]
     argv += ["-ar", "16000", str(part)]
     try:
         done = subprocess.run(

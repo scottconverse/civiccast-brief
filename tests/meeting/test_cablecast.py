@@ -290,3 +290,29 @@ def test_pipeline_records_a_transcribed_cablecast_show(tmp_path, web, monkeypatc
     transcript = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
     assert transcript["source"]["caption_kind"] == "local_speech_to_text"
     assert transcript["source"]["capture"] == pipeline.TRANSCRIBED_CAPTURE
+
+
+def test_the_audio_fetch_names_the_program_to_the_host(tmp_path, monkeypatch):
+    show = C.Show(
+        host="reflect.cityofloveland.co",
+        show_id=746,
+        vod_id=530,
+        name="City Council Meeting November 4, 2026",
+        date="November 4, 2026",
+        mp4_url="https://x/a.mp4",
+    )
+    cap = C.CablecastCapture(
+        show=show, caption_file=Path("show.vtt"), caption_reused=False, items=[]
+    )
+    seen = {}
+
+    def run(argv, **kw):
+        seen["argv"] = argv
+        Path(argv[-1]).write_bytes(b"wav")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    monkeypatch.setattr(C.subprocess, "run", run)
+    C.fetch_audio(cap, tmp_path / "audio")
+    argv = seen["argv"]
+    assert argv[argv.index("-user_agent") + 1] == direct.FETCH_USER_AGENT
+    assert argv.index("-user_agent") < argv.index("-i")
