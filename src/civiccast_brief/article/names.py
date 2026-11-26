@@ -15,6 +15,7 @@ and :func:`repair_article` replaces the name with the record's spelling or with 
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
@@ -488,6 +489,9 @@ class People:
 
     persons: tuple[Person, ...]
     text: str
+    #: The normalised tokens of the city's own name ("Estes Park" -> {"estes", "park"}). A run
+    #: that carries the city's name is a place, never an unmatched person ("South Golden").
+    places: frozenset[str] = frozenset()
 
     def match(self, printed: str, role: str = "") -> Person | None:
         """The record person the printed name means, or None.
@@ -525,7 +529,25 @@ class People:
         Hill, but "University Hill" is a neighborhood.
         """
         tokens = _tokens(name)
-        if not tokens or tokens[-1] not in _NON_PERSON_TAIL:
+        if not tokens:
+            return False
+        # The city's own name is a place, never an unmatched person ("Golden", "South Golden",
+        # "Hunger Free Golden", "Golden Nazarene Church"). A run that exactly matches a record
+        # person is still that person ("Pat Lyons" on a Lyons roster).
+        if self.places and not any(_tokens(person.name) == tokens for person in self.persons):
+            starts = [index for index, token in enumerate(tokens) if token in self.places]
+            contiguous = bool(starts) and starts == list(range(starts[0], starts[0] + len(starts)))
+            if (
+                len(starts) == len(self.places)
+                and contiguous
+                and (
+                    starts[0] == 0
+                    or len(tokens) >= 3
+                    or (len(tokens) == 2 and starts[0] == 1 and tokens[0] in _CITY_LEAD_WORDS)
+                )
+            ):
+                return True
+        if tokens[-1] not in _NON_PERSON_TAIL:
             return False
         for person in self.persons:
             last, first = _tokens(person.last), _tokens(person.first)
@@ -824,6 +846,30 @@ _COMPANY_WORDS = frozenset(
         "limited",
         "plc",
         "gmbh",
+    }
+)
+
+
+#: A word that turns the city's name into a place: "South Golden", "Old Town", "Be Golden".
+_CITY_LEAD_WORDS = frozenset(
+    {
+        "north",
+        "south",
+        "east",
+        "west",
+        "downtown",
+        "old",
+        "new",
+        "greater",
+        "historic",
+        "central",
+        "upper",
+        "lower",
+        "uptown",
+        "be",
+        "keep",
+        "love",
+        "visit",
     }
 )
 
@@ -2272,11 +2318,24 @@ def people_from_roster(roster: Any, path: str = "roster.json") -> list[Person]:
     return out
 
 
+def city_name_of(folder: Path | None) -> str:
+    """The city's own name from ``city.json`` in its folder, or "" when it cannot be read."""
+    if folder is None:
+        return ""
+    try:
+        data = json.loads((folder / "city.json").read_text(encoding="utf-8"))
+        name = data["name"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+    return name if isinstance(name, str) else ""
+
+
 def load_people(
     rosters: list[tuple[Any, str]] | None = None,
     pages: dict[str, Any] | None = None,
     documents_path: str = "",
     other_rosters: list[tuple[Any, str]] | None = None,
+    city_name: str = "",
 ) -> People:
     """The people a meeting's records name, from its roster files and its documents.
 
@@ -2313,7 +2372,7 @@ def load_people(
             *(_normal(str(page.text)) for page in (pages or {}).values()),
         ]
     )
-    return People(persons=tuple(persons), text=text)
+    return People(persons=tuple(persons), text=text, places=frozenset(_tokens(city_name)))
 
 
 def audit(people: People, texts: list[str]) -> list[str]:

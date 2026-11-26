@@ -11,6 +11,7 @@ from typing import Any
 
 from civiccast_brief.article.names import (
     People,
+    city_name_of,
     fixes,
     load_people,
     ordinary_words,
@@ -301,7 +302,14 @@ def _people_of(meeting_dir: Path | None, documents: Path | None, roundup: bool =
             except (OSError, ValueError):
                 continue
         pages = merged or None
-    return load_people(rosters, pages, str(documents) if documents else "", others)
+    city_name = city_name_of(Path(roster_path).parent) if roster_path else ""
+    return load_people(
+        rosters,
+        pages,
+        str(documents) if documents else "",
+        others,
+        city_name=city_name,
+    )
 
 
 def _name_fixes(

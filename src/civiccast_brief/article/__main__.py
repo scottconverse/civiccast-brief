@@ -36,7 +36,12 @@ from typing import Any
 
 from civiccast_brief import models
 from civiccast_brief.article import golden, skill
-from civiccast_brief.article.names import People, load_people, repair_article
+from civiccast_brief.article.names import (
+    People,
+    city_name_of,
+    load_people,
+    repair_article,
+)
 from civiccast_brief.article.terms import load_record, repair_terms
 from civiccast_brief.article.title import save_title, write_title
 from civiccast_brief.article.writer import (
@@ -209,11 +214,13 @@ def _people(args: argparse.Namespace, recap, pages: dict[str, DocPage] | None) -
         pages = _record_pages(args, recap)
     # The body's roster comes first; the city's other bodies are matched only by exact name.
     rosters = _rosters(args, recap)
+    city = getattr(args, "city", None)
     return load_people(
         rosters[:1],
         pages,
         str(documents) if documents.exists() else "",
         rosters[1:],
+        city_name=city_name_of(city),
     )
 
 
