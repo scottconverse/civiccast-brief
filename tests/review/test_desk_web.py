@@ -595,7 +595,23 @@ def test_remove_takes_off_a_member_entered_on_the_page(store, city):
     )
     assert removed.status_code == 303
     assert removed.headers["location"] == "/roster?notice=removed"
-    assert json.loads(roster_file(city).read_text(encoding="utf-8"))["members"] == []
+    assert not roster_file(city).exists()
+
+
+def test_removing_the_last_of_two_hand_members_keeps_the_one_left(store, city):
+    roster_city(city)
+    client = client_for(store, city)
+    add_member(client, name="Ada Lovelace", source="https://example.org/ada")
+    add_member(client, name="Grace Hopper", source="https://example.org/grace")
+    removed = client.post(
+        "/roster/remove",
+        data={"token": token(client), "body": "City Council", "name": "Ada Lovelace"},
+        follow_redirects=False,
+    )
+    assert removed.status_code == 303
+    data = json.loads(roster_file(city).read_text(encoding="utf-8"))
+    assert data["hand"] is True
+    assert [m["name"] for m in data["members"]] == ["Grace Hopper"]
 
 
 def test_remove_refuses_a_member_the_records_supplied(store, city):

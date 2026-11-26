@@ -103,7 +103,7 @@ def _hand(path: Path) -> bool:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    return isinstance(data, dict) and data.get("hand") is True
+    return isinstance(data, dict) and data.get("hand") is True and bool(data.get("members"))
 
 
 def _governing(body: str) -> bool:
@@ -266,10 +266,15 @@ def write_civicweb_rosters(
         return [f"{base}: the meeting type list could not be read: {exc}"]
     for body in source.bodies:
         existing = roster_for(folder, body)
+        path = folder / ROSTERS_DIR / f"{slug(body)}.json"
         if existing is not None:
             if _hand(existing):
                 lines.append(f"{body}: kept {existing.name}; its members were entered by hand")
-            continue
+                continue
+            # An empty roster this writer's own file would replace is filled in; anything else
+            # (a roster with members, or the citywide roster.json) is left alone.
+            if not _empty(existing) or existing != path:
+                continue
         page_id = pages.get(_fold(body))
         if page_id is None:
             lines.append(f"{body}: the portal lists no member page for it")
@@ -283,7 +288,6 @@ def write_civicweb_rosters(
         if not members:
             lines.append(f"{body}: the portal lists no current members")
             continue
-        path = folder / ROSTERS_DIR / f"{slug(body)}.json"
         roster = {
             "city": city,
             "state": state,

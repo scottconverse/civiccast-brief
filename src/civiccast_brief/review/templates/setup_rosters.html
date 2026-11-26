@@ -47,7 +47,7 @@ each week's records, but the setup needs one to start.
   {% for r in city.rows %}
   <tr>
     <td>{{ r.body }}</td>
-    {% if r.file %}
+    {% if r.file and r.members %}
     <td>{{ r.file }}</td><td>{{ r.members }}</td><td></td>
     {% else %}
     <td><span class="status failed">No roster</span></td><td></td>

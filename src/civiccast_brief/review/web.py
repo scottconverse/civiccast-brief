@@ -1294,6 +1294,9 @@ def make_desk_app(
             )
         assert isinstance(members, list)
         members.remove(member)
+        if not members and data.get("hand") is True:
+            path.unlink()
+            return _redirect("/roster?notice=removed")
         text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         path.write_text(text, encoding="utf-8", newline="\n")
         return _redirect("/roster?notice=removed")

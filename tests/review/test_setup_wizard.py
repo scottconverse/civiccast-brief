@@ -1524,6 +1524,24 @@ def test_a_body_with_no_roster_makes_the_rosters_row_needs_work(done_hub_app):
     assert 'href="/setup/rosters"' in page.text
 
 
+def test_a_roster_file_with_no_members_makes_the_rosters_row_needs_work(done_hub_app):
+    app, cities = done_hub_app
+    client = client_for(app)
+    prepare_everything_ok(app, cities, client)
+    _two_body_sources(cities)
+    rosters = cities / "alpha" / "city" / "rosters"
+    rosters.mkdir()
+    (rosters / "planning-commission.json").write_text(
+        json.dumps({"body": "Planning Commission", "hand": True, "members": []}),
+        encoding="utf-8",
+    )
+
+    page = client.get("/setup/done")
+    assert "No members for: Planning Commission." in page.text
+    assert "1 thing needs work." in page.text
+    assert 'href="/setup/rosters"' in page.text
+
+
 def test_every_body_with_a_roster_makes_the_rosters_row_ok_again(done_hub_app):
     app, cities = done_hub_app
     client = client_for(app)
