@@ -18,6 +18,8 @@ touches a real scheduled task.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -65,6 +67,7 @@ class TaskStatus:
     next_run: datetime | None = None
     last_run: datetime | None = None
     last_result: int | None = None
+    cities: str = ""
 
     @property
     def last_result_text(self) -> str:
@@ -111,7 +114,8 @@ def install_script(python: str | Path, cities_dir: str | Path) -> str:
 
     The trigger names this user and the principal is interactive with limited rights, so a
     non-elevated user may register it. The hourly trigger carries no ``-RepetitionDuration``:
-    Task Scheduler then repeats with no end, which it accepts as ``PT1H``."""
+    Task Scheduler then repeats with no end, which it accepts as ``PT1H``. The task is allowed
+    to start and to keep running on battery, so a laptop on battery still runs its week."""
     action = f"New-ScheduledTaskAction -Execute {_ps(python)} -Argument {_ps(_command(cities_dir))}"
     return "\n".join(
         [
@@ -125,7 +129,8 @@ def install_script(python: str | Path, cities_dir: str | Path) -> str:
             ),
             (
                 "$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable"
-                " -MultipleInstances IgnoreNew"
+                " -MultipleInstances IgnoreNew -AllowStartIfOnBatteries"
+                " -DontStopIfGoingOnBatteries"
             ),
             (
                 "$principal = New-ScheduledTaskPrincipal -UserId $me"
@@ -153,9 +158,12 @@ def status_script() -> str:
             "if ($info.NextRunTime) { $next = $info.NextRunTime.ToString('o') }",
             "$last = ''",
             "if ($info.LastRunTime) { $last = $info.LastRunTime.ToString('o') }",
+            "if ($task.Actions.Count -gt 0) { $arguments = [string]$task.Actions[0].Arguments }",
+            "else { $arguments = '' }",
             (
                 "[pscustomobject]@{ installed = $true; state = [string]$task.State;"
-                " next = $next; last = $last; result = [int]$info.LastTaskResult }"
+                " next = $next; last = $last; result = [int]$info.LastTaskResult;"
+                " arguments = $arguments }"
                 " | ConvertTo-Json -Compress"
             ),
         ]
@@ -220,7 +228,28 @@ def status(runner: TaskRunner = run_powershell) -> TaskStatus:
         next_run=_moment(data.get("next")),
         last_run=_moment(data.get("last")),
         last_result=int(data["result"]) if data.get("result") is not None else None,
+        cities=_cities_in(str(data.get("arguments") or "")),
     )
+
+
+def _cities_in(arguments: str) -> str:
+    """The cities folder named by a task's command line, or "" when it names none."""
+    match = re.search(r'--cities "([^"]*)"', arguments)
+    return match.group(1) if match else ""
+
+
+def other_desk(status: TaskStatus, cities_dir: str | Path) -> str:
+    """The task's cities folder when it runs a different desk's cities, else "".
+
+    One task name per PC means installing it from a second desk would silently replace the
+    first desk's task; callers warn before that happens."""
+    if not status.installed or not status.cities:
+        return ""
+    if os.path.normcase(str(Path(status.cities).resolve())) == os.path.normcase(
+        str(Path(cities_dir).resolve())
+    ):
+        return ""
+    return status.cities
 
 
 def remove(runner: TaskRunner = run_powershell) -> bool:

@@ -35,7 +35,8 @@ below is what makes the weekly job run with the desk closed and after a reboot.<
 <h2>The Windows task</h2>
 <p class="muted">One task, <code>CivicCast Brief weekly</code>, runs every city in turn every hour,
 and at sign-in. It runs as you, with no administrator rights and no stored password, so it only
-runs while you are signed in to Windows. After a reboot it runs at your next sign-in, and catches
+runs while you are signed in to Windows. It runs on battery too. After a reboot it runs at your
+next sign-in, and catches
 up a week that passed while the PC was off. When a city's job is already running, the task waits
 for the next hour rather than start a second copy.</p>
 {% if task_error %}
@@ -43,10 +44,12 @@ for the next hour rather than start a second copy.</p>
 {% elif task and task.installed %}
 <dl class="facts">
   <dt>State</dt><dd>{{ task.state or "—" }}</dd>
+  <dt>Cities folder</dt><dd>{{ task.cities or "—" }}</dd>
   <dt>Next run</dt><dd>{% if task.next_run %}{{ task.next_run.strftime('%a %Y-%m-%d %H:%M %Z') }}{% else %}—{% endif %}</dd>
   <dt>Last run</dt><dd>{% if task.last_run %}{{ task.last_run.strftime('%a %Y-%m-%d %H:%M %Z') }}{% else %}—{% endif %}</dd>
   <dt>Last result</dt><dd>{{ task.last_result_text }}</dd>
 </dl>
+{% if other_desk %}<p class="notice error" role="alert">This task runs another desk's cities: {{ other_desk }}.</p>{% endif %}
 {% else %}
 <p><span class="status">Not set up</span> — the weekly job only runs while the desk is open.</p>
 {% endif %}
@@ -54,11 +57,13 @@ for the next hour rather than start a second copy.</p>
   <form method="post" action="/setup/weekly">
     <input type="hidden" name="token" value="{{ token }}">
     <input type="hidden" name="action" value="install">
+    {% if replace_ready %}<input type="hidden" name="replace" value="1">{% endif %}
     <button type="submit" class="primary" data-busy="Setting up the Windows task…">Set up the Windows task</button>
   </form>
   <form method="post" action="/setup/weekly">
     <input type="hidden" name="token" value="{{ token }}">
     <input type="hidden" name="action" value="remove">
+    {% if replace_ready %}<input type="hidden" name="replace" value="1">{% endif %}
     <button type="submit" data-busy="Removing the Windows task…"
             data-confirm="Remove the Windows task? The weekly job will then run only while the desk is open.">Remove the Windows task</button>
   </form>

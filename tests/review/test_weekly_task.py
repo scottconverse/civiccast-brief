@@ -28,7 +28,7 @@ $me = "$env:USERDOMAIN\$env:USERNAME"
 $action = New-ScheduledTaskAction -Execute 'C:\Python\python.exe' -Argument '-m civiccast_brief.review run-due --cities "C:\cities"'
 $logon = New-ScheduledTaskTrigger -AtLogOn -User $me
 $hourly = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1)
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName 'CivicCast Brief weekly' -Action $action -Trigger @($logon, $hourly) -Settings $settings -Principal $principal -Force | Out-Null"""
     assert calls == [[*PREFIX, script]]
@@ -44,6 +44,14 @@ def test_the_trigger_names_this_user_and_needs_no_administrator() -> None:
     # Task Scheduler rejects P99999999DT23H59M59S; no duration means it repeats with no end.
     assert "RepetitionDuration" not in script
     assert "-RepetitionInterval (New-TimeSpan -Hours 1)" in script
+
+
+def test_the_task_may_start_and_keep_running_on_battery() -> None:
+    script = weekly_task.install_script("python.exe", r"C:\cities")
+
+    # Windows otherwise keeps its defaults, which never start the hour's run on battery.
+    assert "-AllowStartIfOnBatteries" in script
+    assert "-DontStopIfGoingOnBatteries" in script
 
 
 def test_a_pythonw_beside_python_runs_the_task_with_no_console_window(tmp_path) -> None:
@@ -107,6 +115,40 @@ def test_status_reads_the_state_times_and_result() -> None:
     assert status.next_run is not None and status.next_run.hour == 6
     assert status.last_run is not None
     assert status.last_result_text == "ok"
+
+
+def test_status_reads_the_cities_folder_from_the_task_arguments() -> None:
+    status = weekly_task.status(
+        lambda argv: (
+            0,
+            json.dumps(
+                {
+                    "installed": True,
+                    "state": "Ready",
+                    "next": "",
+                    "last": "",
+                    "result": weekly_task.NEVER_RUN,
+                    "arguments": '-m civiccast_brief.review run-due --cities "C:\\x\\cities"',
+                }
+            ),
+            "",
+        )
+    )
+
+    assert status.cities == r"C:\x\cities"
+
+
+def test_other_desk_names_another_folder_and_nothing_otherwise(tmp_path) -> None:
+    here = tmp_path / "here"
+    elsewhere = tmp_path / "elsewhere"
+
+    assert (
+        weekly_task.other_desk(weekly_task.TaskStatus(installed=True, cities=str(here)), here) == ""
+    )
+    assert weekly_task.other_desk(
+        weekly_task.TaskStatus(installed=True, cities=str(elsewhere)), here
+    ) == str(elsewhere)
+    assert weekly_task.other_desk(weekly_task.TaskStatus(installed=False), here) == ""
 
 
 def test_status_says_not_installed_and_never_run_plainly() -> None:
