@@ -24,7 +24,7 @@ from datetime import date
 from typing import Any, Final
 from urllib.parse import urlsplit
 
-from civiccast_brief.citybuild import detect, drive, platforms
+from civiccast_brief.citybuild import detect, drive, platforms, read
 from civiccast_brief.citybuild.documents import document_links
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError, Page
 from civiccast_brief.citybuild.page import Link, link_date, page_text, parse, squash
@@ -526,6 +526,47 @@ def _known_bodies(result: Search, given: str | None) -> list[str]:
     return list(dict.fromkeys([*result.bodies, *COMMON_BODIES]))
 
 
+def _named(known: list[str], texts: list[str], city: str) -> list[str]:
+    """The bodies in ``known`` (same order) that some text names.
+
+    A body does not count for a text when every place its name appears there overlaps a place
+    where a longer matched body name appears in the same text. Berthoud's titles read
+    "Town Board of Trustees Meeting": "town board" sits inside "board of trustees", so that
+    title names one body, the Board of Trustees, not two. A title naming the Town Board alone
+    still names it. A body found only by :func:`read.shortened_match` keeps the old rule and
+    counts when :func:`body_matches` is true.
+    """
+    matched: set[str] = set()
+    for text in texts:
+        lowered = read._plain(squash(text)).casefold()
+        places: dict[str, list[tuple[int, int]]] = {}
+        for body in known:
+            spans: list[tuple[int, int]] = []
+            for name in read.names_for(body):
+                start = lowered.find(name)
+                while start != -1:
+                    spans.append((start, start + len(name)))
+                    start = lowered.find(name, start + 1)
+            places[body] = spans
+        for body in known:
+            spans = places[body]
+            if not spans:
+                if body_matches(body, text, city):
+                    matched.add(body)
+                continue
+            if any(
+                not any(
+                    start < end and other_start < stop and (stop - other_start) > (end - start)
+                    for other in known
+                    if other != body
+                    for other_start, stop in places[other]
+                )
+                for start, end in spans
+            ):
+                matched.add(body)
+    return [body for body in known if body in matched]
+
+
 def _granicus(result: Search, item: detect.Found, fetcher: Fetcher, body: str | None) -> None:
     if not item.extra:
         result.unread.append(Unread("Granicus", item.url, "no view_id in the link"))
@@ -536,7 +577,7 @@ def _granicus(result: Search, item: detect.Found, fetcher: Fetcher, body: str | 
         result.unread.append(Unread("Granicus", item.url, "the archive page did not answer"))
         return
     text = page_text(page.text)
-    bodies = [b for b in _known_bodies(result, body) if body_matches(b, text, result.name)]
+    bodies = _named(_known_bodies(result, body), [text], result.name)
     if not bodies:
         result.unread.append(Unread("Granicus", item.url, "the archive names none of the bodies"))
         return
@@ -592,8 +633,8 @@ def _youtube(
         return
     known = _known_bodies(result, body)
     recent = [v for v in videos if (today - v[2]).days <= OLD_TITLE_DAYS]
-    titles = " | ".join(title for _, title, _ in recent)
-    bodies = [b for b in known if body_matches(b, titles, result.name)]
+    titles = [title for _, title, _ in recent]
+    bodies = _named(known, titles, result.name)
     if not bodies:
         naming = [v for v in videos if any(body_matches(b, v[1], result.name) for b in known)]
         if naming:
@@ -638,8 +679,8 @@ def _cablecast(result: Search, item: detect.Found) -> None:
         note = f"its show list did not answer: {exc}; {by_hand}"
         result.unread.append(Unread(item.label, item.url, note))
         return
-    titles = " | ".join(show.name for show in shows)
-    bodies = [b for b in _known_bodies(result, None) if body_matches(b, titles, result.name)]
+    titles = [show.name for show in shows]
+    bodies = _named(_known_bodies(result, None), titles, result.name)
     if not bodies:
         note = f"none of its {len(shows)} newest shows names a body; {by_hand}"
         result.unread.append(Unread(item.label, item.url, note))

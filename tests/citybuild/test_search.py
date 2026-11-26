@@ -7,7 +7,7 @@ from datetime import date
 
 from civiccast_brief.citybuild.build import PUBLISHER_EMAIL, REPORT_FILE, build_city
 from civiccast_brief.citybuild.fetch import FetchError, Page
-from civiccast_brief.citybuild.search import PROBED, guesses, search_city
+from civiccast_brief.citybuild.search import PROBED, _named, guesses, search_city
 from civiccast_brief.sources import load_sources, make_source
 
 from .conftest import (
@@ -368,6 +368,69 @@ def test_a_channel_whose_only_body_titles_are_old_is_unread_not_saved(web):
     (unread,) = [u for u in found.unread if u.platform == "YouTube"]
     assert "older than a year" in unread.note
     assert unread.channel == CHANNEL
+
+
+def berthoud_feed(web, *videos: tuple[str, str, str]) -> None:
+    web.add(
+        "https://www.berthoud.test/",
+        '<html><a href="https://www.youtube.com/channel/UCH5_wkpLrKYb1JuUk6-UdNg">Meetings</a></html>',
+    )
+    web.add(
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UCH5_wkpLrKYb1JuUk6-UdNg",
+        feed(*videos),
+        "application/atom+xml",
+    )
+
+
+def test_a_title_naming_town_board_of_trustees_offers_one_body(web):
+    """Berthoud's "Town Board of Trustees" title names the Board of Trustees, not Town Board too."""
+    berthoud_feed(
+        web,
+        (
+            "aaaaaaaaaaa",
+            "11 24 2026 Town Board of Trustees Meeting",
+            "2026-11-25T03:00:00+00:00",
+        ),
+    )
+    found = search_city(
+        "Berthoud",
+        "CO",
+        website="https://www.berthoud.test/",
+        fetcher=web.fetcher(),
+        today=date(2026, 11, 25),
+    )
+    (channel,) = by_kind(found)["youtube"]
+    assert channel.bodies == ("Board of Trustees",)
+
+
+def test_a_title_naming_town_board_alone_still_offers_it(web):
+    berthoud_feed(
+        web,
+        (
+            "aaaaaaaaaaa",
+            "11 24 2026 Town Board of Trustees Meeting",
+            "2026-11-25T03:00:00+00:00",
+        ),
+        ("bbbbbbbbbbb", "11 10 2026 Town Board Meeting", "2026-11-11T03:00:00+00:00"),
+    )
+    found = search_city(
+        "Berthoud",
+        "CO",
+        website="https://www.berthoud.test/",
+        fetcher=web.fetcher(),
+        today=date(2026, 11, 25),
+    )
+    (channel,) = by_kind(found)["youtube"]
+    assert set(channel.bodies) == {"Town Board", "Board of Trustees"}
+
+
+def test_named_keeps_a_body_whose_name_is_not_inside_another():
+    assert _named(
+        ["Planning Commission", "Planning and Zoning Commission"],
+        ["Planning and Zoning Commission Meeting"],
+        "",
+    ) == ["Planning and Zoning Commission"]
+    assert _named(["City Council"], ["City Council Meeting"], "") == ["City Council"]
 
 
 # ----- CivicClerk, eScribe and CivicPlus ---------------------------------------------------------
