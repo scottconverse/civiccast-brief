@@ -315,7 +315,15 @@ def fetch_audio(cap: CablecastCapture, work_dir: Path, *, ffmpeg: str = "ffmpeg"
     if wav.exists() and wav.stat().st_size > 0:
         return wav
     part = wav.with_suffix(".part.wav")
-    argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", cap.show.mp4_url, "-vn"]
+    argv = [
+        ffmpeg,
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        *direct.input_args(cap.show.mp4_url),
+        "-vn",
+    ]
     argv += ["-ac", "1", "-ar", "16000", str(part)]
     try:
         done = subprocess.run(

@@ -37,12 +37,23 @@ from civiccast_brief.speech.windows_process import hidden_process_kwargs
 FETCH_TIMEOUT_S = 120
 AUDIO_TIMEOUT_S = 3600
 
+#: The name the audio fetch gives, in the usual crawler form; some video hosts refuse
+#: ffmpeg's own name.
+FETCH_USER_AGENT = "Mozilla/5.0 (compatible; CivicCastBrief; +https://civiccastbrief.org)"
+
 #: The reason recorded when a direct-media meeting has no media address at all.
 NO_MEDIA = "the source lists no playable media for this meeting"
 
 #: How one child process is run. Tests pass a fake that writes the transcript the speech
 #: program would have written, so no test runs a model or reaches the network.
 Runner = Callable[[list[str], float], subprocess.CompletedProcess[bytes]]
+
+
+def input_args(media_url: str) -> list[str]:
+    """ffmpeg's input arguments for a media address, naming this program on an HTTP fetch."""
+    if media_url.lower().startswith(("http://", "https://")):
+        return ["-user_agent", FETCH_USER_AGENT, "-i", media_url]
+    return ["-i", media_url]
 
 
 class DirectError(RuntimeError):
@@ -203,7 +214,17 @@ def fetch_audio(media_url: str, work_dir: Path, meeting_id: str, *, ffmpeg: str 
     if wav.exists() and wav.stat().st_size > 0:
         return wav
     part = wav.with_suffix(".part.wav")
-    argv = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", media_url, "-vn", "-ac", "1"]
+    argv = [
+        ffmpeg,
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        *input_args(media_url),
+        "-vn",
+        "-ac",
+        "1",
+    ]
     argv += ["-ar", "16000", str(part)]
     try:
         done = subprocess.run(
