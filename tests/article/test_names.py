@@ -1582,3 +1582,60 @@ def test_a_print_role_beats_a_company_word_but_a_titleless_run_does_not():
     # "Co" is a surname too, so it is not a company word.
     assert "co" not in _COMPANY_WORDS
     assert "l l c" not in _COMPANY_WORDS
+
+
+def test_the_citys_own_name_is_not_a_persons_name() -> None:
+    from civiccast_brief.article.names import People
+
+    people = People(persons=(), text="", places=frozenset({"golden"}))
+    for place in (
+        "Golden",
+        "South Golden",
+        "Hunger Free Golden",
+        "Golden Nazarene Church",
+        "Be Golden",
+    ):
+        assert people.not_a_person(place) is True, place
+    assert people.not_a_person("Pat Golden") is False
+
+
+def test_a_multi_word_city_name_needs_the_whole_name() -> None:
+    from civiccast_brief.article.names import People
+
+    people = People(persons=(), text="", places=frozenset({"estes", "park"}))
+    assert people.not_a_person("Estes Park") is True
+    # One city token alone is not the city, so the old rule decides and "Estes" is no place word.
+    assert people.not_a_person("Estes") is False
+
+
+def test_a_record_person_named_like_the_city_is_still_a_person() -> None:
+    from civiccast_brief.article.names import People, Person
+
+    person = Person(
+        name="Pat Lyons",
+        first="Pat",
+        last="Lyons",
+        role="Trustee",
+        source="roster.json",
+        evidence='"name": "Pat Lyons"',
+    )
+    people = People(persons=(person,), text="", places=frozenset({"lyons"}))
+    assert people.not_a_person("Pat Lyons") is False
+
+
+def test_the_citys_name_in_a_paragraph_survives_the_name_repair() -> None:
+    people = load_people([], {}, "", city_name="Golden")
+    text = (
+        "Golden residents can meet the finalists, and Hunger Free Golden presented its assessment."
+    )
+    out, changes = repair_text(text, people)
+    assert out == text
+    assert changes == []
+
+
+def test_city_name_of_reads_city_json_or_gives_empty(tmp_path) -> None:
+    from civiccast_brief.article.names import city_name_of
+
+    assert city_name_of(tmp_path) == ""
+    (tmp_path / "city.json").write_text('{"name": "Golden"}', encoding="utf-8")
+    assert city_name_of(tmp_path) == "Golden"
