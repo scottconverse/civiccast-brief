@@ -202,6 +202,30 @@ def test_the_title_before_a_name_and_the_title_after_it_read_the_same():
     assert boardsites._line_member("Lauren Roth - Chair") == ("Lauren Roth", "Chair")
 
 
+def test_a_title_in_parentheses_after_a_name_is_the_members_title():
+    assert boardsites._line_member("Ross Fraser (Chair)") == ("Ross Fraser", "Chair")
+    assert boardsites._line_member("Seth Webb (Vice Chair)") == ("Seth Webb", "Vice Chair")
+    assert boardsites._line_member("Rick Caldwell (Alternate)") == ("Rick Caldwell", "Alternate")
+    assert boardsites._line_member("Pat Doe (Staff Liaison)") is False
+    assert boardsites._line_member("Mindy Miller (she, her)") == ("Mindy Miller", "")
+
+
+def test_a_box_is_the_html_of_its_own_element():
+    boxes = (
+        '<div id="board-box-Alpha-1"><p>Alpha</p><p>One</p></div>'
+        '<div id="board-box-Beta-2"><p>Beta</p><p>Two</p></div>'
+        '<div id="board-box-Gamma-3"><p>Gamma</p><p>Three</p></div>'
+    )
+    middle = boardsites._box(boxes, "board-box-Beta-2")
+    assert middle is not None
+    assert "Beta" in middle and "Two" in middle
+    assert "Alpha" not in middle and "Gamma" not in middle
+    assert boardsites._box(boxes, "board-box-Missing-9") is None
+    last = boardsites._box(boxes, "board-box-Gamma-3")
+    assert last is not None
+    assert "Three" in last and "Alpha" not in last and last.rstrip().endswith("</div>")
+
+
 def test_a_page_with_fewer_than_three_names_has_no_roster():
     page = "<h2>Members</h2><ul><li>Ann Lee, Chair</li><li>Bo Ray</li></ul>"
     assert boardsites.read_board_members(page) == []
@@ -414,3 +438,87 @@ def test_a_board_page_titled_committee_gives_the_portals_commission_its_roster(
         ("Cheryl Szydlo", "Member"),
     ]
     assert data["sources"] == [page_url]
+
+
+def _board_box(ident: str, *lines: str) -> str:
+    return (
+        f'<div id="{ident}" class="board-box board-item">'
+        + "".join(f"<p>{line}</p>" for line in lines)
+        + "</div>"
+    )
+
+
+def test_a_board_is_read_from_its_own_box_on_a_page_of_every_board(tmp_path, web, monkeypatch):
+    folder = tmp_path / "golden"
+    folder.mkdir()
+    source = make_source(
+        "civicplus",
+        {
+            "site": "www.exampleco.gov",
+            "bodies": ["Town Council", "Planning Commission", "Library Board"],
+        },
+    )
+    merge_sources(folder, [source])
+    (folder / "city.json").write_text(json.dumps({"name": "Example"}))
+    (folder / "roster.json").write_text(json.dumps({"state": "CO", "body": "Town Council"}))
+    (folder / "city-search.json").write_text(json.dumps({"website": SITE + "/"}))
+    index = SITE + "/boards_and_commissions.php"
+    planning = _board_box(
+        "board-box-PlanningCommission-47",
+        "Planning Commission",
+        "Boards & Commissions",
+        "Details",
+        "Members",
+        "The Planning Commission meets twice a month.",
+        "Serving Members",
+        "Planning Commission Members and Their Term End Dates",
+        "Commission Member",
+        "Term Ends",
+        "Jenn Rutter",
+        "April 2028",
+        "Ross Fraser (Chair)",
+        "April 2028",
+        "Elizabeth Hilliard",
+        "April 2028",
+        "Seth Webb (Vice Chair)",
+        "April 2028",
+        "Rick Caldwell (Alternate)",
+        "April 2030",
+    )
+    library = _board_box(
+        "board-box-LibraryBoard-48",
+        "Library Board",
+        "Members",
+        "Zoe Zane",
+        "Yves York",
+        "Xena Xu",
+        "Wade Wu",
+        "Vic Vale",
+        "Uma Unger",
+    )
+    parks = _board_box(
+        "board-box-ParksBoard-49", "Parks Board", "Members", "Pat Park", "Quinn Quay", "Rae Reed"
+    )
+    web.add(SITE + "/", _page("Home", f'<a href="{index}">Boards &amp; Commissions</a>'))
+    web.add(
+        index,
+        _page(
+            "Boards, Commissions & Committees",
+            '<a href="#board-box-PlanningCommission-47">Planning Commission</a>'
+            '<a href="#board-box-LibraryBoard-48">Library Board</a>'
+            '<a href="#board-box-ParksBoard-49">Parks Board</a>' + planning + library + parks,
+        ),
+    )
+    _run(folder, web, monkeypatch)
+    path = roster_for(folder, "Planning Commission")
+    assert path is not None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert [(m["name"], m["role"]) for m in data["members"]] == [
+        ("Jenn Rutter", "Member"),
+        ("Ross Fraser", "Chair"),
+        ("Elizabeth Hilliard", "Member"),
+        ("Seth Webb", "Vice Chair"),
+        ("Rick Caldwell", "Alternate"),
+    ]
+    assert data["sources"] == [index + "#board-box-PlanningCommission-47"]
+    assert "Zoe Zane" not in [m["name"] for m in data["members"]]  # the Library Board's box

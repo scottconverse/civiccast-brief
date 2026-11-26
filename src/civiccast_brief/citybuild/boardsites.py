@@ -7,7 +7,9 @@ of ways, all seen on 2026-11-11:
   (Lafayette), or one name per line with the title after a comma (Lyons);
 * the same with the title on the next line (Boulder: "Commission Member", "Term Years");
 * "2026 Planning Commission Members" and plain names under it (Louisville);
-* "Name, Chair (term ends Feb. 28, 2028)" under "Current Members" (Boulder County).
+* "Name, Chair (term ends Feb. 28, 2028)" under "Current Members" (Boulder County);
+* every board on one page, each in its own box linked by ``#id``, the names with the title in
+  parentheses after them (Golden CO, 2026-11-26).
 
 The members are read by rule; no model is asked. Only names and titles are kept, never the email
 address or the phone number beside them, and staff and council liaisons are left out. A board
@@ -142,6 +144,14 @@ def _line_member(line: str) -> tuple[str, str] | None | bool:
     text = _TERM_TAIL.sub("", line).strip()
     while (stripped := _NAME_NOTE.sub("", text)) != text:
         text = stripped
+    parenthesised = re.fullmatch(r"(.+?)\s*\(([^()]*)\)", text)
+    if parenthesised:
+        name, role = _board_name(parenthesised[1]), parenthesised[2].strip()
+        if name is not None and not _ROLE_LINE.match(name):
+            if _STAFF.search(role):
+                return False  # "Pat Doe (Staff Liaison)"
+            if _ROLE_PHRASE.fullmatch(role):
+                return name, role  # "Ross Fraser (Chair)"
     head, role = text, ""
     match = re.match(r"^(.+?)\s*(?:,|\s[—–-])\s*(.+)$", text)
     if match:
@@ -360,7 +370,7 @@ class _Reader:
 
 def _links(page: Page, host: str) -> list[tuple[str, str]]:
     _, links, _ = parse(page.text, page.url)
-    return [(l.text, l.url.split("#", 1)[0]) for l in links if _host(l.url) == host and l.text]
+    return [(l.text, l.url) for l in links if _host(l.url) == host and l.text]
 
 
 def _is_index(text: str) -> bool:
@@ -433,6 +443,48 @@ def _about(body: str, page: Page, guessed: bool, url: str) -> bool:
     return False
 
 
+_TAG = re.compile(r"<[A-Za-z][^>]*>")
+_ID = re.compile(r"""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE)
+
+
+def _ident(tag: str) -> str | None:
+    match = _ID.search(tag)
+    if match is None:
+        return None
+    return html.unescape(next(g for g in match.groups() if g is not None))
+
+
+def _box_prefix(fragment: str) -> str | None:
+    """The part of the fragment that names the boxes it belongs to: "board-box-" from
+    "board-box-PlanningCommission-47", or None when the fragment has fewer than two dashes."""
+    dashes = [index for index, char in enumerate(fragment) if char == "-"]
+    return None if len(dashes) < 2 else fragment[: dashes[-2] + 1]
+
+
+def _box(html: str, fragment: str) -> str | None:
+    """The HTML of the element ``fragment`` names, from its tag up to the tag of the next box
+    (an element whose id starts with the same prefix), or to the end of the page; None when no
+    element has that id."""
+    prefix = _box_prefix(fragment)
+    start = None
+    for tag in _TAG.finditer(html):
+        ident = _ident(tag[0])
+        if ident is None:
+            continue
+        if start is None:
+            if ident == fragment:
+                start = tag.start()
+        elif prefix is not None and ident.startswith(prefix):
+            return html[start : tag.start()]
+    return None if start is None else html[start:]
+
+
+def _box_about(body: str, box: str) -> bool:
+    """Whether the box names the body near its top: one of its first five lines, such as the box's
+    own heading, scores as the body."""
+    return any(_score(body, line) >= 2 for line in page_lines(box)[:5])
+
+
 def write_site_rosters(
     folder: Path,
     sources: list[Source],
@@ -466,16 +518,25 @@ def write_site_rosters(
         members: list[dict[str, str]] = []
         page_url = ""
         for url, guessed in _candidates(body, pool, indexes)[:PAGES_PER_BODY]:
-            page = reader.get(url)
+            fragment = url.split("#", 1)[1] if "#" in url else ""
+            page = reader.get(url.split("#", 1)[0])
             tried.append(url)
-            if page is None or not _about(body, page, guessed, url):
+            if page is None:
                 continue
-            members = read_board_members(page.text)
-            if members and page.url in used:
-                tried.append(f"{page.url} (already {used[page.url]}'s)")
-                members = []
-            if members:
-                page_url = page.url
+            if fragment:  # one box on a page that holds every board: read that box alone
+                box = _box(page.text, fragment)
+                if box is None or not _box_about(body, box):
+                    continue
+                found, page_url = read_board_members(box), url
+            else:
+                if not _about(body, page, guessed, url):
+                    continue
+                found, page_url = read_board_members(page.text), page.url
+            if found and page_url in used:
+                tried.append(f"{page_url} (already {used[page_url]}'s)")
+                found = []
+            if found:
+                members = found
                 used[page_url] = body
                 break
         if not members:
