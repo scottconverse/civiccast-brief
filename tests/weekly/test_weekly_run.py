@@ -8,7 +8,15 @@ from pathlib import Path
 
 from civiccast_brief.meeting.capture import CAPTIONS_NOT_YET_REASON
 from civiccast_brief.weekly.find import Agenda, Found
-from civiccast_brief.weekly.run import STATE_NAME, Settings, Site, Steps, roster_for, run_week
+from civiccast_brief.weekly.run import (
+    STATE_NAME,
+    Settings,
+    Site,
+    Steps,
+    _rebase_media,
+    roster_for,
+    run_week,
+)
 
 COUNCIL = "City Council"
 PZ = "Planning and Zoning Commission"
@@ -1827,3 +1835,125 @@ def test_a_broken_voices_file_fails_the_site_steps_instead_of_using_defaults(tmp
     assert report.failed
     assert any("voices:" in line for line in report.lines)
     assert "audio" not in [step for step, _ in fake.calls]
+
+
+OLD_MEDIA = "http://localhost:8800/x/media"
+
+
+def _rebase_setup(tmp_path, names=("ep-1.mp3", "ep-1-chapters.json", "ep-1.vtt")):
+    """An episode file pointing at the old media address, and the files its links name."""
+    media = tmp_path / "media"
+    media.mkdir()
+    for name in names:
+        (media / name).write_text("x", encoding="utf-8")
+    data = {
+        "id": "ep-1",
+        "title": "A meeting",
+        "audio": {"url": f"{OLD_MEDIA}/ep-1.mp3", "duration": 12},
+        "chapters_url": f"{OLD_MEDIA}/ep-1-chapters.json",
+        "vtt_url": f"{OLD_MEDIA}/ep-1.vtt",
+    }
+    site_file = tmp_path / "ep-1.json"
+    site_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return site_file, media, data
+
+
+def test_rebase_media_moves_every_link_to_the_current_address(tmp_path):
+    site_file, media, before = _rebase_setup(tmp_path)
+
+    log = _rebase_media(site_file, media, "https://media.example.org/x")
+
+    after = json.loads(site_file.read_text(encoding="utf-8"))
+    assert after["audio"]["url"] == "https://media.example.org/x/ep-1.mp3"
+    assert after["chapters_url"] == "https://media.example.org/x/ep-1-chapters.json"
+    assert after["vtt_url"] == "https://media.example.org/x/ep-1.vtt"
+    assert after["audio"]["duration"] == before["audio"]["duration"]
+    assert after["title"] == before["title"]
+    assert log == [("ep-1: media links moved to https://media.example.org/x", False)]
+
+
+def test_rebase_media_leaves_a_link_whose_file_is_not_in_the_media_folder(tmp_path):
+    site_file, media, _ = _rebase_setup(tmp_path, names=("ep-1.mp3", "ep-1-chapters.json"))
+
+    _rebase_media(site_file, media, "https://media.example.org/x")
+
+    after = json.loads(site_file.read_text(encoding="utf-8"))
+    assert after["audio"]["url"] == "https://media.example.org/x/ep-1.mp3"
+    assert after["chapters_url"] == "https://media.example.org/x/ep-1-chapters.json"
+    assert after["vtt_url"] == f"{OLD_MEDIA}/ep-1.vtt"
+
+
+def test_rebase_media_leaves_a_file_already_on_the_current_address_alone(tmp_path):
+    site_file, media, _ = _rebase_setup(tmp_path)
+    data = json.loads(site_file.read_text(encoding="utf-8"))
+    data["audio"]["url"] = "https://media.example.org/x/ep-1.mp3"
+    data["chapters_url"] = "https://media.example.org/x/ep-1-chapters.json"
+    data["vtt_url"] = "https://media.example.org/x/ep-1.vtt"
+    text = json.dumps(data, indent=2) + "\n"
+    site_file.write_text(text, encoding="utf-8", newline="\n")
+
+    log = _rebase_media(site_file, media, "https://media.example.org/x")
+
+    assert log == []
+    assert site_file.read_bytes() == text.encode("utf-8")
+
+
+def test_rebase_media_takes_a_trailing_slash_on_the_address_without_a_double_slash(tmp_path):
+    site_file, media, _ = _rebase_setup(tmp_path, names=("ep-1.mp3",))
+
+    _rebase_media(site_file, media, "https://media.example.org/x/")
+
+    after = json.loads(site_file.read_text(encoding="utf-8"))
+    assert after["audio"]["url"] == "https://media.example.org/x/ep-1.mp3"
+
+
+def test_rebase_media_leaves_a_file_that_is_not_json_alone(tmp_path):
+    site_file = tmp_path / "ep-1.json"
+    site_file.write_text("not json", encoding="utf-8")
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "ep-1.mp3").write_text("x", encoding="utf-8")
+
+    assert _rebase_media(site_file, media, "https://media.example.org/x") == []
+    assert site_file.read_text(encoding="utf-8") == "not json"
+
+
+def test_publishing_again_moves_a_built_episodes_links_to_the_new_media_address(tmp_path):
+    site = Site(
+        episodes=tmp_path / "site-in",
+        media=tmp_path / "media",
+        out=tmp_path / "site",
+        base_url="https://longmont.civiccastbrief.org",
+        media_base_url=OLD_MEDIA,
+        slug="longmont",
+    )
+    settings = _settings(tmp_path, site=site)
+    fake = Fake()
+    fake.exported = {
+        "0001-episode": {"kind": "episode", "status": "published", "meeting_id": "oWZpzjzjwnE"},
+    }
+    run_week(settings, [COUNCIL_MEETING], LAST, fake.steps())
+    built_file = site.episodes / "ep-oWZpzjzjwnE.json"
+    data = json.loads(built_file.read_text(encoding="utf-8"))
+    data["audio"] = {"url": f"{OLD_MEDIA}/ep-oWZpzjzjwnE.mp3"}
+    built_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    for name in ("ep-oWZpzjzjwnE.mp3", "ep-oWZpzjzjwnE-chapters.json", "ep-oWZpzjzjwnE.vtt"):
+        (site.media / name).write_text("x", encoding="utf-8")
+
+    # The Website step changes the city's media address, and the same desk is published again.
+    moved = Site(
+        episodes=site.episodes,
+        media=site.media,
+        out=site.out,
+        base_url=site.base_url,
+        media_base_url="https://media.example.org/test/longmont",
+        slug="longmont",
+    )
+    rerun = Fake()
+    rerun.exported = fake.exported
+    run_week(replace(settings, site=moved), [COUNCIL_MEETING], LAST, rerun.steps())
+
+    after = json.loads(built_file.read_text(encoding="utf-8"))
+    assert after["audio"]["url"] == "https://media.example.org/test/longmont/ep-oWZpzjzjwnE.mp3"
+    # Nothing was built again.
+    assert "episode" not in [step for step, argv in rerun.calls if argv[0] != "names"]
