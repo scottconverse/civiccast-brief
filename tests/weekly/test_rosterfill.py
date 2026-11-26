@@ -196,7 +196,7 @@ def test_a_later_meeting_marks_the_new_date_seen(tmp_path):
     assert len(crist["records"]) == 2
 
 
-def test_the_desk_roster_page_says_where_each_member_came_from_and_has_no_editor(tmp_path):
+def test_the_desk_roster_page_says_where_each_member_came_from(tmp_path):
     city = tmp_path / "city"
     city.mkdir()
     path = _roster(
@@ -209,12 +209,15 @@ def test_the_desk_roster_page_says_where_each_member_came_from_and_has_no_editor
         home = client.get("/")
     assert page.status_code == 200
     assert 'href="/roster"' in home.text
-    assert "Nobody types the members in" in page.text
+    assert "The weekly run fills names in from each meeting's records" in " ".join(
+        page.text.split()
+    )
     assert "Diane Crist" in page.text
     assert "packet, page 6, line 8" in " ".join(page.text.split())
     assert "Entered by hand" in page.text
     main = page.text.split("<main>", 1)[1]
-    assert "<form" not in main and "<textarea" not in main
+    assert "<textarea" not in main
+    assert 'action="/roster/add"' in main
     assert "@" not in page.text
 
 
