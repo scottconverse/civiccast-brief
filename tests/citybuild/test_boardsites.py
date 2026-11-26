@@ -522,3 +522,10 @@ def test_a_board_is_read_from_its_own_box_on_a_page_of_every_board(tmp_path, web
     ]
     assert data["sources"] == [index + "#board-box-PlanningCommission-47"]
     assert "Zoe Zane" not in [m["name"] for m in data["members"]]  # the Library Board's box
+
+
+def test_a_board_roster_stores_the_states_full_name_from_a_code(tmp_path, web, monkeypatch, capsys):
+    folder = _town(tmp_path, web, ["Town Council", "Library Board"])  # roster.json says "CO"
+    _run(folder, web, monkeypatch)
+    path = folder / "rosters" / "library-board.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["state"] == "Colorado"

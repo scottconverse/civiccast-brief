@@ -414,3 +414,11 @@ def test_all_caps_headings_are_not_members():
     )
     found, _ = read_members(page, "City Council")
     assert [m.name for m in found] == ["Laura Weinberg", "Lisa Vitry"]
+
+
+def test_a_roster_from_found_stores_the_states_full_name():
+    from datetime import date
+
+    found = members.Found(page="https://example.org/council")
+    roster = members.roster_from_found("Berthoud", "CO", found, date(2026, 11, 26))
+    assert roster["state"] == "Colorado"

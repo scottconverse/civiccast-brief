@@ -33,6 +33,7 @@ from urllib.parse import urlsplit
 
 from civiccast_brief.citybuild.fetch import Fetcher, FetchError, Page
 from civiccast_brief.citybuild.page import parse
+from civiccast_brief.citybuild.search import state_name
 
 #: The governing bodies, in the order one is picked when a city lists more than one.
 GOVERNING: Final = (
@@ -597,7 +598,7 @@ def roster_from_found(name: str, state: str, found: Found, today: date) -> dict[
         )
     return {
         "city": name,
-        "state": state,
+        "state": state_name(state),
         "body": found.body,
         "retrieved": today.isoformat(),
         "sources": [found.page],

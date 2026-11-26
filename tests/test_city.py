@@ -3,7 +3,7 @@ import json
 import pytest
 
 from civiccast_brief import __main__ as top
-from civiccast_brief.city import CityError, load_city, setup
+from civiccast_brief.city import CityError, load_city, roster_template, setup
 from civiccast_brief.meeting import cli as meeting_cli
 from civiccast_brief.meeting.roster import load_roster
 from civiccast_brief.site.model import load_site_input
@@ -214,3 +214,8 @@ def test_a_cablecast_city_reaches_the_meeting_run(tmp_path, monkeypatch):
     argv = ["run", "5", "--city", str(tmp_path), "--out", str(tmp_path / "o")]
     assert meeting_cli.main(argv) == 0
     assert seen["cablecast_host"] == "reflect-ex.cablecast.tv"
+
+
+def test_the_roster_template_stores_the_states_full_name():
+    template = roster_template(name="Berthoud", state="CO", body="City Council", roster_page="")
+    assert template["state"] == "Colorado"

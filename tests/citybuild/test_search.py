@@ -7,7 +7,13 @@ from datetime import date
 
 from civiccast_brief.citybuild.build import PUBLISHER_EMAIL, REPORT_FILE, build_city
 from civiccast_brief.citybuild.fetch import FetchError, Page
-from civiccast_brief.citybuild.search import PROBED, _named, guesses, search_city
+from civiccast_brief.citybuild.search import (
+    PROBED,
+    _named,
+    guesses,
+    search_city,
+    state_name,
+)
 from civiccast_brief.sources import load_sources, make_source
 
 from .conftest import (
@@ -656,3 +662,7 @@ def test_civicweb_image_host_on_a_city_page_is_not_taken_for_a_portal(web):
     )
     assert [c.source.id for c in found.candidates] == [f"civicweb:{LOVELAND}"]
     assert not found.unread
+
+
+def test_a_full_state_name_is_left_as_it_is():
+    assert state_name("Colorado") == "Colorado"

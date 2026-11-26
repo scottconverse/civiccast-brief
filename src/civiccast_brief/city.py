@@ -156,9 +156,11 @@ def city_settings(
 
 
 def roster_template(*, name: str, state: str, body: str, roster_page: str) -> dict[str, Any]:
+    from civiccast_brief.citybuild.search import state_name
+
     return {
         "city": name,
-        "state": state,
+        "state": state_name(state),
         "body": body,
         "retrieved": "",
         "sources": [roster_page] if roster_page else [],
