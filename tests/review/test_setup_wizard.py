@@ -1122,6 +1122,63 @@ def test_the_task_buttons_call_powershell_and_show_its_status(rich_hub_app):
     assert "Unregister-ScheduledTask" in calls[-1][-1]
 
 
+def test_installing_from_a_second_desk_warns_before_replacing_another_desk(rich_hub_app) -> None:
+    app, cities = rich_hub_app
+    calls: list[list[str]] = []
+
+    def runner(cities_folder):
+        def fake(argv):
+            script = argv[-1]
+            if "Register-ScheduledTask" in script:
+                calls.append(list(argv))
+                return 0, "", ""
+            return (
+                0,
+                json.dumps(
+                    {
+                        "installed": True,
+                        "state": "Ready",
+                        "next": "",
+                        "last": "",
+                        "result": 267011,
+                        "arguments": (
+                            f'-m civiccast_brief.review run-due --cities "{cities_folder}"'
+                        ),
+                    }
+                ),
+                "",
+            )
+
+        return fake
+
+    client = client_for(app)
+    app.state.hub.task_runner = runner(r"C:\another-desk\cities")
+
+    warned = client.post("/setup/weekly", data={"token": token(client), "action": "install"})
+    assert warned.status_code == 409
+    assert calls == []  # nothing was installed over the other desk's task
+    assert 'name="replace"' in warned.text
+    assert "another desk" in warned.text
+    assert r"C:\another-desk\cities" in warned.text
+
+    replaced = client.post(
+        "/setup/weekly",
+        data={"token": token(client), "action": "install", "replace": "1"},
+        follow_redirects=False,
+    )
+    assert replaced.headers["location"] == "/setup/weekly?notice=installed"
+    assert "Register-ScheduledTask" in calls[-1][-1]
+
+    # The task already runs this desk's own folder, so installing it again needs no warning.
+    calls.clear()
+    app.state.hub.task_runner = runner(str(cities))
+    same = client.post(
+        "/setup/weekly", data={"token": token(client), "action": "install"}, follow_redirects=False
+    )
+    assert same.headers["location"] == "/setup/weekly?notice=installed"
+    assert "Register-ScheduledTask" in calls[-1][-1]
+
+
 def test_every_week_is_finished_when_the_task_is_set_and_every_schedule_is_on(rich_hub_app):
     app, _ = rich_hub_app
     app.state.hub.task_runner, _calls = task_runner(installed=True)

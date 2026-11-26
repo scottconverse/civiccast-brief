@@ -62,6 +62,7 @@ Brief, so nothing is installed for them. Add `-Diarize` for speaker diarization 
 |---|---|---|
 | Python 3.12 and `uv` | everything | `uv sync` installs the project. |
 | `ffmpeg` on PATH | audio, Granicus audio | |
+| The `browser` extra (Playwright) | cities read in Chrome: Laserfiche WebLink and some city sites | `install.ps1` installs it. With a manual setup run `uv sync --extra browser`. Chrome itself must be installed. |
 | Ollama at `127.0.0.1:11434` with the writer model | recap, script | The default model is `deepseek-v4.1-flash:1017-cloud`. Pass `--model` to use another. City Council's built-in pick is `claude:claude-opus-5-5`, so a Claude sign-in is also needed for it. |
 | Claude Code, signed in to a Claude subscription | the weekly story (`article skill`) | The report-local-news skill runs the `claude` CLI. `article skill --model` picks the CLI model or alias (default `opus`). |
 | yt-dlp, installed by CivicCast Brief | YouTube capture | Run `python -m civiccast_brief tools --test-video <URL>` once, with any public YouTube meeting video that has captions. It installs yt-dlp into `~/.civiccast-brief/record/runtimes/yt-dlp` and makes it active only after it fetches that video's captions. Not needed for a Granicus city. |

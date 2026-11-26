@@ -1059,6 +1059,7 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         notice: str = "",
         error: str = "",
         status: int = 200,
+        replace_ready: bool = False,
     ) -> HTMLResponse:
         rows = weekly_rows()
         task, task_error = task_status()
@@ -1071,6 +1072,8 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
             rows=rows,
             task=task,
             task_error=task_error,
+            other_desk=weekly_task.other_desk(task, hub.cities_dir) if task else "",
+            replace_ready=replace_ready,
             notice=notice,
             error=error,
             weekdays=WEEKDAYS,
@@ -1090,6 +1093,22 @@ def make_hub_app(hub_db: str | Path, cities_dir: str | Path) -> FastAPI:
         if form is None:
             return bad_token()
         action = form.get("action", "save")
+        if action in ("install", "remove"):
+            task, _task_error = task_status()
+            elsewhere = weekly_task.other_desk(task, hub.cities_dir) if task else ""
+            if elsewhere and form.get("replace") != "1":
+                if action == "install":
+                    error = (
+                        f"The Windows task now runs the cities in {elsewhere}. Setting it up "
+                        "here replaces it, and those cities stop running every hour. Press the "
+                        "button again to replace it."
+                    )
+                else:
+                    error = (
+                        f"The Windows task now runs the cities in {elsewhere}. Removing it stops "
+                        "those cities running every hour. Press the button again to remove it."
+                    )
+                return weekly_step(form=dict(form), error=error, status=409, replace_ready=True)
         if action == "install":
             try:
                 weekly_task.install(sys.executable, hub.cities_dir, hub.task_runner)

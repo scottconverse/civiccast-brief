@@ -42,7 +42,8 @@ topic and monthly archive pages, search, a sitemap and a podcast feed. An exampl
 ### What you need
 
 - A Windows 11 PC. The program is built and tested on Windows.
-- Google Chrome (some city sites can only be read through it).
+- Google Chrome (some city sites can only be read through it). The `browser` extra
+  (installed by `install.ps1`) lets the program drive it.
 - Ollama for the default writing model, and Claude Code signed in to a Claude subscription for the
   weekly story writer (the report-local-news skill runs the `claude` CLI).
 - For audio, one of:
