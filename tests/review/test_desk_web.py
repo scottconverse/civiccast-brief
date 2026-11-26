@@ -228,6 +228,11 @@ def test_sources_add_edit_remove_and_errors_name_the_field(store, city):
     )
     assert added.status_code == 200
     assert "Added https://longmont.primegov.com for City Council" in added.text
+    listed = client.get("/sources")
+    assert (
+        'data-confirm="Remove https://longmont.primegov.com for City Council? '
+        'The weekly run stops reading it."' in listed.text
+    )
     again = client.post(
         "/sources/add",
         data={
