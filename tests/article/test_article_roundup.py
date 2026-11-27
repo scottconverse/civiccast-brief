@@ -92,3 +92,25 @@ def test_an_empty_week_cannot_make_a_roundup() -> None:
         assert "at least one" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("an empty roundup must be refused")
+
+
+def test_a_bare_result_claim_gives_no_news_headline_issue() -> None:
+    from civiccast_brief.article.title import Title, check_title
+
+    recap = Recap(
+        city="Superior",
+        body="Town Council",
+        meeting_date="November 3, 2026",
+        video_id="roundup",
+        claims=(
+            Claim(
+                "m1-c01",
+                "Water rates",
+                "[November 3, 2026 meeting] The item carried unanimously.",
+                "0:05:00",
+                "carried",
+            ),
+        ),
+    )
+    issues = check_title(recap, Title("Council carries water rates", ("m1-c01",)))
+    assert "news_headline" not in {issue.code for issue in issues}
