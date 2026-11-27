@@ -1,6 +1,6 @@
 # CivicCast Brief user manual
 
-This manual covers **CivicCast Brief 0.5.0**. It has four parts:
+This manual covers **CivicCast Brief 0.6.0**. It has four parts:
 
 1. [New users](#1-new-users): what the program is and your first hour with it.
 2. [Editors (no technical background needed)](#2-editors): the desk, the buttons, and what readers see.

@@ -1,7 +1,7 @@
 # CivicCast Brief
 
 CivicCast Brief answers one question for a town: *what did my local government just do?* It reads a city's public meeting videos, agendas, packets and minutes, and makes a cited recap, a news story and a two-host podcast episode for each meeting.
-Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.5.0.
+Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.6.0.
 
 [Website](https://scottconverse.github.io/civiccast-brief/) · [Live sites](https://civiccastbrief.org): Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie, Colo. · [User manual](docs/user-manual.md) · [Set up a city](docs/set-up-a-city.md) · [Releases](https://github.com/scottconverse/civiccast-brief/releases)
 
@@ -67,7 +67,7 @@ the PC; an NVIDIA GPU is needed only for the optional Dia2 and Chatterbox engine
 
 ## Project status
 
-Version 0.5.0. Actively developed. The weekly run publishes eight live Colorado town sites
+Version 0.6.0. Actively developed. The weekly run publishes eight live Colorado town sites
 (Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie). Built and tested
 on Windows 11.
 

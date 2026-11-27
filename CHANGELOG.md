@@ -2,7 +2,7 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
-## Unreleased
+## 0.6.0 — 2026-11-26
 
 ### Tooling
 
@@ -48,6 +48,50 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - The plain desk has a **Voices** page: choose the voice engine, the engine to retry with and each
   host's voice, saved in the city folder's `voices.json`. `weekly run` and `publish` take
   `--voices PATH` and use it for the audio step (the `--audio-engine` flags still win).
+
+### Setup wizard fixes
+
+- No console window opens from a task or job the desk starts.
+- Find sources: fields and bodies are clearer, a title naming "Town Board of Trustees" offers one
+  body, and a board page titled Committee is read as the portal's Commission.
+- Rosters: a board's members are read from its own box on a page that lists every board; old
+  videos and old titles, police chiefs and vacant seats are no longer read as members; every roster
+  file stores the state's full name ("Colorado", not "CO").
+- The Roster page has an **Add** form: add a member by hand with the link to where the name is
+  printed. Removing the last hand-entered member removes its empty roster.
+- The Sources page asks before it removes a source.
+- The Weekly job page says whether the run puts the website online. The weekly Windows task runs on
+  battery, warns before it replaces another desk's task, and leaves an open desk's running run
+  alone. **Everything works** says when the Windows task runs another desk's cities.
+- The Test and Rosters steps' failures found on the Larimer County walk are fixed.
+
+### Finding meetings and records
+
+- A Granicus or Cablecast meeting with no captions is transcribed from its audio.
+- The audio fetch names CivicCast Brief, so Granicus serves the video.
+- A Granicus meeting gets its HTML agenda, so the claim check has the agenda's words.
+- A CivicClerk document filed under another category (Erie files a study session under
+  "General") joins its meeting by the event's name.
+- Laserfiche: a year folder named with the year last ("MINUTES ... 2026") is read.
+- An episode on the site moves to the city's current media address.
+
+### Names and checks
+
+- The city's own name is never replaced as a person's name, and the episode build finds the city
+  folder from a body roster too.
+- The script check reads "Council", "City", "During" and "Looking" at the start of a sentence, and
+  the city's own name, as no invented name.
+
+### Known limits
+
+- The story check tests a story's names and numbers against the story's own CLAIMS AND SOURCES
+  lines, the document pages those lines cite, the roster and the official record. It does not test
+  a story claim against what the meeting captions say at its time stamp, and a paragraph that
+  matches no claim is checked against the closest claim. A story that passes still needs an
+  editor's read.
+- Setup can miss a town's agenda packets: in Estes Park it found the Laserfiche minutes folder but
+  not the "Town Board Packets" and "Planning Commission Packets" folders in the same repository,
+  and the town's website refuses automated readers.
 
 ## 0.5.0 — 2026-11-24
 
