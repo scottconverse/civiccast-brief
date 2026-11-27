@@ -221,7 +221,25 @@ _GARBLED_NUMBER = re.compile(
     r"(?P<tail>\s*,?\s+Series\s+\d{4})?",
     re.IGNORECASE,
 )
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+#: Words that end in a period without ending the sentence: "Nov. 12", "7 p.m. Nov. 3", "Mr. Lacis".
+_ABBREVIATION_END_RE = re.compile(
+    r"(?:\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Mr|Mrs|Ms|Dr|St|No|Co|Inc|Jr|Sr|vs)"
+    r"|\b[ap]\.m|\b[A-Z])\.$"
+)
+
+
+def split_sentences(text: str) -> list[str]:
+    """Sentences, never broken after an abbreviation or before a number or a lowercase word."""
+    out: list[str] = []
+    for piece in _SENTENCE_SPLIT_RE.split(text.strip()):
+        if not piece:
+            continue
+        if out and (_ABBREVIATION_END_RE.search(out[-1]) or re.match(r"[0-9a-z]", piece)):
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
 
 
 @dataclass(frozen=True)
@@ -276,7 +294,7 @@ class Record:
             return False
         return any(
             wanted in _normal(sentence) and act.search(sentence)
-            for sentence in _SENTENCE_RE.split(self.text.replace("\n", " "))
+            for sentence in split_sentences(self.text.replace("\n", " "))
         )
 
 
@@ -348,7 +366,7 @@ def load_record(pages: dict[str, Any] | None) -> Record | None:
             phrases.setdefault(run, None)
     recusals = tuple(
         sentence
-        for sentence in _SENTENCE_RE.split(text.replace("\n", " "))
+        for sentence in split_sentences(text.replace("\n", " "))
         if re.search(r"\brecus\w*|\bconflict of interest\b", sentence, re.IGNORECASE)
     )
     return Record(

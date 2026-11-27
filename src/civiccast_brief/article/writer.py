@@ -42,7 +42,7 @@ from civiccast_brief.article.names import (
     seat_fixes,
     spans,
 )
-from civiccast_brief.article.terms import Record, term_issues
+from civiccast_brief.article.terms import Record, split_sentences, term_issues
 from civiccast_brief.script.checker import (
     _POSSESSIVE_RE,
     _claim_words,
@@ -441,6 +441,9 @@ NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
 def news_value(claim: Any) -> int:
     """How much of a lead a claim is: a resignation 100, a money/land/law vote 70, a contested
     vote 60, public comment 35, a routine item 0, anything else 10 (the highest match wins)."""
+    words = re.findall(r"[a-z]+", str(claim.text or "").lower())
+    if all(word in _BARE_RESULT_WORDS for word in words):
+        return 10
     text = " ".join(str(part or "") for part in (claim.topic, claim.text, claim.quote))
     for weight, pattern, needs_action in NEWS_WEIGHTS:
         if not pattern.search(text):
@@ -1010,25 +1013,6 @@ PERSONAL_ACTS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
 )
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
-#: Words that end in a period without ending the sentence: "Nov. 12", "7 p.m. Nov. 3", "Mr. Lacis".
-_ABBREVIATION_END_RE = re.compile(
-    r"(?:\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Mr|Mrs|Ms|Dr|St|No|Co|Inc|Jr|Sr|vs)"
-    r"|\b[ap]\.m|\b[A-Z])\.$"
-)
-
-
-def split_sentences(text: str) -> list[str]:
-    """Sentences, never broken after an abbreviation or before a number or a lowercase word."""
-    out: list[str] = []
-    for piece in _SENTENCE_SPLIT_RE.split(text.strip()):
-        if not piece:
-            continue
-        if out and (_ABBREVIATION_END_RE.search(out[-1]) or re.match(r"[0-9a-z]", piece)):
-            out[-1] = f"{out[-1]} {piece}"
-        else:
-            out.append(piece)
-    return out
 
 
 def _check_who(
@@ -1243,6 +1227,42 @@ _RESULT_WORDS = frozenset(
         "unanimous",
         "was",
         "approved",
+    }
+)
+
+#: Words a claim's text may use while naming no subject at all: "The motion carried.",
+#: "The item carried unanimously.", "The motion passed 6 to 1, with one member voting no."
+_BARE_RESULT_WORDS = _RESULT_WORDS | frozenset(
+    {
+        "item",
+        "it",
+        "carries",
+        "vote",
+        "voted",
+        "votes",
+        "voting",
+        "with",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "member",
+        "members",
+        "no",
+        "yes",
+        "to",
+        "by",
+        "of",
+        "in",
+        "opposition",
+        "opposed",
+        "against",
+        "ayes",
+        "nays",
+        "fails",
     }
 )
 

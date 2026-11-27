@@ -127,3 +127,25 @@ def test_a_weekday_or_a_word_inside_a_longer_name_is_not_a_garble() -> None:
     ):
         assert repair_text(text, record) == (text, [])
         assert term_issues(text, record) == []
+
+
+ERIE_AGENDA = (
+    "D. 2026-229 A Resolution of the Town Council of the Town of Erie Acknowledging the \n"
+    "Resignation of Andrew J. Moore as Mayor, Declaring a Mayoral Vacancy"
+)
+
+
+def test_a_middle_initial_does_not_split_the_sentence_that_states_the_act() -> None:
+    from civiccast_brief.article.terms import Record
+    from civiccast_brief.article.writer import PERSONAL_ACTS
+
+    resigned = next(act for name, act in PERSONAL_ACTS if name == "resigned")
+    record = Record(text=ERIE_AGENDA)
+    assert record.act_backed("mayor", resigned)
+    assert not record.act_backed("treasurer", resigned)
+
+
+def test_a_middle_initial_does_not_split_a_recusal_sentence() -> None:
+    found = load_record({"d1p1": Page("Council Member J. Smith recused himself from item 4.")})
+    assert found is not None
+    assert found.recusals == ("Council Member J. Smith recused himself from item 4.",)

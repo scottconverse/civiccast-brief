@@ -656,3 +656,36 @@ def test_a_dollar_figure_a_claim_states_is_reported_when_the_story_leaves_it_out
         Paragraph("The property tax movement was $250,000.", ("c03",)),
     )
     assert missing_money(recap, full) == []
+
+
+def test_a_bare_result_is_not_the_meeting_news_and_does_not_lead() -> None:
+    from civiccast_brief.article.writer import news_value, top_news
+    from civiccast_brief.script.recap import Claim, Recap
+
+    bare = Claim("c01", "2027 budget", "The motion carried.", "0:10:00", "the motion carried")
+    assert news_value(bare) == 10
+    subject = Claim(
+        "c02", "2027 budget", "The council approved the 2027 budget.", "0:11:00", "approved"
+    )
+    assert news_value(subject) == 70
+    contested = Claim(
+        "c03",
+        "2027 budget",
+        "The motion passed 6 to 1, with one member voting no.",
+        "0:12:00",
+        "six to one",
+    )
+    assert news_value(contested) == 10
+    resignation = Claim("c04", "Mayor", "Mayor Moore resigned.", "0:13:00", "I resign")
+    assert news_value(resignation) == 100
+
+    week = Recap(
+        city="Superior",
+        body="Town Council",
+        meeting_date="November 3, 2026",
+        video_id="abc12345678",
+        claims=(
+            Claim("c05", "Water rates", "The item carried unanimously.", "0:05:00", "carried"),
+        ),
+    )
+    assert top_news(week) is None
