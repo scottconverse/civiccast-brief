@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from civiccast_brief.claude_lock import claude_turn
 from civiccast_brief.models import ModelCallError, child_env
 from civiccast_brief.script.recap import Recap, seconds_of
 from civiccast_brief.speech.windows_process import hidden_process_kwargs
@@ -270,18 +271,19 @@ def claude_agent(prompt: str, work_dir: Path, model: str, timeout_s: int) -> tup
         "--output-format",
         "json",
     ]
-    done = subprocess.run(
-        args,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        env=child_env(),
-        cwd=str(work_dir),
-        timeout=timeout_s,
-        check=False,
-        **hidden_process_kwargs(),
-    )
+    with claude_turn():
+        done = subprocess.run(
+            args,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=child_env(),
+            cwd=str(work_dir),
+            timeout=timeout_s,
+            check=False,
+            **hidden_process_kwargs(),
+        )
     return done.returncode, done.stdout, done.stderr
 
 

@@ -20,6 +20,7 @@ Rerun the same command to try the failed steps again.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from datetime import date, timedelta
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from civiccast_brief.city import CityError, load_city
+from civiccast_brief.claude_lock import TURNS_ENV
 from civiccast_brief.sources import SourceError, load_sources
 from civiccast_brief.speech.windows_process import parent_alive, task_parent_pid
 from civiccast_brief.weekly.documents import Fetcher, read_documents
@@ -137,6 +139,8 @@ def _site(args: argparse.Namespace, slug: str) -> Site | None:
 
 
 def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
+    # This is the batch weekly run: its Claude calls take turns. Child processes inherit it.
+    os.environ[TURNS_ENV] = "1"
     try:
         city = load_city(args.city)
         sources = load_sources(args.city)
