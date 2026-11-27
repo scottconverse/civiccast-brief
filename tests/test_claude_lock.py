@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 
@@ -17,6 +19,54 @@ from civiccast_brief.claude_lock import WAITING_LINE, claude_turn
 
 def _lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CIVICCAST_CLAUDE_LOCK", str(tmp_path / "x.lock"))
+    # These tests are about the lock itself, so they turn on the turns the weekly run sets.
+    monkeypatch.setenv("CIVICCAST_CLAUDE_TURNS", "1")
+
+
+def _hold(path: Path) -> BinaryIO:
+    """Hold the lock the way ``_try_lock`` does, so a call there has to wait."""
+    handle = open(path, "a+b")  # noqa: SIM115 - the handle is the lock; closed by _release
+    if os.name == "nt":
+        import msvcrt
+
+        if os.fstat(handle.fileno()).st_size == 0:
+            handle.write(b"\0")
+            handle.flush()
+        os.lseek(handle.fileno(), 0, os.SEEK_SET)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    return handle
+
+
+def _release(handle: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(handle.fileno(), 0, os.SEEK_SET)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    handle.close()
+
+
+def test_without_the_turns_variable_a_call_runs_at_once_and_never_waits(tmp_path, monkeypatch):
+    _lock(tmp_path, monkeypatch)
+    monkeypatch.delenv("CIVICCAST_CLAUDE_TURNS", raising=False)
+    holder = _hold(tmp_path / "x.lock")
+    try:
+        said: list[str] = []
+        entered = False
+        with claude_turn(say=said.append, poll_s=0.01):
+            entered = True
+        assert entered
+        assert said == []
+    finally:
+        _release(holder)
 
 
 def test_a_free_lock_is_taken_and_freed(tmp_path, monkeypatch):

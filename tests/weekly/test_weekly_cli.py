@@ -62,6 +62,12 @@ def test_the_window_is_read_and_a_meeting_that_cannot_run_is_listed(tmp_path, ca
     assert "2026-11-10 City Council - CANCELLED: not run: the meeting was cancelled" in out
 
 
+def test_the_run_turns_on_the_claude_turns_for_its_children(tmp_path, monkeypatch):
+    monkeypatch.setenv("CIVICCAST_CLAUDE_TURNS", "0")
+    assert cli._run(_args(tmp_path), Listers(primegov=lambda *a: [])) == 0
+    assert os.environ["CIVICCAST_CLAUDE_TURNS"] == "1"
+
+
 def test_site_settings_must_be_given_together(tmp_path, capsys):
     code = cli._run(_args(tmp_path, "--episodes", str(tmp_path / "e")), Listers())
     assert code == 1

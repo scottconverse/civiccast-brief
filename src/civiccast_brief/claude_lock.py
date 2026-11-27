@@ -8,6 +8,9 @@ Brief state for the length of one ``claude -p`` call, so a second run waits its 
 
 The lock is a byte-locked file, so the OS frees it if the process dies; the child's
 ``timeout`` still ends a hung run and frees the lock the usual way.
+
+Only the batch weekly run takes turns: it sets ``CIVICCAST_CLAUDE_TURNS`` to ``"1"``
+before it starts. Every other caller (a desk button, the sign-in check) runs at once.
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 DEFAULT_POLL_S = 5.0
+#: Set to ``"1"`` by the batch weekly run; only then does a call take a turn.
+TURNS_ENV = "CIVICCAST_CLAUDE_TURNS"
 #: Said once, when the turn has to wait for another run.
 WAITING_LINE = "claude: waiting for another Claude run on this PC to finish"
 
@@ -74,7 +79,14 @@ def _unlock(fd: int) -> None:
 def claude_turn(
     *, say: Callable[[str], None] = print, poll_s: float = DEFAULT_POLL_S
 ) -> Iterator[None]:
-    """Hold the PC's Claude lock for one ``claude -p`` call, waiting for another run."""
+    """Hold the PC's Claude lock for one ``claude -p`` call, waiting for another run.
+
+    Takes a turn only when ``CIVICCAST_CLAUDE_TURNS`` is ``"1"`` (the batch weekly run);
+    every other caller runs at once and touches no file.
+    """
+    if os.environ.get(TURNS_ENV) != "1":
+        yield
+        return
     path = lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = open(path, "a+b")  # noqa: SIM115 - the handle is the lock; closed below
