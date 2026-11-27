@@ -1,10 +1,15 @@
 """The weekly run with stand-in steps: each one writes the files the real one writes."""
 
 import json
+import os
 import shutil
+import subprocess
+import sys
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+
+import pytest
 
 from civiccast_brief.meeting.capture import CAPTIONS_NOT_YET_REASON
 from civiccast_brief.weekly.find import Agenda, Found
@@ -1957,3 +1962,186 @@ def test_publishing_again_moves_a_built_episodes_links_to_the_new_media_address(
     assert after["audio"]["url"] == "https://media.example.org/test/longmont/ep-oWZpzjzjwnE.mp3"
     # Nothing was built again.
     assert "episode" not in [step for step, argv in rerun.calls if argv[0] != "names"]
+
+
+class MovingClock:
+    """A clock that moves on by a fixed step each time a meeting is run."""
+
+    def __init__(self, minutes=240):
+        self.now = 0.0
+        self.step = minutes * 60
+
+    def __call__(self):
+        return self.now
+
+
+class MeetingAdvancesClock(Fake):
+    def __init__(self, clock):
+        super().__init__()
+        self.clock = clock
+
+    def meeting(self, argv):
+        result = super().meeting(argv)
+        self.clock.now += self.clock.step
+        return result
+
+
+def test_a_run_starts_no_meeting_after_its_time_budget(tmp_path):
+    clock = MovingClock(minutes=240)
+    fake = MeetingAdvancesClock(clock)
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, PZ_MEETING, OLDER_MEETING],
+        LAST,
+        fake.steps(),
+        time_budget_s=6 * 3600,
+        clock=clock,
+    )
+
+    assert report.failed == 0
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == [
+        "oWZpzjzjwnE",
+        "PZPZPZPZPZ1",
+    ]
+    assert (
+        "2026-11-01 City Council Special Session: not started: the run's 6-hour time budget "
+        "is used; it runs next week" in report.lines
+    )
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"]["youtube:oWZpzjzjwnE"]["status"] == "done"
+    assert state["meetings"]["youtube:PZPZPZPZPZ1"]["status"] == "done"
+    assert "youtube:OLDEROLDER1" not in state["meetings"]
+    assert any(line.startswith("roundup:") for line in report.lines)
+
+
+def test_with_no_time_budget_every_meeting_runs(tmp_path):
+    clock = MovingClock(minutes=240)
+    fake = MeetingAdvancesClock(clock)
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, PZ_MEETING, OLDER_MEETING],
+        LAST,
+        fake.steps(),
+        time_budget_s=None,
+        clock=clock,
+    )
+
+    assert report.failed == 0
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == [
+        "oWZpzjzjwnE",
+        "PZPZPZPZPZ1",
+        "OLDEROLDER1",
+    ]
+    assert not any("time budget" in line for line in report.lines)
+
+
+class StepClock:
+    """A clock that answers one fixed time per read."""
+
+    def __init__(self, *values):
+        self.values = iter(values)
+
+    def __call__(self):
+        return next(self.values)
+
+
+def test_a_meeting_done_or_with_a_reason_is_reported_after_the_budget_is_used(tmp_path):
+    clock = StepClock(0, 7 * 3600)
+    fake = Fake()
+    settings = _settings(tmp_path, rosters=(COUNCIL, PZ))
+    run_week(settings, [COUNCIL_MEETING], LAST, Fake().steps())
+    cancelled = Found(
+        PZ, date(2026, 11, 7), "Cancelled Meeting", "p", "CCCCCCCCCCC", reason="cancelled"
+    )
+
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, cancelled, PZ_MEETING],
+        LAST,
+        fake.steps(),
+        time_budget_s=6 * 3600,
+        clock=clock,
+    )
+
+    assert "2026-11-03 City Council Regular Session: done in an earlier run" in report.lines
+    assert "2026-11-07 Cancelled Meeting: not run: cancelled" in report.lines
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == []
+    assert (
+        "2026-11-05 Planning and Zoning Commission: not started: the run's 6-hour time budget "
+        "is used; it runs next week" in report.lines
+    )
+
+
+def test_an_ended_task_stops_the_run_before_the_next_meeting(tmp_path):
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site, rosters=(COUNCIL, PZ))
+    fake = Fake()
+    answers = iter([True, False])
+
+    def parent_check():
+        return next(answers)
+
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, PZ_MEETING],
+        LAST,
+        fake.steps(),
+        parent_check=parent_check,
+    )
+
+    assert report.failed == 1
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == ["oWZpzjzjwnE"]
+    assert (
+        "stopped: the task that started this run has ended (Windows may have stopped it at "
+        "its time limit); nothing more was started" in report.lines
+    )
+    assert not any(line.startswith("roundup:") for line in report.lines)
+    assert not any(step == "site" for step, _ in fake.calls)
+    state = json.loads((settings.work / STATE_NAME).read_text(encoding="utf-8"))
+    assert state["meetings"]["youtube:oWZpzjzjwnE"]["status"] == "done"
+    assert "youtube:PZPZPZPZPZ1" not in state["meetings"]
+
+
+def test_an_ended_task_stops_the_run_before_the_publish(tmp_path):
+    site = _site(tmp_path)
+    settings = _settings(tmp_path, site=site, rosters=(COUNCIL, PZ))
+    fake = Fake()
+    answers = iter([True, True, False])
+
+    def parent_check():
+        return next(answers)
+
+    report = run_week(
+        settings,
+        [COUNCIL_MEETING, PZ_MEETING],
+        LAST,
+        fake.steps(),
+        parent_check=parent_check,
+    )
+
+    assert report.failed == 1
+    assert [_positional(argv) for step, argv in fake.calls if step == "meeting"] == [
+        "oWZpzjzjwnE",
+        "PZPZPZPZPZ1",
+    ]
+    assert not any(step == "site" for step, _ in fake.calls)
+    assert "stopped: the task that started this run has ended" in " ".join(report.lines)
+
+
+def test_parent_alive_sees_this_process(tmp_path):
+    from civiccast_brief.speech.windows_process import parent_alive
+
+    assert parent_alive(os.getpid()) is True
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows process handles")
+def test_parent_alive_sees_a_finished_child_as_gone():
+    from civiccast_brief.speech.windows_process import parent_alive
+
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    child.wait()
+    assert parent_alive(child.pid) is False

@@ -20,6 +20,7 @@ Rerun the same command to try the failed steps again.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from datetime import date, timedelta
@@ -28,6 +29,7 @@ from typing import Any
 
 from civiccast_brief.city import CityError, load_city
 from civiccast_brief.sources import SourceError, load_sources
+from civiccast_brief.speech.windows_process import parent_alive
 from civiccast_brief.weekly.documents import Fetcher, read_documents
 from civiccast_brief.weekly.find import Agenda, Listers, find_meetings
 from civiccast_brief.weekly.run import Settings, Site, publish_site, run_week
@@ -165,14 +167,32 @@ def _run(args: argparse.Namespace, listers: Listers | None = None) -> int:
         review_only=args.review_only,
     )
     if listers is not None:
-        return _week(city.name, sources, first, last, listers, settings, args.limit)
+        return _week(
+            city.name,
+            sources,
+            first,
+            last,
+            listers,
+            settings,
+            args.limit,
+            args.time_budget_hours * 3600 if args.time_budget_hours else None,
+        )
     import httpx
 
     # One client for the whole run: the documents step fetches packets inside run_week.
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         listers = real_listers(client)
         listers.city = city.name  # a title may leave the city's name off a body's name
-        return _week(city.name, sources, first, last, listers, settings, args.limit)
+        return _week(
+            city.name,
+            sources,
+            first,
+            last,
+            listers,
+            settings,
+            args.limit,
+            args.time_budget_hours * 3600 if args.time_budget_hours else None,
+        )
 
 
 def _publish(args: argparse.Namespace) -> int:
@@ -203,15 +223,35 @@ def _week(
     listers: Listers,
     settings: Settings,
     limit: int | None = None,
+    time_budget_s: float | None = None,
 ) -> int:
     meetings, problems = find_meetings(sources, first, last, listers)
     print(f"{name}: {len(meetings)} meeting(s) from {first} to {last}")
     for problem in problems:
         print(f"source problem: {problem}", file=sys.stderr)
-    report = run_week(settings, meetings, last, limit=limit)
+    parent_pid = os.getppid()
+    report = run_week(
+        settings,
+        meetings,
+        last,
+        limit=limit,
+        time_budget_s=time_budget_s,
+        parent_check=lambda: parent_alive(parent_pid),
+    )
     for line in report.lines:
         print(line)
     return 1 if report.failed or problems else 0
+
+
+def _budget_hours(text: str) -> float:
+    """A number of hours, 0 or more, for --time-budget-hours. 0 means no budget."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError("--time-budget-hours cannot be negative")
+    return value
 
 
 def _positive(text: str) -> int:
@@ -236,6 +276,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--first", type=date.fromisoformat, help="first day, YYYY-MM-DD")
     run.add_argument("--last", type=date.fromisoformat, help="last day (default: today)")
     run.add_argument("--diarize", action="store_true", help="label caption lines with voices")
+    run.add_argument(
+        "--time-budget-hours",
+        type=_budget_hours,
+        default=6.0,
+        metavar="HOURS",
+        help="start no meeting after this long; 0 means no budget (default 6)",
+    )
     run.add_argument(
         "--limit",
         type=_positive,

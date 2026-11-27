@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from types import SimpleNamespace as NS
 
+import pytest
+
 from civiccast_brief.weekly import __main__ as cli
 from civiccast_brief.weekly.find import Listers
 
@@ -79,7 +81,7 @@ def test_the_portal_client_stays_open_while_the_week_runs(tmp_path, monkeypatch,
 
     open_during_run = []
 
-    def run_week(settings, meetings, last, limit=None):
+    def run_week(settings, meetings, last, limit=None, **kwargs):
         open_during_run.append(not clients[0].is_closed)
         return NS(lines=[], failed=0)
 
@@ -111,3 +113,29 @@ def test_the_pc_worker_folder_is_passed_on_and_refused_with_diarize(tmp_path, ca
     again = _args(tmp_path / "2", "--worker", str(tmp_path / "pc"))
     cli._run(again, Listers(primegov=lambda *a: []))
     assert seen and seen[0].worker == tmp_path / "pc"
+
+
+def _budget_passed(tmp_path, monkeypatch, *extra):
+    seen = []
+    report = NS(lines=[], failed=0)
+    monkeypatch.setattr(cli, "run_week", lambda s, *a, **k: seen.append(k) or report)
+    code = cli._run(_args(tmp_path, *extra), Listers(primegov=lambda *a: []))
+    assert code == 0
+    return seen[0]["time_budget_s"]
+
+
+def test_the_time_budget_defaults_to_six_hours(tmp_path, monkeypatch):
+    assert _budget_passed(tmp_path, monkeypatch) == 21600
+
+
+def test_zero_hours_means_no_budget(tmp_path, monkeypatch):
+    assert _budget_passed(tmp_path, monkeypatch, "--time-budget-hours", "0") is None
+
+
+def test_the_time_budget_is_given_in_seconds(tmp_path, monkeypatch):
+    assert _budget_passed(tmp_path, monkeypatch, "--time-budget-hours", "2.5") == 9000
+
+
+def test_a_negative_time_budget_is_refused(tmp_path):
+    with pytest.raises(SystemExit):
+        _args(tmp_path, "--time-budget-hours", "-1")
