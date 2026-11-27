@@ -409,12 +409,19 @@ _VOTE_CALL_RE = re.compile(
 
 #: A speaker's statement or a staff recommendation is an ordinary claim, not the news.
 _SPEAKER_STATEMENT_RE = re.compile(
-    r"^(?:an?\s+unidentified\s+|an?\s+|one\s+)"
+    r"^(?:an?\s+unidentified\s+|an?\s+|another\s+|one\s+)"
     r"(?:speaker|resident|commenter|member of the public)\s+"
-    r"(?:argued|asked|urged|called|suggested|questioned|requested|complained|objected)\b",
+    r"(?:said|says|stated|told|noted|added|explained|described|listed|reported|"
+    r"argued|asked|urged|called|suggested|questioned|requested|complained|objected)\b",
     re.IGNORECASE,
 )
 _STAFF_RECOMMEND_RE = re.compile(r"^staff\s+(?:recommend\w*|find\w*|found)\b", re.IGNORECASE)
+#: A recap of an act already done at an earlier meeting is background, not this meeting's news.
+_EARLIER_ACT_RE = re.compile(
+    r"\bhad\s+(?:already\s+)?(?:been\s+)?"
+    r"(?:approv|adopt|pass|done|vot|carri|deni|reject|authoriz)\w*",
+    re.IGNORECASE,
+)
 
 #: What makes a claim the lead, high to low. A resignation outranks any vote; a money, land or
 #: law decision outranks public comment; a routine consent item is last. A money, land or law
@@ -478,7 +485,11 @@ def news_value(claim: Any) -> int:
     score = _weighted_value(_VOTE_CALL_RE.sub(" ", text))
     topic = str(claim.topic or "").strip().lower()
     said = str(claim.text or "")
-    if topic.startswith("public comment") or _SPEAKER_STATEMENT_RE.search(said):
+    if (
+        topic.startswith("public comment")
+        or _SPEAKER_STATEMENT_RE.search(said)
+        or _EARLIER_ACT_RE.search(said)
+    ):
         return min(score, 35)
     if topic.startswith("staff recommend") or _STAFF_RECOMMEND_RE.search(said):
         return 10

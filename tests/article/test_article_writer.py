@@ -775,3 +775,52 @@ def test_speaker_statements_staff_recommendations_and_procedure_are_not_the_news
     for index, (expected, topic, text, quote) in enumerate(real):
         claim = Claim(f"n{index}", topic, text, "0:15:00", quote)
         assert news_value(claim) == expected, (topic, text)
+
+
+def test_a_speaker_said_and_a_recap_of_an_earlier_vote_are_not_the_lead() -> None:
+    from civiccast_brief.article.writer import news_value
+
+    statements = (
+        (
+            "An unidentified speaker said there would be a contract for the licensing authority "
+            "hearing officer, assuming approval."
+        ),
+        "An unidentified speaker said the state deadline to adopt the budget was December 15th.",
+        (
+            "An unidentified speaker said people had walked out when told they couldn't bring a "
+            "beer out to the patio."
+        ),
+        "An unidentified speaker said they were not a yes vote on either of them that day.",
+        (
+            "A speaker said the resolution was a fund-level adoption appropriating funds at the "
+            "fund level."
+        ),
+        "An unidentified speaker said the zoning carries a minimum density of 18 units per acre.",
+        "The rate increases had been done the previous day with resolutions.",
+        (
+            "The city council had approved the ordinance to move forward to second reading by a "
+            "5 to 2 vote."
+        ),
+    )
+    for index, text in enumerate(statements):
+        claim = Claim(f"s{index}", "", text, "0:20:00", "")
+        assert news_value(claim) <= 35, text
+
+    kept = (
+        (
+            70,
+            "",
+            "The council approved a $2 million contract for road repair.",
+            "",
+        ),
+        (100, "", "The mayor resigned effective December 1.", ""),
+        (
+            70,
+            "Resolution 2026, 203",
+            "The council carried the motion by voice vote.",
+            "",
+        ),
+    )
+    for index, (expected, topic, text, quote) in enumerate(kept):
+        claim = Claim(f"k{index}", topic, text, "0:21:00", quote)
+        assert news_value(claim) == expected, (topic, text)
