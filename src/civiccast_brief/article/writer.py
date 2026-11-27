@@ -385,10 +385,12 @@ WHO DID WHAT: never write "the same speaker", "that speaker" or "they also" to j
 """
 
 #: The act that makes a money, land or law claim the news. A claim that merely mentions a
-#: contract ("The Superior contract started in 2021") is background, not a decision.
+#: contract ("The Superior contract started in 2021") is background, not a decision. Moving to
+#: an item or a second is procedure, not a decision; only "moved to table" and its like count.
 NEWS_ACTION_RE = re.compile(
-    r"\b(approv\w*|adopt\w*|pass\w*|carried|carries|mov(?:e|es|ed|ing)\s+to|vote[sd]?|"
-    r"authoriz\w*|deni\w*|reject\w*|resign\w*|announc\w*|second\w*)\b",
+    r"\b(approv\w*|adopt\w*|pass\w*|carried|carries|"
+    r"mov(?:e|es|ed|ing)\s+to\s+(?!(?:the|its|a|an|consideration|item|agenda|next|public)\b)\w+|"
+    r"vote[sd]?|authoriz\w*|deni\w*|reject\w*|resign\w*|announc\w*)\b",
     re.IGNORECASE,
 )
 _MONEY_LAND_LAW_RE = re.compile(
@@ -398,8 +400,24 @@ _MONEY_LAND_LAW_RE = re.compile(
     re.IGNORECASE,
 )
 
-#: What makes a claim the lead, high to low. A resignation outranks any vote; a vote on money,
-#: land or a law outranks public comment; a routine consent item is last. A money, land or law
+#: A vote call says "opposed" without anyone opposing: "All opposed, say no" is procedure.
+_VOTE_CALL_RE = re.compile(
+    r"\b(?:all|any)\s+(?:those\s+)?opposed\b|\bthose\s+opposed\b|"
+    r"\bopposed,?\s+(?:say|same sign)\b|\bI'll oppose\b",
+    re.IGNORECASE,
+)
+
+#: A speaker's statement or a staff recommendation is an ordinary claim, not the news.
+_SPEAKER_STATEMENT_RE = re.compile(
+    r"^(?:an?\s+unidentified\s+|an?\s+|one\s+)"
+    r"(?:speaker|resident|commenter|member of the public)\s+"
+    r"(?:argued|asked|urged|called|suggested|questioned|requested|complained|objected)\b",
+    re.IGNORECASE,
+)
+_STAFF_RECOMMEND_RE = re.compile(r"^staff\s+(?:recommend\w*|find\w*|found)\b", re.IGNORECASE)
+
+#: What makes a claim the lead, high to low. A resignation outranks any vote; a money, land or
+#: law decision outranks public comment; a routine consent item is last. A money, land or law
 #: claim scores 70 only when it states a decision, never for a passing mention.
 NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
     (
@@ -424,7 +442,7 @@ NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
         0,
         re.compile(
             r"\b(consent agenda|minutes?|approve the agenda|roll[- ]call|proclamations?|"
-            r"appointments?|meeting schedule|adjourns?)\b",
+            r"appointments?|meeting schedule|adjourn\w*)\b",
             re.IGNORECASE,
         ),
         False,
@@ -438,13 +456,8 @@ NEWS_WEIGHTS: tuple[tuple[int, re.Pattern[str], bool], ...] = (
 )
 
 
-def news_value(claim: Any) -> int:
-    """How much of a lead a claim is: a resignation 100, a money/land/law vote 70, a contested
-    vote 60, public comment 35, a routine item 0, anything else 10 (the highest match wins)."""
-    words = re.findall(r"[a-z]+", str(claim.text or "").lower())
-    if all(word in _BARE_RESULT_WORDS for word in words):
-        return 10
-    text = " ".join(str(part or "") for part in (claim.topic, claim.text, claim.quote))
+def _weighted_value(text: str) -> int:
+    """The highest weight any of the :data:`NEWS_WEIGHTS` patterns gives this text."""
     for weight, pattern, needs_action in NEWS_WEIGHTS:
         if not pattern.search(text):
             continue
@@ -452,6 +465,24 @@ def news_value(claim: Any) -> int:
             continue
         return weight
     return 10
+
+
+def news_value(claim: Any) -> int:
+    """How much of a lead a claim is: a resignation 100, a money/land/law vote 70, a contested
+    vote 60, public comment 35, a routine item 0, anything else 10 (the highest match wins); a
+    speaker's statement caps at 35 and a staff recommendation is 10."""
+    words = re.findall(r"[a-z]+", str(claim.text or "").lower())
+    if all(word in _BARE_RESULT_WORDS for word in words):
+        return 10
+    text = " ".join(str(part or "") for part in (claim.topic, claim.text, claim.quote))
+    score = _weighted_value(_VOTE_CALL_RE.sub(" ", text))
+    topic = str(claim.topic or "").strip().lower()
+    said = str(claim.text or "")
+    if topic.startswith("public comment") or _SPEAKER_STATEMENT_RE.search(said):
+        return min(score, 35)
+    if topic.startswith("staff recommend") or _STAFF_RECOMMEND_RE.search(said):
+        return 10
+    return score
 
 
 def news_order(recap: Recap) -> list[str]:

@@ -689,3 +689,89 @@ def test_a_bare_result_is_not_the_meeting_news_and_does_not_lead() -> None:
         ),
     )
     assert top_news(week) is None
+
+
+def test_speaker_statements_staff_recommendations_and_procedure_are_not_the_news() -> None:
+    from civiccast_brief.article.writer import news_value
+
+    routine = (
+        (
+            35,
+            "Public comment: mayoral vacancy",
+            (
+                "An unidentified speaker argued that the town charter required the council to "
+                "declare a vacancy at that night's meeting and fill it according to the "
+                "charter's timelines."
+            ),
+            "resignations",
+        ),
+        (10, "Staff recommendation", "Staff recommended adopting the ordinance.", ""),
+        (
+            0,
+            "Adjournment",
+            "The board adjourned the meeting.",
+            "All those in favor and all those opposed, we are adjourned.",
+        ),
+        (
+            10,
+            "Motion vote",
+            "The council carried the motion by voice vote.",
+            "All right, all in favor say aye. All opposed say no. Motion carries.",
+        ),
+        (
+            10,
+            "Resolution on county commission size",
+            (
+                "The meeting moved to consideration of a resolution supporting an increase in "
+                "county commissioners from three to five."
+            ),
+            "",
+        ),
+        (
+            10,
+            "Resolution LHA 2026-19 amendments",
+            (
+                "Commissioner McCoy made amendments to section 17 that were seconded by a "
+                "commissioner."
+            ),
+            "",
+        ),
+    )
+    for index, (expected, topic, text, quote) in enumerate(routine):
+        claim = Claim(f"r{index}", topic, text, "0:10:00", quote)
+        assert news_value(claim) == expected, (topic, text)
+
+    real = (
+        (
+            70,
+            "Resolution 2026, 203",
+            "The council carried the motion by voice vote.",
+            "Aye. I'll oppose say no. Motion carries.",
+        ),
+        (70, "Road repair", "The council approved a $2 million contract for road repair.", ""),
+        (
+            60,
+            "Fee increase vote",
+            "Council Member Smith voted no, and the motion carried 4-1.",
+            "",
+        ),
+        (
+            60,
+            "Rezoning",
+            "Council Member Smith opposed the rezoning plan in a divided vote.",
+            "",
+        ),
+        (100, "Mayor", "The mayor resigned effective December 1.", ""),
+        (
+            60,
+            "Parking plan",
+            "Council members split on the parking plan and the motion failed.",
+            "",
+        ),
+        (35, "Public comment: parking", "A resident asked the council to add parking.", ""),
+        (70, "Ordinance", "Council Member Lee moved to table the ordinance.", ""),
+        (10, "Agenda", "The board moved to the next item.", ""),
+    )
+    for index, (expected, topic, text, quote) in enumerate(real):
+        claim = Claim(f"n{index}", topic, text, "0:15:00", quote)
+        assert news_value(claim) == expected, (topic, text)
