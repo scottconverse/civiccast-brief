@@ -1,9 +1,13 @@
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime
 from types import SimpleNamespace as NS
 
 import pytest
 
+from civiccast_brief.speech.windows_process import task_parent_pid
 from civiccast_brief.weekly import __main__ as cli
 from civiccast_brief.weekly.find import Listers
 
@@ -139,3 +143,24 @@ def test_the_time_budget_is_given_in_seconds(tmp_path, monkeypatch):
 def test_a_negative_time_budget_is_refused(tmp_path):
     with pytest.raises(SystemExit):
         _args(tmp_path, "--time-budget-hours", "-1")
+
+
+def test_the_task_parent_pid_is_a_process():
+    pid = task_parent_pid()
+    assert isinstance(pid, int) and pid > 0
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the launcher's process table is Windows")
+def test_the_task_parent_pid_is_the_process_that_started_python():
+    code = (
+        "from civiccast_brief.speech.windows_process import task_parent_pid; "
+        "print(task_parent_pid())"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": "src"},
+        check=True,
+    )
+    assert int(done.stdout.strip()) == os.getpid()

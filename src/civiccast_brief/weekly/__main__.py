@@ -20,7 +20,6 @@ Rerun the same command to try the failed steps again.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections.abc import Sequence
 from datetime import date, timedelta
@@ -29,7 +28,7 @@ from typing import Any
 
 from civiccast_brief.city import CityError, load_city
 from civiccast_brief.sources import SourceError, load_sources
-from civiccast_brief.speech.windows_process import parent_alive
+from civiccast_brief.speech.windows_process import parent_alive, task_parent_pid
 from civiccast_brief.weekly.documents import Fetcher, read_documents
 from civiccast_brief.weekly.find import Agenda, Listers, find_meetings
 from civiccast_brief.weekly.run import Settings, Site, publish_site, run_week
@@ -229,7 +228,7 @@ def _week(
     print(f"{name}: {len(meetings)} meeting(s) from {first} to {last}")
     for problem in problems:
         print(f"source problem: {problem}", file=sys.stderr)
-    parent_pid = os.getppid()
+    parent_pid = task_parent_pid()
     report = run_week(
         settings,
         meetings,
