@@ -36,6 +36,7 @@ import hashlib
 import json
 import re
 import shutil
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -64,6 +65,13 @@ from civiccast_brief.weekly.worker import AUDIO, CAPTIONS, WorkerFolder, audio_k
 
 Main = Callable[[Sequence[str]], int]
 STATE_NAME = "weekly-state.json"
+#: A run starts no new meeting after this long; the rest wait for the next week. The station's
+#: task has a hard limit shorter than this, and a run cut off mid-meeting leaves broken output.
+DEFAULT_TIME_BUDGET_S = 6 * 3600
+STOPPED_LINE = (
+    "stopped: the task that started this run has ended (Windows may have stopped it at its "
+    "time limit); nothing more was started"
+)
 AUDIO_FILES = ("episode.mp3", "chapters.json", "transcript.vtt")
 #: 64 kbps: an MP3's bytes should match its duration at about this rate. A half copy keeps the
 #: header's full duration, so the ratio is the only sign the file is short.
@@ -1163,6 +1171,9 @@ def run_week(
     steps: Steps | None = None,
     published: str | None = None,
     limit: int | None = None,
+    time_budget_s: float | None = DEFAULT_TIME_BUDGET_S,
+    clock: Callable[[], float] = time.monotonic,
+    parent_check: Callable[[], bool] | None = None,
 ) -> Report:
     """Run every meeting not done yet, the roundup, and the site. One meeting's failure is
     recorded and the run goes on with the next.
@@ -1171,10 +1182,17 @@ def run_week(
     not ``done``) are tried, newest day first. A meeting that ends ``waiting`` or ``not run``
     does not count: the run goes on to the next-newest runnable meeting until ``limit``
     meetings ended done or failed, or none are left. Meetings never tried are left out and not
-    recorded in the state. The roundup is skipped, since it would cover meetings not run."""
+    recorded in the state. The roundup is skipped, since it would cover meetings not run.
+
+    A run starts no new meeting once ``time_budget_s`` seconds have passed (``None`` for no
+    budget): the meeting is left out of the state, and so is every meeting after it, each with
+    a line. The roundup and the site build still run. With ``parent_check``, a run whose parent
+    task has ended stops at once: the state is saved, and the roundup and the site build are
+    skipped."""
     steps = steps or Steps()
     state = State(settings.work / STATE_NAME)
     report = Report()
+    started = clock()
     selected = list(meetings)
     if limit is not None:
         runnable = [
@@ -1189,18 +1207,34 @@ def run_week(
     for meeting in selected:
         if limit is not None and counted >= limit:
             break
-        entry = state.meeting(meeting.key)
-        entry.update(title=meeting.title, week=last.isoformat())
+        # Look up without creating: a meeting the budget or the ended task leaves untried is
+        # left out of the state, like a meeting --limit never tried, so the next run picks it up.
+        entry = state.data["meetings"].get(meeting.key)
         # A meeting run before keeps its run, even when it would not be run now: its episode
         # and story are on the desk and are built from that run's folder.
-        if entry.get("status") == "done":
+        if entry is not None and entry.get("status") == "done":
+            entry.update(title=meeting.title, week=last.isoformat())
             report.add(f"{meeting.day} {meeting.title}: done in an earlier run")
             continue
         if meeting.reason:
+            entry = state.meeting(meeting.key)
+            entry.update(title=meeting.title, week=last.isoformat())
             entry.update(status="not run", error=meeting.reason)
             state.save()
             report.add(f"{meeting.day} {meeting.title}: not run: {meeting.reason}")
             continue
+        if parent_check is not None and not parent_check():
+            report.add(STOPPED_LINE, failed=True)
+            state.save()
+            return report
+        if time_budget_s is not None and clock() - started >= time_budget_s:
+            report.add(
+                f"{meeting.day} {meeting.title}: not started: the run's "
+                f"{time_budget_s / 3600:g}-hour time budget is used; it runs next week"
+            )
+            continue
+        entry = state.meeting(meeting.key)
+        entry.update(title=meeting.title, week=last.isoformat())
         try:
             run_meeting(steps, settings, meeting, entry)
         except Waiting as exc:
@@ -1231,6 +1265,10 @@ def run_week(
         line = run_roundup(steps, settings, state, last)
         report.add(line, failed=line.startswith("roundup: failed"))
     if settings.site is not None:
+        if parent_check is not None and not parent_check():
+            report.add(STOPPED_LINE, failed=True)
+            state.save()
+            return report
         _publish_into(report, steps, settings, state, published)
     return report
 
