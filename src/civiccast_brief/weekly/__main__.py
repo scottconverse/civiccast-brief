@@ -64,6 +64,10 @@ def real_listers(client: Any) -> Listers:
                 return Agenda(content.citation_url, lines) if lines else None
         return None
 
+    def granicus_agenda(host: str, view_id: int, clip_id: int) -> Agenda | None:
+        url, items = granicus.fetch_agenda(host, view_id, clip_id)
+        return Agenda(url, tuple(items)) if items else None
+
     fetchers: dict[str, Fetcher] = {}
 
     def primegov_documents(url: str, meeting: Any, body: str) -> tuple[dict[str, Any], list[str]]:
@@ -98,6 +102,7 @@ def real_listers(client: Any) -> Listers:
         primegov_documents=primegov_documents,
         youtube=channel.list_videos,
         granicus=granicus.list_clips,
+        granicus_agenda=granicus_agenda,
         cablecast=cablecast.list_shows,
         civicclerk=civicclerk,
         escribe=escribe,

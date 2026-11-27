@@ -867,3 +867,38 @@ def test_a_portal_meeting_with_no_video_joins_the_same_video_in_any_source_order
             ]
         )
     assert results[0] == results[1]
+
+
+def test_a_granicus_clip_carries_its_html_agenda():
+    archive = Source(kind="granicus", bodies=(COUNCIL,), host="example.granicus.com", view_id="2")
+    clips = [NS(clip_id=4410, name="Regular Meeting", date="November 3, 2026")]
+    agenda = Agenda(
+        "https://example.granicus.com/AgendaViewer.php?view_id=2&clip_id=4410",
+        ("1) Roll Call",),
+    )
+    asked = []
+
+    def granicus_agenda(host, view, clip):
+        asked.append((host, view, clip))
+        return agenda
+
+    listers = Listers(granicus=lambda host, view: clips, granicus_agenda=granicus_agenda)
+    found, _ = find_meetings([archive], FIRST, LAST, listers)
+
+    assert len(found) == 1 and found[0].agenda == agenda
+    assert asked == [("example.granicus.com", 2, 4410)]
+
+
+def test_a_granicus_agenda_that_fails_still_leaves_the_clip_found():
+    archive = Source(kind="granicus", bodies=(COUNCIL,), host="example.granicus.com", view_id="2")
+    clips = [NS(clip_id=4410, name="Regular Meeting", date="November 3, 2026")]
+
+    def broken(host, view, clip):
+        raise RuntimeError("agenda page answered 500")
+
+    listers = Listers(granicus=lambda host, view: clips, granicus_agenda=broken)
+    found, _ = find_meetings([archive], FIRST, LAST, listers)
+
+    assert len(found) == 1
+    assert found[0].key == "granicus:example.granicus.com/4410"
+    assert found[0].agenda is None
