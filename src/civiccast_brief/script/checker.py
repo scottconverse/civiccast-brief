@@ -65,13 +65,16 @@ _COMMON_OPENERS = frozenset(
         "but",
         "can",
         "check",
+        "city",
         "consider",
         "could",
+        "council",
         "did",
         "do",
         "does",
         "don't",
         "done",
+        "during",
         "even",
         "every",
         "far",
@@ -119,6 +122,7 @@ _COMMON_OPENERS = frozenset(
         "like",
         "listen",
         "look",
+        "looking",
         "meanwhile",
         "more",
         "most",
@@ -831,7 +835,12 @@ def _check_line(
         issues.append(
             Issue(number, "error", "number", f"number {missing} is not in the cited claim(s)")
         )
-    allowed_words = _claim_words(cited_texts) | SHOW_NAMES | _roster_name_words(roster, cited_texts)
+    allowed_words = (
+        _claim_words(cited_texts)
+        | SHOW_NAMES
+        | _roster_name_words(roster, cited_texts)
+        | set(_WORD_RE.findall(recap.city.lower()))
+    )
     for name in _proper_nouns(line.text, skip_plural_titles=True):
         word = name.lower()
         # "Boulder's" is the place "Boulder" the claim or the header names.

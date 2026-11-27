@@ -212,6 +212,62 @@ def test_an_unknown_name_at_a_sentence_start_still_fails():
     assert (1, "name") in codes
 
 
+def _opener_recap(city: str, claim_text: str) -> Recap:
+    return Recap(
+        city=city,
+        body="City Council",
+        meeting_date="October 20, 2026",
+        video_id="rsagM9xn28Y",
+        claims=(Claim("c01", "Item", claim_text, "0:00:00", claim_text),),
+    )
+
+
+def _name_errors(recap: Recap, text: str) -> list[str]:
+    lines = [
+        ScriptLine("S1", "Welcome to CivicCast Brief."),
+        ScriptLine("S2", text, ("c01",)),
+        ScriptLine("S1", "Right."),
+    ]
+    report = check_script(recap, lines)
+    return [i.message for i in report.errors if i.code == "name"]
+
+
+def test_four_more_sentence_openers_are_not_names():
+    recap = _opener_recap("Longmont", "The group met on October twentieth.")
+    for text in (
+        "During the meeting, the group talked about the plan.",
+        "Looking ahead, the group planned more work.",
+        "Council members spoke about the plan.",
+        "City staff said the plan would continue.",
+    ):
+        assert _name_errors(recap, text) == [], text
+
+
+def test_an_unknown_name_after_a_new_opener_still_fails():
+    recap = _opener_recap("Longmont", "The group met on October twentieth.")
+    messages = _name_errors(recap, "The plan came from Quorbex during the meeting.")
+    assert any("'Quorbex'" in message for message in messages)
+
+
+def test_council_mid_sentence_is_still_a_name():
+    recap = _opener_recap("Longmont", "The group met on October twentieth.")
+    messages = _name_errors(recap, "Residents said Council approved it.")
+    assert any("'Council'" in message for message in messages)
+
+
+def test_the_recap_city_is_never_an_invented_name():
+    recap = _opener_recap("Golden", "The group presented.")
+    messages = _name_errors(recap, "Then Hunger Free Golden presented.")
+    named = {message.split("'")[1] for message in messages}
+    assert named == {"Hunger", "Free"}
+
+
+def test_another_city_in_a_line_is_still_a_name():
+    recap = _opener_recap("Golden", "The plan came from the group.")
+    messages = _name_errors(recap, "The plan came from Boulder.")
+    assert any("'Boulder'" in message for message in messages)
+
+
 def test_the_closing_line_openers_are_not_names():
     lines = good_script()
     lines[-1] = ScriptLine(
