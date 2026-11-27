@@ -18,7 +18,7 @@ import io
 import logging
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any, Final
 from urllib.parse import urlsplit
@@ -93,7 +93,18 @@ def _keep(source: Source, docs: Sequence[Any], first: date, last: date, via: str
 
 
 def _civicclerk(source: Source, first: date, last: date, fetcher: Fetcher) -> list[Doc]:
-    return _keep(source, platforms.clerk_docs(source.tenant, fetcher, last), first, last)
+    from civiccast_brief.weekly.find import match_body
+
+    docs = []
+    for d in platforms.clerk_docs(source.tenant, fetcher, last):
+        # The category files a document under a body ("General" for Erie's 17 November study
+        # session); the event name names it, as the video path's title does.
+        if not _listed_body(source, d.body):
+            matched = match_body(d.event, source.bodies, _CITY.get())
+            if matched:
+                d = replace(d, body=matched)
+        docs.append(d)
+    return _keep(source, docs, first, last)
 
 
 def _escribe(source: Source, first: date, last: date, fetcher: Fetcher) -> list[Doc]:
