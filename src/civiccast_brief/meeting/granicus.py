@@ -38,6 +38,7 @@ _MP3_RE = re.compile(r"https?://[^\"'\s]+\.mp3", re.IGNORECASE)
 _MP4_RE = re.compile(r"https://archive-video\.granicus\.com/[^\"'\s]+\.mp4", re.IGNORECASE)
 _CUE_RE = re.compile(r"^(\d+):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d+):(\d{2}):(\d{2})\.(\d{3})")
 _DATE_RE = re.compile(r"([A-Z][a-z]{2,8})\.?\s+(\d{1,2}),\s*(\d{4})")
+_TOP_ROW_RE = re.compile(r"<tr\b[^>]*\bvAlign\s*=\s*[\"']?top\b", re.IGNORECASE)
 
 
 class GranicusError(RuntimeError):
@@ -154,6 +155,33 @@ def list_clips(host: str, view_id: int) -> list[Clip]:
         raise GranicusError(
             f"Townlight could not read the Granicus meeting list: {error}"
         ) from error
+
+
+def agenda_url(host: str, view_id: int, clip_id: int) -> str:
+    return f"https://{host}/AgendaViewer.php?view_id={view_id}&clip_id={clip_id}"
+
+
+def parse_agenda(page: str) -> list[str]:
+    """The clip's agenda as item lines: ``"1) Pledge of Allegiance"``, sub-items as ``"a) ..."``."""
+    items: list[str] = []
+    for row in _ROW_RE.findall(page):
+        if not _TOP_ROW_RE.match(row):
+            continue
+        cells = _CELL_RE.findall(row)
+        if len(cells) != 2:
+            continue
+        number = _text(cells[0][1])
+        title = _text(cells[1][1])
+        if not title:
+            continue
+        items.append(f"{number} {title}")
+    return items
+
+
+def fetch_agenda(host: str, view_id: int, clip_id: int) -> tuple[str, list[str]]:
+    """The agenda page's address and its item lines."""
+    url = agenda_url(host, view_id, clip_id)
+    return url, parse_agenda(_fetch(url))
 
 
 def find_clip(host: str, view_id: int, clip_id: int) -> Clip:

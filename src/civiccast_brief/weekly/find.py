@@ -113,6 +113,8 @@ class Listers:
     youtube: Callable[[str], Sequence[Any]] | None = None
     #: (host, view id) -> clips with .clip_id, .name, .date ("October 6, 2026")
     granicus: Callable[[str, int], Sequence[Any]] | None = None
+    #: (host, view id, clip id) -> the clip's HTML agenda, or None when it has none
+    granicus_agenda: Callable[[str, int, int], Agenda | None] | None = None
     #: (host) -> shows with .show_id, .name, .date ("October 6, 2026"); only shows with a video
     cablecast: Callable[[str], Sequence[Any]] | None = None
     #: (tenant or account, first day, last day) -> VideoListings with .video_id, .title,
@@ -431,6 +433,12 @@ def _granicus(source: Source, first: date, last: date, listers: Listers) -> list
             source.bodies[0] if len(source.bodies) == 1 else ""
         )
         reason = "" if body else "the clip name names no body this source covers"
+        agenda = None
+        if listers.granicus_agenda:
+            try:
+                agenda = listers.granicus_agenda(source.host, view_id, int(clip.clip_id))
+            except Exception:  # noqa: BLE001 - a clip without its agenda is still found
+                agenda = None
         found.append(
             Found(
                 body,
@@ -440,6 +448,7 @@ def _granicus(source: Source, first: date, last: date, listers: Listers) -> list
                 str(clip.clip_id),
                 granicus_host=source.host,
                 granicus_view_id=view_id,
+                agenda=agenda,
                 reason=reason,
             )
         )

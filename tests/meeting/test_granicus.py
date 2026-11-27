@@ -322,3 +322,20 @@ def test_the_audio_fetch_names_the_program_to_the_host(tmp_path, monkeypatch):
     argv = seen["argv"]
     assert argv[argv.index("-user_agent") + 1] == direct.FETCH_USER_AGENT
     assert argv.index("-user_agent") < argv.index("-i")
+
+
+def test_the_published_agenda_is_read_as_item_lines():
+    page = (FIX / "golden-agenda.html").read_text(encoding="utf-8", errors="replace")
+    lines = G.parse_agenda(page)
+    assert lines[0] == "1) Pledge of Allegiance"
+    assert "a) Colorado Gives Day – December 8, 2026" in lines
+    assert "10) Hunger Free Golden Update" in lines
+    assert "12) Adjournment" in lines
+    # A Document link outside the item rows is not an agenda item.
+    assert not any("Small Business Saturday 2026" in line for line in lines)
+
+
+def test_agenda_url_is_the_viewer_page():
+    assert G.agenda_url("goldenco.granicus.com", 2, 6736) == (
+        "https://goldenco.granicus.com/AgendaViewer.php?view_id=2&clip_id=6736"
+    )
