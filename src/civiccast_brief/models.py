@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+from civiccast_brief.claude_lock import claude_turn
 from civiccast_brief.script import llm
 from civiccast_brief.speech.windows_process import hidden_process_kwargs
 
@@ -215,7 +216,7 @@ def run_process(cmd: list[str], stdin: str, env: Mapping[str, str]) -> tuple[int
     program = shutil.which(cmd[0])
     if program is None:
         raise ModelCallError(f"{cmd[0]!r} is not on PATH; install Claude Code and sign in")
-    with tempfile.TemporaryDirectory(prefix="civiccast-model-") as cwd:
+    with tempfile.TemporaryDirectory(prefix="civiccast-model-") as cwd, claude_turn():
         done = subprocess.run(
             [program, *cmd[1:]],
             input=stdin,
