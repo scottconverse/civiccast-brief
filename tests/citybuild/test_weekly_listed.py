@@ -9,11 +9,12 @@ folder and Louisville's Planning Commission Laserfiche folder.
 from __future__ import annotations
 
 import io
+import json
 from datetime import date
 
 from pypdf import PdfReader, PdfWriter
 
-from civiccast_brief.citybuild import laserfiche
+from civiccast_brief.citybuild import laserfiche, platforms
 from civiccast_brief.sources import make_source
 from civiccast_brief.weekly import listed
 
@@ -42,6 +43,15 @@ def _days(docs):
     return sorted({(d.body, d.day) for d in docs})
 
 
+def _add_clerk_events(web, tenant, today, rows):
+    """A CivicClerk Events answer with the given rows (eventName, categoryName, files)."""
+    web.add(
+        platforms.clerk_events_url(tenant, today),
+        json.dumps({"value": rows}),
+        "application/json",
+    )
+
+
 def test_civicclerk_lists_each_bodys_documents_in_the_days(web):
     add_erie(web, date(2026, 11, 10))
     source = make_source("civicclerk", {"tenant": ERIE, "bodies": ["Town Council"]})
@@ -52,6 +62,95 @@ def test_civicclerk_lists_each_bodys_documents_in_the_days(web):
         ("Town Council", date(2026, 11, 10)),
     ]
     assert sorted(d.what for d in docs if d.day == date(2026, 11, 10)) == ["agenda", "packet"]
+
+
+def _files(*ids):
+    return [
+        {"type": kind, "fileId": file_id, "name": f"{kind}.pdf"}
+        for kind, file_id in zip(("Agenda", "Agenda Packet"), ids, strict=False)
+    ]
+
+
+def test_civicclerk_a_document_filed_as_general_joins_by_its_event_name(web):
+    _add_clerk_events(
+        web,
+        ERIE,
+        date(2026, 11, 17),
+        [
+            {
+                "eventName": "Town Council Study Session",
+                "categoryName": "General",
+                "startDateTime": "2026-11-17T18:00:00Z",
+                "publishedFiles": _files(1, 2),
+            }
+        ],
+    )
+    source = make_source(
+        "civicclerk", {"tenant": ERIE, "bodies": ["Town Council", "Liquor License Authority"]}
+    )
+    docs = listed._civicclerk(source, date(2026, 11, 17), date(2026, 11, 17), web.fetcher())
+    assert [d.body for d in docs] == ["Town Council", "Town Council"]
+    assert sorted(d.what for d in docs) == ["agenda", "packet"]
+
+
+def test_civicclerk_a_category_that_names_a_listed_body_is_kept_as_is(web):
+    _add_clerk_events(
+        web,
+        ERIE,
+        date(2026, 11, 17),
+        [
+            {
+                "eventName": "Liquor License Authority",
+                "categoryName": "Liquor License Authority",
+                "startDateTime": "2026-11-17T13:00:00Z",
+                "publishedFiles": _files(3, 4),
+            }
+        ],
+    )
+    source = make_source(
+        "civicclerk", {"tenant": ERIE, "bodies": ["Town Council", "Liquor License Authority"]}
+    )
+    docs = listed._civicclerk(source, date(2026, 11, 17), date(2026, 11, 17), web.fetcher())
+    assert [d.body for d in docs] == ["Liquor License Authority", "Liquor License Authority"]
+
+
+def test_civicclerk_an_event_name_naming_no_listed_body_is_not_kept(web):
+    _add_clerk_events(
+        web,
+        ERIE,
+        date(2026, 11, 17),
+        [
+            {
+                "eventName": "Tree Advisory Board Meeting",
+                "categoryName": "General",
+                "startDateTime": "2026-11-17T18:00:00Z",
+                "publishedFiles": _files(5, 6),
+            }
+        ],
+    )
+    source = make_source(
+        "civicclerk", {"tenant": ERIE, "bodies": ["Town Council", "Liquor License Authority"]}
+    )
+    docs = listed._civicclerk(source, date(2026, 11, 17), date(2026, 11, 17), web.fetcher())
+    assert docs == []
+
+
+def test_civicclerk_docs_sets_the_event_name(web):
+    _add_clerk_events(
+        web,
+        ERIE,
+        date(2026, 11, 17),
+        [
+            {
+                "eventName": "Town Council Study Session",
+                "categoryName": "General",
+                "startDateTime": "2026-11-17T18:00:00Z",
+                "publishedFiles": _files(7, 8),
+            }
+        ],
+    )
+    docs = platforms.clerk_docs(ERIE, web.fetcher(), date(2026, 11, 17))
+    assert [d.event for d in docs] == ["Town Council Study Session"] * 2
 
 
 def test_escribe_keeps_only_the_listed_bodys_meetings(web):

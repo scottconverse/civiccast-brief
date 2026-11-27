@@ -50,6 +50,8 @@ class Doc:
     url: str
     #: "agenda", "packet" or "minutes".
     what: str
+    #: CivicClerk's event name, which may name the body when the category does not.
+    event: str = ""
 
 
 def _text(fragment: str) -> str:
@@ -142,7 +144,7 @@ def clerk_docs(tenant: str, fetcher: Fetcher, today: date) -> list[Doc]:
                 named = str(file.get("name") or "")
                 held = _named_day(named, day) if what == "minutes" else day
                 url = clerk_file_url(tenant, int(file["fileId"]))
-                found.append(Doc(body, held, f"{title} ({body})", url, what))
+                found.append(Doc(body, held, f"{title} ({body})", url, what, title))
     # One file of each kind per body and meeting: the same minutes can be published under
     # two events (its own and the meeting that approved them).
     unique: dict[tuple[str, date, str], Doc] = {}
