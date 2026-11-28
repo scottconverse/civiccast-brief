@@ -1,0 +1,107 @@
+name: Release assets
+
+# Puts a pinned Windows installer on each published GitHub release, so a user can download
+# the install files for that exact version from the release page.
+# Docs changes never start it: the pull_request paths name code files only.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build the assets for, for example v0.6.0
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/scripts/release-assets.ps1
+      - .github/workflows/release-assets.yml
+      - install.ps1
+      - install.cmd
+
+permissions:
+  contents: write
+
+jobs:
+  assets:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # A dispatch can name an older tag; the release and pull request events check out
+          # the ref they are about.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
+      - name: Work out the tag
+        id: tag
+        shell: powershell
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $tag = switch ($env:EVENT_NAME) {
+            'release' { $env:RELEASE_TAG }
+            'workflow_dispatch' { $env:INPUT_TAG }
+            default { $env:HEAD_SHA }
+          }
+          if (-not $tag) { throw 'no tag to build assets for' }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "assets for $tag"
+      - name: Build the assets
+        shell: powershell
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'assets'
+          .\.github\scripts\release-assets.ps1 -Tag $env:TAG -OutDir $out
+      - name: The pinned installer installs that version
+        shell: powershell
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          CHECK_VERSION: ${{ github.event_name != 'pull_request' }}
+        run: |
+          # A user with no copy of the code runs install.ps1 from an empty folder.
+          $here = Join-Path $env:RUNNER_TEMP 'pinned'
+          New-Item -ItemType Directory -Force $here | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'assets\install.ps1') $here
+          $app = Join-Path $env:RUNNER_TEMP 'app'
+          powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'install.ps1') -AppDir $app
+
+          $toml = Join-Path $app 'pyproject.toml'
+          if (-not (Test-Path $toml)) { throw "no pyproject.toml in $app" }
+          if ($env:CHECK_VERSION -eq 'true') {
+            $want = $env:TAG -replace '^v', ''
+            $line = Select-String -Path $toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+            if (-not $line) { throw 'no version line in pyproject.toml' }
+            $got = $line.Matches[0].Groups[1].Value
+            if ($got -ne $want) { throw "installed version $got, expected $want" }
+            "version: $got"
+          }
+
+          $py = Join-Path $app '.venv\Scripts\python.exe'
+          $desk = Start-Process -PassThru -FilePath $py -ArgumentList '-m', 'civiccast_brief.review', 'serve', '--db', "$env:RUNNER_TEMP\desk.db"
+          $ok = $false
+          for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
+            Start-Sleep 2
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/; $ok = $r.StatusCode -eq 200 } catch { }
+          }
+          Stop-Process -Id $desk.Id -Force
+          if (-not $ok) { throw 'the editor desk did not answer on 127.0.0.1:8765' }
+          "desk: HTTP 200"
+      - name: Attach the assets to the release
+        if: github.event_name != 'pull_request'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'assets'
+          $files = @(
+            (Join-Path $out 'install.ps1'),
+            (Join-Path $out 'install.cmd'),
+            (Join-Path $out "civiccast-brief-install-$env:TAG.zip"),
+            (Join-Path $out 'SHA256SUMS.txt')
+          )
+          gh release upload $env:TAG @files --clobber
