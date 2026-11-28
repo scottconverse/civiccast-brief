@@ -5,7 +5,7 @@ by `.github/workflows/pages.yml` on every push to `main` that changes `website/`
 
 Plain HTML and CSS. No build step and no JavaScript.
 
-The page describes version 0.6.0. The code is the source of truth: the podcast hosts are
+The page describes version 0.6.1. The code is the source of truth: the podcast hosts are
 Pat and Alex, and the weekly voice chain is Gemini Flash TTS, then Gemini Flash-Lite TTS,
 then LFM3 locally on the CPU. Dia2 is an optional engine for an NVIDIA GPU.
 
