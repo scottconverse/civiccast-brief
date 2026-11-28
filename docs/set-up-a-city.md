@@ -609,8 +609,9 @@ means every runnable meeting and the site finished; 1 means something failed (th
 **Time budget.** `--time-budget-hours HOURS` sets how long a run may keep starting new meetings
 (default 6; `0` means no budget). Once the budget has passed, each meeting left is listed with a
 "not started" line and runs next time; the roundup and the site build still run. When the Windows
-scheduled task that started the run has ended, the run stops at once, saves its state and skips the
-rest.
+scheduled task that started the run has ended, the run starts nothing more, saves its state and
+skips the rest. It checks before each meeting and before the site build, so a
+meeting already in progress finishes first.
 
 **One Claude run at a time.** On one PC, weekly runs take turns for `claude -p`: the batch weekly
 run sets `CIVICCAST_CLAUDE_TURNS=1`, so two cities' runs wait for each other, and the waiting run
