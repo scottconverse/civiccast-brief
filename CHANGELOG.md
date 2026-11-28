@@ -17,8 +17,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 - `weekly run --time-budget-hours HOURS` sets how long a run may keep starting new meetings.
   The default is 6, and `0` means no budget. Once it has passed, each meeting left is listed with
   a "not started" line and runs next time; the roundup and the site build still run.
-- A run stops at once, saves its state and skips the rest when the Windows scheduled task that
-  started it has ended.
+- A run starts nothing more, saves its state and skips the rest when the Windows scheduled task
+  that started it has ended. It checks before each meeting and before the site build, so a
+  meeting already in progress finishes first.
 - The batch weekly run sets `CIVICCAST_CLAUDE_TURNS=1`, so two cities' runs on one PC take turns
   for each `claude -p` call, one Claude run at a time. The waiting run prints
   `claude: waiting for another Claude run on this PC to finish`. Desk buttons and the sign-in
@@ -26,8 +27,9 @@ All notable changes to CivicCast Brief. Versions follow the repository's release
 
 ### Writing
 
-- A story's lead is the meeting's decision. A speaker's statement, a staff recommendation,
-  procedure, or a bare result with no subject is not used as the lead.
+- A story's lead is the meeting's decision. A speaker's statement, a staff recommendation, a recap
+  of an earlier meeting's act, procedure, or a bare result with no subject is ranked low, so the
+  decision comes first when the meeting made one.
 - A middle initial in a document sentence is kept whole.
 
 ### The manual

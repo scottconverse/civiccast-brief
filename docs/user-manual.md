@@ -563,8 +563,9 @@ weekly roundup is skipped.
 meeting left is listed with a "not started" line and is picked up by the next run. The roundup and
 the site build still run.
 
-A run stops at once, saves its state and skips the rest when the Windows scheduled task that
-started it has ended (Windows may have stopped it at its time limit). Its last line reads:
+A run starts nothing more, saves its state and skips the rest when the Windows scheduled task that
+started it has ended (Windows may have stopped it at its time limit). It checks before each meeting
+and before the site build, so a meeting already in progress finishes first. Its last line reads:
 "stopped: the task that started this run has ended (Windows may have stopped it at its time
 limit); nothing more was started".
 
@@ -853,9 +854,10 @@ flowchart TD
     C -->|still fails| H["held in review<br/>never published by itself"]
 ```
 
-A story's lead is the meeting's decision. A speaker's statement, a staff recommendation,
-procedure, or a bare result with no subject is not used as the lead. A middle initial in a
-document sentence is kept whole.
+A story's lead is the meeting's decision. A speaker's statement, a staff recommendation, a recap
+of an earlier meeting's act, procedure, or a bare result with no subject is ranked low, so the
+decision comes first when the meeting made one. A middle initial in a document sentence is kept
+whole.
 
 ### An item's life on the desk
 
