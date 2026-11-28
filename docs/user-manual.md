@@ -771,7 +771,7 @@ sequenceDiagram
     participant U as audio
     participant G as site
     W->>P: list this window's meetings
-    W->>W: budget check before each meeting;<br/>no new meeting after --time-budget-hours
+    W->>W: budget check before each meeting,<br/>no new meeting after --time-budget-hours
     W->>P: documents.json for a meeting
     W->>W: fill the roster from the records
     W->>M: run the meeting (captions or local speech)
@@ -779,7 +779,7 @@ sequenceDiagram
     W->>S: write, check, then repair if needed
     S-->>W: script.json
     W->>D: stage the episode
-    W->>A: write and stage the story;<br/>one Claude run at a time on this PC
+    W->>A: write and stage the story,<br/>one Claude run at a time on this PC
     A-->>D: article item
     W->>W: roundup when two or more meetings ran
     W->>D: export published items
