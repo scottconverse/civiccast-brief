@@ -42,6 +42,10 @@ captions through its existing paths.
 Editors work in the desk, a local web app (double-click `desk.cmd`). An item that passes every check
 is published on its own; editors can edit, unpublish, hold or kill anything from the desk.
 
+The weekly run keeps to a time budget: `--time-budget-hours` (6 by default, `0` for none) stops it
+starting new meetings once that time has passed, and the meetings it does not reach wait for the
+next run. On one PC, weekly runs take turns for Claude, so there is one Claude run at a time.
+
 ## Quick start
 
 On Windows 11, download `civiccast-brief-install-v0.6.1.zip` from
