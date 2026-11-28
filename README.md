@@ -1,7 +1,7 @@
 # CivicCast Brief
 
 CivicCast Brief answers one question for a town: *what did my local government just do?* It reads a city's public meeting videos, agendas, packets and minutes, and makes a cited recap, a news story and a two-host podcast episode for each meeting.
-Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.6.0.
+Every paragraph, vote and quote links to the second in the video where it was said. It then builds a static city website with a podcast feed. Version 0.6.1.
 
 [Website](https://scottconverse.github.io/civiccast-brief/) · [Live sites](https://civiccastbrief.org): Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie, Colo. · [User manual](docs/user-manual.md) · [Set up a city](docs/set-up-a-city.md) · [Releases](https://github.com/scottconverse/civiccast-brief/releases)
 
@@ -44,7 +44,12 @@ is published on its own; editors can edit, unpublish, hold or kill anything from
 
 ## Quick start
 
-On Windows 11, double-click `install.cmd`, or run:
+On Windows 11, download `civiccast-brief-install-v0.6.1.zip` from
+[the latest release](https://github.com/scottconverse/civiccast-brief/releases/latest), unpack it,
+and double-click `install.cmd`. The `install.ps1` in the zip is pinned to that release, so it
+downloads that exact version.
+
+Or, with one command (which installs the newest code on `main`):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
@@ -58,7 +63,7 @@ the PC; an NVIDIA GPU is needed only for the optional Dia2 and Chatterbox engine
 
 ## Documentation
 
-- [User manual](docs/user-manual.md): new users, editors, technical users and the architecture.
+- [User manual](docs/user-manual.md): new users, how to set up, editors, technical users and the architecture.
 - [Set up a city](docs/set-up-a-city.md): install, city folder, weekly run, hosting, station.
 - [Voice bake-off](docs/voice-bakeoff.md): how the engines were compared, and what runs today.
 - [Staging](docs/staging.md): run a change on a copy (Dev, then Test) before the live sites.
@@ -67,7 +72,7 @@ the PC; an NVIDIA GPU is needed only for the optional Dia2 and Chatterbox engine
 
 ## Project status
 
-Version 0.6.0. Actively developed. The weekly run publishes eight live Colorado town sites
+Version 0.6.1. Actively developed. The weekly run publishes eight live Colorado town sites
 (Longmont, Boulder, Louisville, Lafayette, Lyons, Nederland, Superior and Erie). Built and tested
 on Windows 11.
 

@@ -32,9 +32,15 @@ It keeps its window open for as long as the desk runs: closing that window stops
 
 ## Install
 
-On Windows, `install.ps1` sets up everything below except Chrome, Ollama and the voice engine,
-for the signed-in user, with no administrator rights. Double-click `install.cmd` in a copy of the
-code, or, with no copy yet, run this in PowerShell:
+`install.ps1` sets up everything below except Chrome, Ollama and the voice engine, for the
+signed-in user, with no administrator rights.
+
+The easy way: download `civiccast-brief-install-v0.6.1.zip` from
+[the latest release](https://github.com/scottconverse/civiccast-brief/releases/latest), unpack it,
+and double-click `install.cmd`. The zip holds `install.ps1` and `install.cmd`, and the
+`install.ps1` in it is pinned to that release's tag, so it downloads that exact version.
+
+With no copy yet, run this in PowerShell instead (it installs the newest code on `main`):
 
 ```
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
@@ -599,6 +605,17 @@ meeting with no roster fails with a message that names the file to add.
 **Reruns.** `weekly-state.json` in the work folder records each meeting's steps. Run the same
 command again to retry what failed: finished meetings and steps are not run again. Exit code 0
 means every runnable meeting and the site finished; 1 means something failed (the output says what).
+
+**Time budget.** `--time-budget-hours HOURS` sets how long a run may keep starting new meetings
+(default 6; `0` means no budget). Once the budget has passed, each meeting left is listed with a
+"not started" line and runs next time; the roundup and the site build still run. When the Windows
+scheduled task that started the run has ended, the run stops at once, saves its state and skips the
+rest.
+
+**One Claude run at a time.** On one PC, weekly runs take turns for `claude -p`: the batch weekly
+run sets `CIVICCAST_CLAUDE_TURNS=1`, so two cities' runs wait for each other, and the waiting run
+prints `claude: waiting for another Claude run on this PC to finish`. Desk buttons and the sign-in
+check do not wait.
 
 **Documents.** The run reads the video captions, the agenda and, for a PrimeGov meeting, the
 packet and the minutes (the published minutes, or the draft minutes in the next regular session's

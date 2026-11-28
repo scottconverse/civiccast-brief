@@ -2,6 +2,46 @@
 
 All notable changes to CivicCast Brief. Versions follow the repository's release tags.
 
+## 0.6.1 — 2026-11-28
+
+### Install
+
+- Each GitHub release now carries `install.ps1` (pinned to that release's tag, so it downloads
+  that exact version), `install.cmd`, `civiccast-brief-install-v0.6.1.zip` (both files) and
+  `SHA256SUMS.txt`. Download the zip from the latest release, unpack it and double-click
+  `install.cmd`. The one-line `irm .../main/install.ps1 | iex` command still works and installs
+  the newest code on `main`.
+
+### The weekly run
+
+- `weekly run --time-budget-hours HOURS` sets how long a run may keep starting new meetings.
+  The default is 6, and `0` means no budget. Once it has passed, each meeting left is listed with
+  a "not started" line and runs next time; the roundup and the site build still run.
+- A run stops at once, saves its state and skips the rest when the Windows scheduled task that
+  started it has ended.
+- The batch weekly run sets `CIVICCAST_CLAUDE_TURNS=1`, so two cities' runs on one PC take turns
+  for each `claude -p` call, one Claude run at a time. The waiting run prints
+  `claude: waiting for another Claude run on this PC to finish`. Desk buttons and the sign-in
+  check do not wait.
+
+### Writing
+
+- A story's lead is the meeting's decision. A speaker's statement, a staff recommendation,
+  procedure, or a bare result with no subject is not used as the lead.
+- A middle initial in a document sentence is kept whole.
+
+### The manual
+
+- New part 2, **How to set up**: what you need, install from a release zip or with one command,
+  the desk and setup wizard, a first city, Test and Every week, and a flowchart. The later parts
+  are renumbered, and their links follow.
+- The weekly run, the architecture diagram and the story check now describe the changes above.
+
+### Versions
+
+- `civiccast_brief.__version__` and `civiccast_brief.record.__version__` now match the version in
+  `pyproject.toml` (0.6.1), and a test checks both against `pyproject.toml`.
+
 ## 0.6.0 — 2026-11-26
 
 ### Tooling

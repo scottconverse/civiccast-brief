@@ -1,11 +1,12 @@
 # CivicCast Brief user manual
 
-This manual covers **CivicCast Brief 0.6.0**. It has four parts:
+This manual covers **CivicCast Brief 0.6.1**. It has five parts:
 
 1. [New users](#1-new-users): what the program is and your first hour with it.
-2. [Editors (no technical background needed)](#2-editors): the desk, the buttons, and what readers see.
-3. [Technical users](#3-technical-users): install, commands, settings files, hosting and the PC worker.
-4. [Architecture](#4-architecture): how the parts fit, with diagrams.
+2. [How to set up](#2-how-to-set-up): what you need, install, the desk and the setup wizard.
+3. [Editors (no technical background needed)](#3-editors): the desk, the buttons, and what readers see.
+4. [Technical users](#4-technical-users): install, commands, settings files, hosting and the PC worker.
+5. [Architecture](#5-architecture): how the parts fit, with diagrams.
 
 The step-by-step setup guide is [set-up-a-city.md](set-up-a-city.md). This manual explains the
 whole program and points to that guide for exact command options.
@@ -60,16 +61,10 @@ found and what to do about anything missing.
 
 ### Your first hour
 
-1. **Install.** Double-click `install.cmd` in a copy of the code, or run the one-line command in
-   [Install](#install). It installs everything for your user, with no administrator rights, and
-   says what is still missing.
-2. **Open the desk.** Double-click `desk.cmd`. Your browser opens the editor desk at
-   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk. A new
-   install opens on the **setup wizard**: this computer, the cities, finding and checking their
-   sources, rosters, models and voices, the website, a test meeting, and the weekly job, for one
-   city or several at once. Once a city exists the home page is the city list, with its **Set up**
-   link back to the wizard.
-3. **Finish on Everything works.** The wizard's last page reads this computer and every city's
+1. **Set up the program.** Follow [How to set up](#2-how-to-set-up): install it, open the desk,
+   and let the setup wizard make a first city. That part has the install steps; this manual
+   repeats none of them here.
+2. **Finish on Everything works.** The wizard's last page reads this computer and every city's
    files and shows one line for each thing: **This computer**, the **Windows task**, then per
    city **Sources** (how many, each READ), **Rosters** (files and members), **Test brief** (the
    test meeting waiting in Items), **Every week** (the schedule and its next run), and
@@ -77,17 +72,107 @@ found and what to do about anything missing.
    link to the page that fixes it. A website chosen before any brief is published shows
    "The website is built after you publish a brief on the desk." — that is not a problem; the
    site appears after the first brief is published.
-4. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
+3. **Find your city's sources.** On the desk, go to **Sources > Find a city's sources**. Type the
    city's name and state (and its website if you know it), press **Search**, tick what it found,
    and press **Add**.
-5. **Check them.** Press **Check all sources**. Each body (council, board, commission) shows
+4. **Check them.** Press **Check all sources**. Each body (council, board, commission) shows
    READ with its newest meeting, or NOT READ with the reason.
-6. **Run the week.** Run the weekly command (see [The weekly run](#the-weekly-run)), or ask your
+5. **Run the week.** Run the weekly command (see [The weekly run](#the-weekly-run)), or ask your
    technical person to schedule it. New meetings appear on the desk.
 
 ---
 
-## 2. Editors
+## 2. How to set up
+
+This part is the short version. Every detail is in [set-up-a-city.md](set-up-a-city.md); the
+commands are in [part 4](#4-technical-users).
+
+### What you need
+
+- A Windows 11 PC. The program is built and tested on Windows.
+- Google Chrome. Some city sites can only be read through it.
+- Ollama with the default writer model. This is the model that writes the recap and the script.
+- Claude Code, signed in to a Claude subscription. The weekly story writer runs the `claude` CLI.
+- A voice engine for audio: a Gemini API key, or LFM3 through `llama-tts` on the PC. Dia2 and
+  Chatterbox run on a separate Windows PC with an NVIDIA GPU and are optional.
+
+The desk's **This computer** page checks all of this on your PC: ffmpeg, yt-dlp, Chrome, Ollama
+with the writer model, Claude Code and its sign-in, and a voice engine. Each row says what it
+found and what to do about anything missing.
+
+### Install the program
+
+There are two ways. Both need no administrator rights and install for your user only.
+
+**From a release (the easy way).**
+
+1. Download `civiccast-brief-install-v0.6.1.zip` from
+   [the latest release](https://github.com/scottconverse/civiccast-brief/releases/latest).
+2. Unpack the zip.
+3. Double-click `install.cmd` in the unpacked folder.
+
+The zip holds `install.ps1` and `install.cmd`. The `install.ps1` in the zip is pinned to that
+release's tag, so it downloads that exact version.
+
+**With one command.** In PowerShell:
+
+```
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/scottconverse/civiccast-brief/main/install.ps1 | iex"
+```
+
+This one installs the newest code on `main`.
+
+**What the installer does.** In order, `install.ps1`:
+
+1. Gets the code (when run without a copy) into `%LOCALAPPDATA%\CivicCastBrief\app`.
+2. Installs uv when it is missing, for this user only.
+3. Installs the Python packages with uv; uv brings Python 3.12 itself when the machine has none.
+4. Installs ffmpeg when it is missing, for this user only.
+5. Installs yt-dlp into CivicCast Brief's own folder.
+6. Checks for Chrome and for Ollama with the writer model, and says what is missing.
+7. Writes `desk.cmd`, which starts the editor desk.
+
+TownRecord and the speech code are part of CivicCast Brief, so nothing else is installed for them.
+The voice engine is not set up here.
+
+### Start the desk and set up a city
+
+1. **Open the desk.** Double-click `desk.cmd`. Your browser opens the editor desk at
+   `http://127.0.0.1:8765/`. Keep the desk's window open; closing it stops the desk.
+2. **Follow the setup wizard.** A new install opens on the **setup wizard**: this computer, the
+   cities, finding and checking their sources, rosters, models and voices, the website, a test
+   meeting, and the weekly job. It handles one city or several at once. Once a city exists the
+   home page is the city list, with its **Set up** link back to the wizard.
+3. **Add a first city.** The cities step takes one city per line (`City, ST` or
+   `City, ST, https://website`). Then find the city's sources, tick what was found, and check
+   them. Each body (council, board, commission) shows READ with its newest meeting, or NOT READ
+   with the reason.
+4. **Run Test.** **Test** runs each city's newest meeting through its real models, one city at a
+   time, and leaves everything in Items for review. Nothing is published.
+5. **Set Every week.** **Every week** sets one schedule for every city and registers one Windows
+   scheduled task, `CivicCast Brief weekly`, for the current user, with no admin and no stored
+   password. The task runs the weekly job with the desk closed and catches up a missed week.
+
+### Where to go next
+
+- [set-up-a-city.md](set-up-a-city.md) has every step in detail: the city folder, sources,
+  rosters, one meeting, the script, the story, the desk, audio, the site and the weekly run.
+- [Part 4](#4-technical-users) has the commands and their options.
+
+### The setup steps
+
+```mermaid
+flowchart TD
+    A["Install<br/>release zip, or one command"] --> B["Open the desk<br/>desk.cmd"]
+    B --> C["Setup wizard<br/>this computer, models and voices"]
+    C --> D["Add a city<br/>find and check its sources"]
+    D --> E["Test<br/>newest meeting, held for review"]
+    E --> F["Every week<br/>one Windows scheduled task"]
+```
+
+---
+
+## 3. Editors
 
 You do not need to know any code to edit. Everything here happens in the browser.
 
@@ -243,9 +328,12 @@ are shown too.
 
 ---
 
-## 3. Technical users
+## 4. Technical users
 
 ### Install
+
+The release zip and the setup wizard are in [part 2](#2-how-to-set-up). This section is the
+technical view.
 
 On Windows, from a copy of the code, double-click `install.cmd`. With no copy, run in PowerShell:
 
@@ -317,7 +405,8 @@ The flag groups, all read from `--help`:
   `lfm3`, `fake`), `--out`, `--intro`, `--outro`, `--config`.
 - **site**: `build --episodes --out --base-url [--stills]`; `home [--cities] --out [--base-url]`.
 - **weekly run**: `--city`, `--work`, `--db`, `--days` (default 7), `--first`, `--last`,
-  `--limit`, `--diarize`, `--episodes`, `--media`, `--site-out`, `--base-url`,
+  `--limit`, `--time-budget-hours` (default 6, 0 means no budget), `--diarize`, `--episodes`,
+  `--media`, `--site-out`, `--base-url`,
   `--media-base-url`, `--audio-engine`, `--audio-fallback-engine`, `--worker`.
 - **station**: `serve --config station.json [--port]`; `deploy cloudflare --site --media
   --project --bucket --prefix --media-url [--account]`; `deploy folder --site --media --out
@@ -469,6 +558,21 @@ is skipped.
 newest day first. The others are left alone and not recorded in `weekly-state.json`, and the
 weekly roundup is skipped.
 
+`--time-budget-hours HOURS` sets how long a run may go on starting new meetings. The default is
+6, and `0` means no budget. Once the budget has passed, the run starts no new meeting: each
+meeting left is listed with a "not started" line and is picked up by the next run. The roundup and
+the site build still run.
+
+A run stops at once, saves its state and skips the rest when the Windows scheduled task that
+started it has ended (Windows may have stopped it at its time limit). Its last line reads:
+"stopped: the task that started this run has ended (Windows may have stopped it at its time
+limit); nothing more was started".
+
+On one PC, weekly runs take turns for `claude -p`. The batch weekly run sets
+`CIVICCAST_CLAUDE_TURNS=1`, so two cities' weekly runs wait for each other, one Claude run at a
+time. The waiting run prints `claude: waiting for another Claude run on this PC to finish`.
+Desk buttons that call Claude and the sign-in check do not wait.
+
 `--review-only` stages every item for review and publishes nothing, even items that pass their
 checks. It is for a test run; without it the run publishes each item that passes.
 Building and deploying the site stay with the weekly command's site options.
@@ -540,7 +644,7 @@ the heavy jobs.
 
 ---
 
-## 4. Architecture
+## 5. Architecture
 
 ### System context
 
@@ -667,6 +771,7 @@ sequenceDiagram
     participant U as audio
     participant G as site
     W->>P: list this window's meetings
+    W->>W: budget check before each meeting,<br/>no new meeting after --time-budget-hours
     W->>P: documents.json for a meeting
     W->>W: fill the roster from the records
     W->>M: run the meeting (captions or local speech)
@@ -674,7 +779,7 @@ sequenceDiagram
     W->>S: write, check, then repair if needed
     S-->>W: script.json
     W->>D: stage the episode
-    W->>A: write and stage the story
+    W->>A: write and stage the story,<br/>one Claude run at a time on this PC
     A-->>D: article item
     W->>W: roundup when two or more meetings ran
     W->>D: export published items
@@ -747,6 +852,10 @@ flowchart TD
     F --> C
     C -->|still fails| H["held in review<br/>never published by itself"]
 ```
+
+A story's lead is the meeting's decision. A speaker's statement, a staff recommendation,
+procedure, or a bare result with no subject is not used as the lead. A middle initial in a
+document sentence is kept whole.
 
 ### An item's life on the desk
 
